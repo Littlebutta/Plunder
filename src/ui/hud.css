@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Pirata+One&family=Nunito:wght@600;800&display=swap');
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; color-scheme: light; }
+#game { display: block; width: 100%; height: 100%; touch-action: none; outline: none; cursor: grab; }
+#game:active { cursor: grabbing; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Nunito', system-ui, sans-serif; color: #fff8e6; }
+.hud-title {
+  position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(18px + env(safe-area-inset-left, 0px));
+  font-family: 'Pirata One', serif; font-size: 34px; letter-spacing: 1px;
+  text-shadow: 0 2px 0 #3a1f0c, 0 0 12px rgba(0,0,0,.25);
+}
+.hud-panel {
+  position: absolute; background: rgba(42, 23, 8, 0.72); border: 2px solid #c0814a;
+  border-radius: 12px; padding: 10px 14px; box-shadow: 0 4px 0 rgba(0,0,0,.25);
+}
+.hud-help { top: 62px; left: 18px; font-size: 13px; line-height: 1.6; }
+.hud-help kbd {
+  display: inline-block; min-width: 22px; text-align: center; padding: 0 5px; margin-right: 4px;
+  background: #fff8e6; color: #3a1f0c; border-radius: 4px; font: 800 12px 'Nunito', sans-serif;
+  box-shadow: 0 2px 0 #c0814a;
+}
+.hud-stats { bottom: 18px; left: 18px; display: flex; gap: 18px; align-items: center; }
+.stat { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+.stat b { font-size: 22px; font-weight: 800; }
+.stat span { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }
+.sail-bar { width: 14px; height: 54px; border-radius: 7px; background: rgba(255,255,255,.18); position: relative; overflow: hidden; }
+.sail-bar i { position: absolute; left: 0; right: 0; bottom: 0; background: #f3e6c8; border-radius: 7px; }
+.sail-bar i.rev { background: #e67b50; }
+.compass { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #c0814a; position: relative; background: rgba(255,255,255,.08); }
+.compass .n { position: absolute; left: 50%; top: 1px; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: #ffd27a; }
+.compass .needle { position: absolute; left: 50%; top: 50%; width: 4px; height: 22px; margin-left: -2px; margin-top: -22px; background: #d8343a; border-radius: 2px; transform-origin: 50% 100%; }
+.hidden { display: none; }
+@media (max-width: 600px) { .hud-help { font-size: 11px; } .hud-title { font-size: 26px; } }
