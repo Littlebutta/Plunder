@@ -1,0 +1,869 @@
+{
+  "schema": 1,
+  "project": "Plunder",
+  "updated": "2026-11-09T20:30:00Z",
+  "categories": [
+    {
+      "key": "feature",
+      "label": "Features",
+      "prefix": "F",
+      "fields": [
+        "priority",
+        "milestone",
+        "tags"
+      ],
+      "statuses": [
+        {
+          "key": "idea",
+          "label": "Idea",
+          "color": "sky"
+        },
+        {
+          "key": "in-progress",
+          "label": "In progress",
+          "color": "amber"
+        },
+        {
+          "key": "good-enough",
+          "label": "Good enough for now",
+          "color": "teal",
+          "closed": true
+        },
+        {
+          "key": "complete",
+          "label": "Complete",
+          "color": "green",
+          "closed": true
+        },
+        {
+          "key": "dropped",
+          "label": "Dropped",
+          "color": "grey",
+          "closed": true
+        }
+      ]
+    },
+    {
+      "key": "bug",
+      "label": "Bugs & fixes",
+      "prefix": "B",
+      "fields": [
+        "priority",
+        "milestone",
+        "tags"
+      ],
+      "statuses": [
+        {
+          "key": "unresolved",
+          "label": "Unresolved",
+          "color": "red"
+        },
+        {
+          "key": "fixed",
+          "label": "Fixed",
+          "color": "green",
+          "closed": true
+        }
+      ]
+    },
+    {
+      "key": "milestone",
+      "label": "Roadmap",
+      "prefix": "M",
+      "fields": [],
+      "statuses": [
+        {
+          "key": "planned",
+          "label": "Planned",
+          "color": "sky"
+        },
+        {
+          "key": "active",
+          "label": "Active",
+          "color": "amber"
+        },
+        {
+          "key": "done",
+          "label": "Done",
+          "color": "green",
+          "closed": true
+        }
+      ]
+    },
+    {
+      "key": "playtest",
+      "label": "Playtest notes",
+      "prefix": "P",
+      "fields": [
+        "milestone",
+        "tags"
+      ],
+      "statuses": [
+        {
+          "key": "new",
+          "label": "New",
+          "color": "amber"
+        },
+        {
+          "key": "actioned",
+          "label": "Turned into tasks",
+          "color": "green",
+          "closed": true
+        },
+        {
+          "key": "archived",
+          "label": "Archived",
+          "color": "grey",
+          "closed": true
+        }
+      ]
+    },
+    {
+      "key": "asset",
+      "label": "Assets",
+      "prefix": "A",
+      "fields": [
+        "milestone",
+        "tags"
+      ],
+      "statuses": [
+        {
+          "key": "needed",
+          "label": "Needed",
+          "color": "red"
+        },
+        {
+          "key": "have",
+          "label": "Have it",
+          "color": "sky"
+        },
+        {
+          "key": "in-game",
+          "label": "In game",
+          "color": "green",
+          "closed": true
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "M-1",
+      "cat": "milestone",
+      "title": "Step 1: Toon ocean, floating raft, follow camera",
+      "status": "done",
+      "tags": [],
+      "notes": "Initial commit on main. Gerstner wave field shared by shader + CPU buoyancy, probe-based raft physics, orbit/follow camera, HUD, G tuning panel.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-2",
+      "cat": "milestone",
+      "title": "Step 2: Swivel gun, wind, wake, sounds",
+      "status": "active",
+      "tags": [],
+      "notes": "Built in PR #2, waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-3",
+      "cat": "milestone",
+      "title": "Portable Windows desktop build",
+      "status": "active",
+      "tags": [],
+      "notes": "Self-updating portable folder (no installer). PR #1, waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/1"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-4",
+      "cat": "milestone",
+      "title": "Step 3: Shipyard (draw hull → 3D hull)",
+      "status": "planned",
+      "tags": [],
+      "notes": "Draw the hull top-down + side profile, loft into a 3D mesh that outputs a HullSpec, test sail. See docs/PIPELINE.md.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-5",
+      "cat": "milestone",
+      "title": "Step 4: Ship components & broadside",
+      "status": "planned",
+      "tags": [],
+      "notes": "Snap points, masts and cannons whose weight changes draft/stability, broadside ribbon aiming.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-6",
+      "cat": "milestone",
+      "title": "Step 5: Islands, map & round loop",
+      "status": "planned",
+      "tags": [],
+      "notes": "Procedural islands with variety, resources, map size/overworld map, persistent map per game, round + shipyard loop.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-7",
+      "cat": "milestone",
+      "title": "Territory & economy",
+      "status": "planned",
+      "tags": [],
+      "notes": "Ports, capturing/fortifying islands, NPC fortresses and their bonuses, defender ships, between-round modifiers.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "M-8",
+      "cat": "milestone",
+      "title": "Multiplayer & menus",
+      "status": "planned",
+      "tags": [],
+      "notes": "Title menu and multiplayer support.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-1",
+      "cat": "feature",
+      "title": "Toon ocean with rolling Gerstner waves",
+      "status": "complete",
+      "milestone": "M-1",
+      "tags": [
+        "ocean",
+        "visuals"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-2",
+      "cat": "feature",
+      "title": "Buoyant raft physics (probe-based floating body)",
+      "status": "complete",
+      "milestone": "M-1",
+      "tags": [
+        "physics"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-3",
+      "cat": "feature",
+      "title": "Smooth follow / orbit camera",
+      "status": "complete",
+      "milestone": "M-1",
+      "tags": [
+        "camera"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-4",
+      "cat": "feature",
+      "title": "Live tuning panel (G) and buoyancy probe view (P)",
+      "status": "complete",
+      "milestone": "M-1",
+      "tags": [
+        "tools"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-5",
+      "cat": "feature",
+      "title": "Bow swivel gun with mouse aim and dotted arc preview",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "combat"
+      ],
+      "notes": "Keep the dotted projected line for swivel guns (Devin, 2026-11-09).",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-6",
+      "cat": "feature",
+      "title": "Projectiles simulated in a Web Worker (multithreaded)",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "combat",
+        "performance"
+      ],
+      "notes": "Devin wants multithreading prioritised because barrages will get heavy.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-7",
+      "cat": "feature",
+      "title": "Wind with gusts + square-sail trim (Q/E, T auto)",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "sailing"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-8",
+      "cat": "feature",
+      "title": "Foam wake trail and wind streaks",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "visuals"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-9",
+      "cat": "feature",
+      "title": "Detailed palm trees",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "islands",
+        "visuals"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-10",
+      "cat": "feature",
+      "title": "Sound effects: cannon, full sail, splashes, ocean + wind ambience",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "audio"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-11",
+      "cat": "feature",
+      "title": "Floating target barrels with score",
+      "status": "complete",
+      "milestone": "M-2",
+      "tags": [
+        "combat"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-12",
+      "cat": "feature",
+      "title": "Portable self-updating Windows exe (no installer)",
+      "status": "complete",
+      "milestone": "M-3",
+      "tags": [
+        "desktop"
+      ],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/1"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-13",
+      "cat": "feature",
+      "title": "Arcade wind: wind acts as a boost, ships can always move",
+      "status": "idea",
+      "priority": "high",
+      "milestone": "M-2",
+      "tags": [
+        "sailing",
+        "feel"
+      ],
+      "notes": "Make sailing more arcade friendly. Wind should give a speed boost, but ships must still move regardless of wind direction.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-14",
+      "cat": "feature",
+      "title": "Wave rework: more dynamic, not one unidirectional pattern",
+      "status": "idea",
+      "priority": "high",
+      "tags": [
+        "ocean",
+        "visuals"
+      ],
+      "notes": "Better wave generation, not just a simple unidirectional wave in the same pattern.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-15",
+      "cat": "feature",
+      "title": "Less foam, and not on top of every wave",
+      "status": "idea",
+      "priority": "medium",
+      "tags": [
+        "ocean",
+        "visuals"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-16",
+      "cat": "feature",
+      "title": "Broadside ribbon: outlined ribbon showing where a cannon barrage lands",
+      "status": "idea",
+      "priority": "high",
+      "milestone": "M-5",
+      "tags": [
+        "combat"
+      ],
+      "notes": "Once a ship has cannons, barrages show an outlined ribbon. Small side-to-side aim, but mostly driven by elevation and the ship's own angle. Swivel guns keep their dotted line.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-17",
+      "cat": "feature",
+      "title": "Draw-your-hull shipyard (top-down + side profile → 3D hull)",
+      "status": "idea",
+      "priority": "high",
+      "milestone": "M-4",
+      "tags": [
+        "shipyard"
+      ],
+      "notes": "Core design from the start: drawing is lofted into a hull mesh + HullSpec. Reference sketches in project files.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-18",
+      "cat": "feature",
+      "title": "Snap-on masts and cannons; weight affects draft and stability",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-5",
+      "tags": [
+        "shipyard"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-19",
+      "cat": "feature",
+      "title": "More varied, better-looking island mountains (not every island has one)",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-6",
+      "tags": [
+        "islands",
+        "visuals"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-20",
+      "cat": "feature",
+      "title": "Shipwrecks on some islands",
+      "status": "idea",
+      "priority": "low",
+      "milestone": "M-6",
+      "tags": [
+        "islands"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-21",
+      "cat": "feature",
+      "title": "Slightly larger default maps, scaled by number of players",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-6",
+      "tags": [
+        "map"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-22",
+      "cat": "feature",
+      "title": "Overworld map showing what players have explored",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-6",
+      "tags": [
+        "map",
+        "ui"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-23",
+      "cat": "feature",
+      "title": "Map persists between rounds, regenerates on a new game",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-6",
+      "tags": [
+        "map"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-24",
+      "cat": "feature",
+      "title": "Build ports on islands for a steady stream of resources",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-7",
+      "tags": [
+        "economy"
+      ],
+      "notes": "Resource type and amount depend on island type and size.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-25",
+      "cat": "feature",
+      "title": "Capture, destroy or fortify islands (NPC bases or enemy players)",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-7",
+      "tags": [
+        "territory"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-26",
+      "cat": "feature",
+      "title": "NPC fortress bonus while captured, transfers to the next captor",
+      "status": "idea",
+      "priority": "low",
+      "milestone": "M-7",
+      "tags": [
+        "territory"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-27",
+      "cat": "feature",
+      "title": "Ship and cannon modifiers applied between rounds",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-7",
+      "tags": [
+        "progression"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-28",
+      "cat": "feature",
+      "title": "Defender ships that guard territory, ordered to defend/patrol from the minimap",
+      "status": "idea",
+      "priority": "low",
+      "milestone": "M-7",
+      "tags": [
+        "territory",
+        "ai"
+      ],
+      "notes": "Open question: a perk, an upgrade, or something built at a port? Undecided (Devin: \"idk yet\").",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-29",
+      "cat": "feature",
+      "title": "Title menu",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-8",
+      "tags": [
+        "ui"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-30",
+      "cat": "feature",
+      "title": "Multiplayer support",
+      "status": "idea",
+      "priority": "medium",
+      "milestone": "M-8",
+      "tags": [
+        "network"
+      ],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-31",
+      "cat": "feature",
+      "title": "Dev tracker (this page)",
+      "status": "complete",
+      "tags": [
+        "tools"
+      ],
+      "notes": "tracker/index.html edits tracker.json on the tracker-data branch; Claude reads it with tracker/cli.mjs.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-1",
+      "cat": "bug",
+      "title": "Windows SmartScreen warns when launching the unsigned exe",
+      "status": "unresolved",
+      "priority": "low",
+      "milestone": "M-3",
+      "tags": [
+        "desktop"
+      ],
+      "notes": "Expected for an unsigned exe: click \"More info → Run anyway\". Fix would need a code-signing certificate.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/1"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-2",
+      "cat": "bug",
+      "title": "Full-folder self-update path not yet tested on real Windows",
+      "status": "unresolved",
+      "priority": "medium",
+      "milestone": "M-3",
+      "tags": [
+        "desktop",
+        "needs-test"
+      ],
+      "notes": "The cmd+robocopy folder swap that runs when the Electron shell changes. Please report if an update ever leaves the folder broken.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/1"
+      ],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "P-1",
+      "cat": "playtest",
+      "title": "Sailing should feel more arcade friendly",
+      "status": "actioned",
+      "milestone": "M-2",
+      "tags": [
+        "feel"
+      ],
+      "notes": "Devin, 2026-11-09: make the wind act like a boost but still allow ships to move regardless. Better, more dynamic wave generation; less foam / not on top of every wave. Swivel keeps dotted line; barrages get an outlined ribbon. More variance and quality in island mountains; not all islands need mountains, some can have wrecked ships.\n\nTurned into F-13, F-14, F-15, F-16, F-19 and F-20.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "A-1",
+      "cat": "asset",
+      "title": "cannon-fire.mp3 (Devin's recording)",
+      "status": "in-game",
+      "milestone": "M-2",
+      "tags": [
+        "audio"
+      ],
+      "notes": "From Desktop\\Plunder\\Sound effects, copied to public/sounds/.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "A-2",
+      "cat": "asset",
+      "title": "sail-full.mp3 (Devin's recording)",
+      "status": "in-game",
+      "milestone": "M-2",
+      "tags": [
+        "audio"
+      ],
+      "notes": "From Desktop\\Plunder\\Sound effects, copied to public/sounds/.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "A-3",
+      "cat": "asset",
+      "title": "Art style references (Wind-Waker / storybook cel shading)",
+      "status": "have",
+      "tags": [
+        "art"
+      ],
+      "notes": "art style example.jpg, art style example 2.jpg, art style example 3.jpg in project files.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    },
+    {
+      "id": "A-4",
+      "cat": "asset",
+      "title": "Shipyard drawing area sketches (top-down + side view)",
+      "status": "have",
+      "milestone": "M-4",
+      "tags": [
+        "art",
+        "ui"
+      ],
+      "notes": "Top down ship drawing idea.png and side ship view drawing area.png in project files.",
+      "links": [],
+      "created": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:30:00Z",
+      "by": "Claude"
+    }
+  ],
+  "deleted": {}
+}
