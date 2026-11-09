@@ -14,6 +14,7 @@ import { Wind } from './world/Wind';
 import { Targets, TARGET_ID_BASE } from './world/Targets';
 import { ProjectileSystem, ImpactEvent } from './combat/ProjectileSystem';
 import { SwivelGun, SWIVEL } from './combat/SwivelGun';
+import { Broadside, BROADSIDE, BroadsideShot } from './combat/Broadside';
 import { Effects } from './fx/Effects';
 import { Wake } from './fx/Wake';
 import { WindStreaks } from './fx/WindStreaks';
@@ -50,8 +51,8 @@ scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3));
 const waves = new WaveField();
 const ocean = new Ocean(waves, sunDir);
 const sky = new Sky(sunDir);
-const islands = createIslands();
-scene.add(sky.group, ocean.mesh, islands);
+const world = createIslands();
+scene.add(sky.group, ocean.mesh, world.group);
 
 const wind = new Wind();
 const raft = new Raft(waves, wind);
@@ -64,6 +65,21 @@ const gun = new SwivelGun(waves);
 gun.mount.position.copy(raft.bowMount);
 raft.group.add(gun.mount);
 scene.add(gun.preview);
+
+// Broadside battery (press C to fit / remove): two light cannons per side.
+const broadside = new Broadside(
+  raft.group,
+  [
+    new THREE.Vector3(1.12, 0.3, -0.55),
+    new THREE.Vector3(1.12, 0.3, 0.55),
+    new THREE.Vector3(-1.12, 0.3, -0.55),
+    new THREE.Vector3(-1.12, 0.3, 0.55),
+  ],
+  waves,
+);
+broadside.setVisible(false);
+scene.add(broadside.ribbon);
+const broadsideShots: BroadsideShot[] = [];
 
 const targets = new Targets(waves);
 scene.add(targets.group);
@@ -113,7 +129,7 @@ window.addEventListener('resize', () => {
 });
 
 // Expose a handle for console tinkering / automated checks.
-Object.assign(window, { plunder: { scene, camera, waves, raft, ocean, follow, sim, wind, gun, projectiles, targets, audio, barrage } });
+Object.assign(window, { plunder: { scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
 
 // --- Combat wiring ----------------------------------------------------------
 projectiles.onImpact = (e: ImpactEvent) => {
@@ -208,12 +224,11 @@ function frame(): void {
   if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
   if (input.wasPressed('KeyH')) hud.toggleHelp();
   if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
-  if (input.wasPressed('KeyT')) raft.autoTrim = !raft.autoTrim;
   if (input.wasPressed('KeyM')) audio.setMuted(!audio.muted);
   if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
 
   wind.update(dt);
-  raft.control(dt, input.throttle, input.steer, input.trim);
+  raft.control(dt, input.throttle, input.steer);
   sim.advance(dt, (h) => {
     waves.update(h);
     raft.physicsStep(h);
@@ -231,6 +246,23 @@ function frame(): void {
     effects.muzzle(muzzlePos, muzzleDir, raft.body.velocity, 0.8);
     audio.play('cannon', { volume: 0.55, rate: 1.4, rateJitter: 0.05, position: muzzlePos });
   }
+  // --- Broadside ---
+  if (input.wasPressed('KeyC')) broadside.setVisible(!broadside.visible);
+  if (broadside.visible) {
+    broadside.aimAt(aimPoint);
+    if (input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
+  }
+  broadsideShots.length = 0;
+  broadside.update(dt, raft.body.velocity, broadsideShots);
+  for (const shot of broadsideShots) {
+    shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed).add(raft.body.velocity);
+    projectiles.spawn(shot.position, shotVel, BROADSIDE.kind, RAFT_ID);
+    effects.muzzle(shot.position, shot.direction, raft.body.velocity, 1.5);
+    audio.play('cannon', { volume: 0.9, rate: 1, rateJitter: 0.06, position: shot.position });
+    // recoil shoves the raft the other way
+    raft.body.velocity.addScaledVector(shot.direction, -0.25);
+  }
+
   for (let i = queuedShots.length - 1; i >= 0; i--) {
     const q = queuedShots[i];
     q.delay -= dt;
@@ -270,8 +302,8 @@ function frame(): void {
 
   // Compass heading: 0 = north (-Z), clockwise positive.
   hud.update(rawDt, raft.body.forwardSpeed, raft.sail, Math.atan2(fwd.x, -fwd.z));
-  hud.updateSailing(Math.atan2(wind.direction.x, -wind.direction.z), raft.sailEfficiency, THREE.MathUtils.radToDeg(raft.trim), raft.autoTrim, raft.sail);
-  hud.updateCombat(gun.reloadProgress, targets.score, projectiles.stats.active, projectiles.stats.threaded, projectiles.stats.workerMs);
+  hud.updateSailing(Math.atan2(wind.direction.x, -wind.direction.z), raft.windBoost, raft.sail);
+  hud.updateCombat(gun.reloadProgress, broadside.visible ? broadside.reloadProgress : -1, targets.score, projectiles.stats.active, projectiles.stats.threaded, projectiles.stats.workerMs);
 
   streaks.update(dt, camera, follow.focusPoint);
   audio.updateListener(camera);

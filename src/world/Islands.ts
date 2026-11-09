@@ -2,71 +2,344 @@ import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
 import { mulberry32 } from '../util/random';
+import { Noise2D } from '../util/noise';
+import { buildWreck } from './Wreck';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * Placeholder scenery: a few hand-placed toon islands so there is something to
- * sail toward and judge speed against. Procedural islands + resources come in
- * a later step; this module is where they will live.
+ * Procedural islands. Each island is a single heightfield mesh on a polar
+ * grid with an irregular coastline, coloured per vertex (sand, grass, rock,
+ * dark rock) and flat-shaded for a faceted storybook look. Types vary the
+ * terrain shape and dressing; not every island gets a mountain.
  */
-export function createIslands(seed = 3): THREE.Group {
+export type IslandType = 'peak' | 'ridge' | 'mesa' | 'hills' | 'cay' | 'stacks' | 'wreck';
+
+export interface Island {
+  type: IslandType;
+  group: THREE.Group;
+  center: THREE.Vector3;
+  /** Rough radius of the coastline (m). */
+  radius: number;
+  /** Coastline radius in a given world direction (for collisions). */
+  coastAt(angle: number): number;
+}
+
+export interface IslandWorld {
+  group: THREE.Group;
+  islands: Island[];
+}
+
+/** Order islands are dealt in; cycled if more are requested. Nearest-first. */
+const TYPE_DECK: IslandType[] = ['peak', 'wreck', 'cay', 'mesa', 'hills', 'ridge', 'stacks', 'cay', 'wreck', 'hills', 'peak', 'ridge'];
+
+export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWorld {
   const group = new THREE.Group();
   group.name = 'islands';
   const rand = mulberry32(seed);
-  const spots: [number, number, number][] = [
-    [90, -160, 1.2],
-    [-220, -80, 0.8],
-    [-60, 260, 1.0],
-    [320, 140, 1.5],
-  ];
-  for (const [x, z, s] of spots) {
-    const island = buildIsland(rand, s);
-    island.position.set(x, 0, z);
-    island.rotation.y = rand() * Math.PI * 2;
-    group.add(island);
+  const islands: Island[] = [];
+
+  for (let n = 0; n < count; n++) {
+    const type = TYPE_DECK[n % TYPE_DECK.length];
+    const radius = radiusFor(type, rand);
+    // Try several spots for this island before giving up on it.
+    for (let tries = 0; tries < 80; tries++) {
+      const a = rand() * Math.PI * 2;
+      // earlier islands in the deck land closer to the start
+      const near = 110 + (n / count) * (worldRadius - 260);
+      const d = near + rand() * 150;
+      const center = new THREE.Vector3(Math.cos(a) * d, 0, Math.sin(a) * d);
+      if (islands.some((o) => o.center.distanceTo(center) < o.radius + radius + 60)) continue;
+      const island = buildIsland(type, radius, mulberry32(Math.floor(rand() * 1e9)));
+      island.center.copy(center);
+      island.group.position.copy(center);
+      group.add(island.group);
+      islands.push(island);
+      break;
+    }
   }
-  return group;
+  return { group, islands };
 }
 
-function buildIsland(rand: () => number, scale: number): THREE.Group {
+function radiusFor(type: IslandType, rand: () => number): number {
+  switch (type) {
+    case 'cay':
+      return 14 + rand() * 10;
+    case 'stacks':
+      return 16 + rand() * 12;
+    case 'wreck':
+      return 20 + rand() * 10;
+    case 'hills':
+      return 28 + rand() * 22;
+    default:
+      return 32 + rand() * 26;
+  }
+}
+
+const COLORS = {
+  sand: new THREE.Color(PALETTE.sand),
+  wetSand: new THREE.Color(0xd9b874),
+  grass: new THREE.Color(0x5cb85a),
+  grassDark: new THREE.Color(0x3f9a4a),
+  rock: new THREE.Color(PALETTE.rock),
+  rockDark: new THREE.Color(0x8a5d55),
+  cliff: new THREE.Color(0xc29a7a),
+  snow: new THREE.Color(0xf5f1e8),
+};
+
+function buildIsland(type: IslandType, radius: number, rand: () => number): Island {
+  const noise = new Noise2D(rand);
   const g = new THREE.Group();
-  const sand = toonMaterial(PALETTE.sand);
-  const rock = toonMaterial(PALETTE.rock);
+  g.name = `island-${type}`;
 
-  // Sandy beach: a flattened, jittered dome that sits through the waterline.
-  const beachGeo = new THREE.SphereGeometry(22, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-  jitter(beachGeo, rand, 1.5);
-  beachGeo.scale(1, 0.18, 1);
-  beachGeo.translate(0, -1.2, 0);
-  const beach = new THREE.Mesh(beachGeo, sand);
-  g.add(beach);
+  // Irregular coastline: radius varies with angle (seamless around the circle).
+  const coastSeed = rand() * 100;
+  const lobes = 0.18 + rand() * 0.2;
+  const coastAt = (angle: number) => {
+    const n = noise.fbm(Math.cos(angle) * 1.3 + coastSeed, Math.sin(angle) * 1.3 + coastSeed, 3);
+    return radius * (1 - lobes + lobes * 2 * n);
+  };
 
-  // Rocky peak(s)
-  const peaks = 1 + Math.floor(rand() * 2);
-  for (let i = 0; i < peaks; i++) {
-    const h = 18 + rand() * 14;
-    const geo = new THREE.ConeGeometry(8 + rand() * 4, h, 7, 3);
-    jitter(geo, rand, 1.2);
-    const peak = new THREE.Mesh(geo, rock);
-    peak.position.set((rand() - 0.5) * 10, h / 2 - 1, (rand() - 0.5) * 10);
-    addOutline(peak, 0.25, PALETTE.outline);
-    g.add(peak);
+  // Feature parameters per type
+  const peakCount = type === 'peak' ? 1 + Math.floor(rand() * 2) : 0;
+  const peaks = Array.from({ length: peakCount }, (_, i) => ({
+    x: (rand() - 0.5) * radius * (i ? 0.7 : 0.35),
+    z: (rand() - 0.5) * radius * (i ? 0.7 : 0.35),
+    h: (i ? 0.55 : 1) * (26 + rand() * 22) * (radius / 45),
+    r: radius * (0.55 + rand() * 0.25),
+    crater: rand() < 0.3,
+  }));
+  const ridgeDir = rand() * Math.PI;
+  const ridgeH = (18 + rand() * 16) * (radius / 45);
+  const mesaH = 9 + rand() * 9;
+  const mesaR = radius * (0.45 + rand() * 0.2);
+  const hillsH = 4 + rand() * 6;
+
+  const height = (x: number, z: number): number => {
+    const r = Math.hypot(x, z);
+    const coast = coastAt(Math.atan2(z, x));
+    const t = r / coast; // 0 centre, 1 coastline
+    // Base: beach dome that crosses the waterline at the coast.
+    const beach = 2.2 * (1 - t * t) - 1.0 + (noise.fbm(x * 0.05, z * 0.05) - 0.5) * 1.2;
+    let h = beach;
+    switch (type) {
+      case 'peak':
+      case 'wreck':
+        for (const p of type === 'peak' ? peaks : []) {
+          const d = Math.hypot(x - p.x, z - p.z) / p.r;
+          if (d >= 1) continue;
+          const ridge = noise.ridged(x * 0.04 + 5, z * 0.04 + 5);
+          let m = Math.pow(1 - d, 1.7) * p.h * (0.75 + ridge * 0.5);
+          if (p.crater && d < 0.18) m -= (0.18 - d) * p.h * 1.6;
+          h = Math.max(h, beach + m);
+        }
+        if (type === 'wreck') h = beach + Math.max(0, (1 - t) * 3 * noise.fbm(x * 0.06, z * 0.06));
+        break;
+      case 'ridge': {
+        const ax = Math.cos(ridgeDir);
+        const az = Math.sin(ridgeDir);
+        const along = x * ax + z * az;
+        const across = -x * az + z * ax;
+        const len = 1 - Math.min(1, Math.abs(along) / (coast * 0.85));
+        const w = Math.max(0, 1 - Math.abs(across) / (coast * 0.45));
+        const ridge = noise.ridged(along * 0.05, across * 0.08 + 3, 5);
+        h = Math.max(h, beach + Math.pow(w, 1.4) * Math.pow(len, 0.6) * ridgeH * (0.5 + ridge));
+        break;
+      }
+      case 'mesa': {
+        const d = r / mesaR + (noise.fbm(x * 0.04, z * 0.04) - 0.5) * 0.35;
+        // terraced cliffs: two steps
+        const step1 = 1 - THREE.MathUtils.smoothstep(d, 0.92, 1.0);
+        const step2 = 1 - THREE.MathUtils.smoothstep(d, 0.55, 0.62);
+        h = Math.max(h, beach + step1 * mesaH * 0.6 + step2 * mesaH * 0.5);
+        break;
+      }
+      case 'hills':
+        h = beach + Math.max(0, 1 - t) * hillsH * noise.fbm(x * 0.035 + 7, z * 0.035 + 7, 4) * 2;
+        break;
+      case 'cay':
+        h = beach * 0.6 - 0.2;
+        break;
+      case 'stacks':
+        h = beach * 0.5 - 0.6;
+        break;
+    }
+    // Sink everything past the coast so the skirt hides under water.
+    if (t > 1) h -= (t - 1) * 12;
+    return h;
+  };
+
+  // --- Polar heightfield mesh ---------------------------------------------
+  const rings = 36;
+  const segs = 72;
+  const outer = radius * 1.45;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  pos.push(0, height(0, 0), 0);
+  for (let ri = 1; ri <= rings; ri++) {
+    const rr = Math.pow(ri / rings, 1.15) * outer;
+    for (let si = 0; si < segs; si++) {
+      const a = (si / segs) * Math.PI * 2 + (ri % 2) * (Math.PI / segs);
+      const x = Math.cos(a) * rr;
+      const z = Math.sin(a) * rr;
+      pos.push(x, height(x, z), z);
+    }
   }
+  for (let si = 0; si < segs; si++) idx.push(0, 1 + ((si + 1) % segs), 1 + si);
+  for (let ri = 1; ri < rings; ri++) {
+    const a0 = 1 + (ri - 1) * segs;
+    const b0 = 1 + ri * segs;
+    for (let si = 0; si < segs; si++) {
+      const a = a0 + si;
+      const a1 = a0 + ((si + 1) % segs);
+      const b = b0 + si;
+      const b1 = b0 + ((si + 1) % segs);
+      if (ri % 2) {
+        idx.push(a, a1, b, a1, b1, b);
+      } else {
+        idx.push(a, a1, b1, a, b1, b);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
 
-  // Palms around the beach
-  const palms = 3 + Math.floor(rand() * 4);
-  for (let i = 0; i < palms; i++) {
+  // Vertex colours from height + slope (+ a little noise so bands look painted).
+  const nrm = geo.attributes.normal as THREE.BufferAttribute;
+  const colors = new Float32Array((pos.length / 3) * 3);
+  const c = new THREE.Color();
+  const peakTop = Math.max(...peaks.map((p) => p.h), ridgeH * 0.9);
+  for (let i = 0; i < pos.length / 3; i++) {
+    const x = pos[i * 3];
+    const y = pos[i * 3 + 1];
+    const z = pos[i * 3 + 2];
+    const slope = 1 - nrm.getY(i);
+    const n = noise.fbm(x * 0.12, z * 0.12, 2) - 0.5;
+    const sandLine = 1.3 + n * 1.2;
+    if (y < 0.15) c.copy(COLORS.wetSand);
+    else if (y < sandLine) c.copy(COLORS.sand);
+    else if (type === 'cay' || type === 'stacks') c.copy(COLORS.sand);
+    else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : COLORS.rock);
+    else if ((type === 'peak' || type === 'ridge') && y > peakTop * 0.62 + n * 4) c.copy(COLORS.rockDark);
+    else c.copy(n > 0.05 ? COLORS.grassDark : COLORS.grass);
+    if (type === 'peak' && y > peakTop * 0.88 && slope < 0.6) c.copy(COLORS.snow);
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const terrain = new THREE.Mesh(facet(geo), terrainMaterial());
+  terrain.receiveShadow = true;
+  terrain.castShadow = true;
+  g.add(terrain);
+
+  // --- Dressing -----------------------------------------------------------
+  if (type === 'stacks') addSeaStacks(g, radius, rand);
+
+  const palmCount = { peak: 5, ridge: 4, mesa: 3, hills: 7, cay: 6, stacks: 1, wreck: 4 }[type] + Math.floor(rand() * 3);
+  for (let i = 0, tries = 0; i < palmCount && tries < 200; tries++) {
     const a = rand() * Math.PI * 2;
-    const r = 9 + rand() * 7;
+    const r = coastAt(a) * (0.35 + rand() * 0.5);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const y = height(x, z);
+    if (y < 0.9 || y > 9) continue;
     const palm = buildPalm(rand);
-    palm.position.set(Math.cos(a) * r, 1.6, Math.sin(a) * r);
+    palm.position.set(x, y - 0.2, z);
+    palm.scale.setScalar(0.85 + rand() * 0.4);
     g.add(palm);
+    i++;
   }
 
-  g.scale.setScalar(scale);
+  const boulders = type === 'cay' ? 2 : 5 + Math.floor(rand() * 5);
+  for (let i = 0; i < boulders; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = coastAt(a) * (0.75 + rand() * 0.35);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const bg = new THREE.IcosahedronGeometry(1, 1);
+    jitter(bg, rand, 0.35);
+    const b = rockMesh(bg, 0.06);
+    const s = 0.8 + rand() * 2.2;
+    b.scale.set(s, s * (0.6 + rand() * 0.5), s);
+    b.position.set(x, height(x, z) - 0.3, z);
+    b.rotation.y = rand() * Math.PI * 2;
+    g.add(b);
+  }
+
+  if (type === 'wreck') {
+    const wreck = buildWreck(rand);
+    const a = rand() * Math.PI * 2;
+    const r = coastAt(a) * 0.82;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    wreck.position.set(x, height(x, z) - 0.6, z);
+    // beached bow-first: point the bow inland
+    wreck.rotation.y = -a - Math.PI / 2 + (rand() - 0.5) * 0.6;
+    g.add(wreck);
+  }
+
   g.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) o.receiveShadow = true;
   });
+
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt };
+}
+
+/** Un-share vertices so each triangle gets its own normal: faceted cel shading. */
+function facet(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  g.computeVertexNormals();
   return g;
+}
+
+let _terrainMat: THREE.Material | null = null;
+function terrainMaterial(): THREE.Material {
+  return (_terrainMat ??= toonMaterial(0xffffff, { vertexColors: true }));
+}
+let _rockMat: THREE.Material | null = null;
+function rockMaterial(): THREE.Material {
+  return (_rockMat ??= toonMaterial(PALETTE.rock));
+}
+
+/**
+ * Faceted rock with a clean ink outline: the visible mesh has per-face
+ * normals, while the outline shell uses a welded, smooth-normal copy so it
+ * doesn't split open at the facets.
+ */
+function rockMesh(geo: THREE.BufferGeometry, outline: number): THREE.Mesh {
+  geo.deleteAttribute('uv');
+  geo.deleteAttribute('normal');
+  const smooth = mergeVertices(geo, 1e-3);
+  smooth.computeVertexNormals();
+  const mesh = new THREE.Mesh(facet(smooth), rockMaterial());
+  addOutline(mesh, outline, PALETTE.outline).geometry = smooth;
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** Tall eroded rock pillars rising out of the sea, with a few birds-eye flat tops. */
+function addSeaStacks(g: THREE.Group, radius: number, rand: () => number): void {
+  const n = 4 + Math.floor(rand() * 4);
+  for (let i = 0; i < n; i++) {
+    const h = 8 + rand() * 20;
+    const r = 2 + rand() * 3.5;
+    const geo = new THREE.CylinderGeometry(r * (0.55 + rand() * 0.3), r, h, 7, 4);
+    jitter(geo, rand, r * 0.25);
+    const stack = rockMesh(geo, 0.12);
+    const a = rand() * Math.PI * 2;
+    const d = rand() * radius * 0.8;
+    stack.position.set(Math.cos(a) * d, h / 2 - 2, Math.sin(a) * d);
+    stack.rotation.set((rand() - 0.5) * 0.15, rand() * Math.PI, (rand() - 0.5) * 0.15);
+    g.add(stack);
+    // grassy cap on some
+    if (rand() < 0.5) {
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.7, r * 0.75, 0.6, 7), toonMaterial(0x5cb85a));
+      cap.position.y = h / 2;
+      stack.add(cap);
+    }
+  }
 }
 
 /**

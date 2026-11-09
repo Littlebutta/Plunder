@@ -202,11 +202,14 @@ export class SwivelGun {
       vel.y -= (vel.y * drag * speed + GRAVITY) * h;
       vel.z -= vel.z * drag * speed * h;
       pos.addScaledVector(vel, h);
-      const water = this.waves.heightAt(pos.x, pos.z);
-      if (pos.y <= water) {
-        pos.y = water;
-        hit = true;
-        break;
+      // Only sample the sea once the shot is low enough to touch it.
+      if (pos.y < 6) {
+        const water = this.waves.heightAt(pos.x, pos.z);
+        if (pos.y <= water) {
+          pos.y = water;
+          hit = true;
+          break;
+        }
       }
       if (i % 6 === 0) {
         this.dummy.position.copy(pos);

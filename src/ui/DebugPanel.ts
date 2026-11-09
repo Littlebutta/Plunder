@@ -5,6 +5,7 @@ import { Ocean } from '../ocean/Ocean';
 import { RAFT_DRIVE, RAFT_HULL } from '../raft/Raft';
 import { Wind } from '../world/Wind';
 import { SWIVEL } from '../combat/SwivelGun';
+import { BROADSIDE } from '../combat/Broadside';
 
 /**
  * Live tuning panel (toggle with G). Wave edits update the shader uniforms AND
@@ -47,6 +48,9 @@ export function createDebugPanel(waves: WaveField, ocean: Ocean, wind: Wind, onS
   const combat = gui.addFolder('Combat').close();
   combat.add(SWIVEL, 'muzzleSpeed', 20, 120, 1).name('swivel muzzle m/s');
   combat.add(SWIVEL, 'reload', 0.05, 5, 0.05).name('swivel reload s');
+  combat.add(BROADSIDE, 'muzzleSpeed', 20, 120, 1).name('broadside muzzle m/s');
+  combat.add(BROADSIDE, 'reload', 0.2, 8, 0.1).name('broadside reload s');
+  combat.add(BROADSIDE, 'stabilise', 0, 1, 0.01).name('roll stabilise');
   combat.add(barrage, 'size', 10, 4000, 10).name('barrage shells');
   combat.add(barrage, 'fire').name('fire barrage (B)');
 
@@ -63,8 +67,9 @@ export function createDebugPanel(waves: WaveField, ocean: Ocean, wind: Wind, onS
   }
 
   const phys = gui.addFolder('Raft physics').close();
-  phys.add(RAFT_DRIVE, 'sailPower', 20, 400, 1).name('sail power');
-  phys.add(RAFT_DRIVE, 'leeway', 0, 1.5, 0.01).name('leeway');
+  phys.add(RAFT_DRIVE, 'baseThrust', 100, 4000, 10).name('base thrust (N)');
+  phys.add(RAFT_DRIVE, 'windBoost', 0, 4000, 10).name('wind boost (N)');
+  phys.add(RAFT_DRIVE, 'headwindPenalty', 0, 1, 0.01).name('headwind penalty');
   phys.add(RAFT_DRIVE, 'steerTorque', 200, 5000, 10).name('steer torque');
   phys.add(RAFT_HULL.dragForward, 'quadratic', 5, 200, 1).name('forward drag');
   phys.add(RAFT_HULL.dragLateral, 'quadratic', 50, 2000, 10).name('lateral drag');

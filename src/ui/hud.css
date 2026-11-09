@@ -49,3 +49,5 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
   font-size: 13px; font-variant-numeric: tabular-nums;
 }
 .hud-score b { font-size: 18px; }
+
+[hidden] { display: none !important; }

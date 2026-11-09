@@ -37,13 +37,16 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
       varying float vHeight;
       varying vec2 vGrid;
       varying float vFade;
+      varying float vEnv;
 
       void main() {
         vec4 world = modelMatrix * vec4(position, 1.0);
         float dist = distance(world.xz, uCenter);
         float fade = 1.0 - smoothstep(uFade.x, uFade.y, dist);
         vec3 n;
-        vec3 d = gerstner(world.xz, fade, n);
+        float env;
+        vec3 d = gerstner(world.xz, fade, n, env);
+        vEnv = env;
         world.xyz += d;
         vWorldPos = world.xyz;
         vNormal = n;
@@ -71,6 +74,7 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
       varying float vHeight;
       varying vec2 vGrid;
       varying float vFade;
+      varying float vEnv;
 
       // --- value noise ---------------------------------------------------
       float hash(vec2 p) {
@@ -126,12 +130,16 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
         vec2 fp = vGrid * 0.11 + vec2(uTime * 0.05, uTime * 0.02);
         float n1 = fbm(fp);
         float line = 1.0 - aastep(0.03, abs(fract(n1 * 5.0) - 0.5));
-        float mask = aastep(0.5, fbm(vGrid * 0.03 - uTime * 0.02)) * aastep(0.4, h);
-        float streaks = line * mask * vFade * uFoamAmount;
+        // Wave groups: vEnv > 1 inside a big set, < 1 in the lulls between.
+        float inSet = smoothstep(0.95, 1.2, vEnv);
+        float mask = aastep(0.58, fbm(vGrid * 0.03 - uTime * 0.02)) * aastep(0.45, h);
+        float streaks = line * mask * vFade * uFoamAmount * (0.35 + 0.65 * inSet);
 
-        // Crest caps: broken white tops on the highest water.
+        // Crest caps: only the tallest crests of a big set break, and a
+        // large-scale noise leaves whole patches of sea clean.
         float capNoise = fbm(vGrid * 0.35 + uTime * 0.25);
-        float caps = aastep(0.92 - capNoise * 0.14, h) * uFoamAmount;
+        float cleanPatch = aastep(0.5, fbm(vGrid * 0.011 + vec2(uTime * 0.01, -uTime * 0.006)));
+        float caps = aastep(0.93 - capNoise * 0.12, h) * inSet * cleanPatch * uFoamAmount;
 
         float foam = max(streaks * 0.9, caps);
         // fade foam detail out in the distance to avoid shimmer

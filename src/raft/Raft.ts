@@ -28,17 +28,22 @@ export const RAFT_HULL: HullSpec = {
 };
 
 /** Tunables for sail, paddle and rudder. */
+/**
+ * Arcade sailing: the sail always drives the raft (so you can go anywhere),
+ * and the wind adds a boost on top when it is behind you.
+ */
 export const RAFT_DRIVE = {
-  /** Sail force coefficient: N per (m/s of apparent wind)^2 at full sail. */
-  sailPower: 110,
-  reverseThrust: 350, // N when paddling backwards
-  steerTorque: 1000, // N·m at full rudder
-  steerSpeedGain: 0.25, // extra steering per m/s of forward speed
-  sailRate: 0.6, // sail fraction per second when raising/lowering
-  trimRate: 1.2, // rad/s when trimming by hand
+  /** N at full sail with no help from the wind (~8 knots top speed). */
+  baseThrust: 950,
+  /** Extra N at full sail running dead downwind in a strength-1 wind. */
+  windBoost: 1100,
+  /** How much a headwind slows you (0 = not at all, 1 = cancels the base drive). */
+  headwindPenalty: 0.15,
+  reverseThrust: 450, // N when paddling backwards
+  steerTorque: 1300, // N·m at full rudder
+  steerSpeedGain: 0.22, // extra steering per m/s of forward speed
+  sailRate: 0.8, // sail fraction per second when raising/lowering
   maxTrim: THREE.MathUtils.degToRad(75),
-  /** Fraction of the sail force that pushes the raft sideways (leeway). */
-  leeway: 0.6,
 };
 
 /** Wind speed in m/s at strength 1. */
@@ -55,11 +60,10 @@ export class Raft {
   /** 0 = furled, 1 = full sail. Negative = paddling backwards. */
   sail = 0;
   rudder = 0;
-  /** Yard angle in radians (0 = square across the raft). */
+  /** Yard angle in radians (0 = square across the raft); swings to the wind on its own. */
   trim = 0;
-  autoTrim = true;
-  /** 0..1, how well the sail is catching the wind right now (for HUD/audio). */
-  sailEfficiency = 0;
+  /** 0..1, how much the wind is boosting you right now (for HUD/audio/FX). */
+  windBoost = 0;
   /** Called once each time the sail fills: full sail AND a good wind. */
   onSailFilled: (() => void) | null = null;
   /** Bow mount point for a deck gun, in raft space. */
@@ -189,23 +193,19 @@ export class Raft {
   }
 
   /**
-   * Per-frame: read player input into sail / rudder / trim state.
-   * throttle -1..1 (S/W) raises/lowers the sail, steer -1..1 (A/D), trim -1..1 (Q/E).
+   * Per-frame: read player input into sail / rudder state.
+   * throttle -1..1 (S/W) raises/lowers the sail, steer -1..1 (A/D).
    */
-  control(dt: number, throttleInput: number, steerInput: number, trimInput = 0): void {
+  control(dt: number, throttleInput: number, steerInput: number): void {
     this.sail = THREE.MathUtils.clamp(this.sail + throttleInput * RAFT_DRIVE.sailRate * dt, -0.4, 1);
     this.rudder = THREE.MathUtils.damp(this.rudder, steerInput, 6, dt);
-    if (trimInput !== 0) {
-      this.autoTrim = false;
-      this.trim = THREE.MathUtils.clamp(this.trim + trimInput * RAFT_DRIVE.trimRate * dt, -RAFT_DRIVE.maxTrim, RAFT_DRIVE.maxTrim);
-    } else if (this.autoTrim) {
-      this.trim = THREE.MathUtils.damp(this.trim, this.bestTrim(), 2.5, dt);
-    }
+    // Purely visual: the yard swings to catch the wind.
+    this.trim = THREE.MathUtils.damp(this.trim, this.bestTrim(), 2.5, dt);
 
     const wasFilled = this.filled;
-    this.filled = this.sail > 0.97 && this.sailEfficiency > 0.55;
+    this.filled = this.sail > 0.97 && this.windBoost > 0.6;
     if (this.filled && !wasFilled) this.onSailFilled?.();
-    if (this.sail < 0.9 || this.sailEfficiency < 0.35) this.filled = false;
+    if (this.sail < 0.9 || this.windBoost < 0.4) this.filled = false;
   }
 
   /** Apparent wind (wind minus own velocity) in raft space, m/s. */
@@ -215,53 +215,33 @@ export class Raft {
     return this.apparentLocal.copy(w).applyQuaternion(_qi.copy(this.body.quaternion).invert());
   }
 
-  /**
-   * Square-sail force in raft space for a given yard angle. The sail only
-   * pushes along its normal, and only when the wind hits its back face.
-   */
-  private sailForce(trim: number, apparent: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    const nx = -Math.sin(trim);
-    const nz = -Math.cos(trim);
-    const speed = Math.hypot(apparent.x, apparent.z);
-    if (speed < 1e-3) return out.set(0, 0, 0);
-    const cos = (apparent.x * nx + apparent.z * nz) / speed;
-    const f = cos > 0 ? RAFT_DRIVE.sailPower * speed * speed * cos * cos : 0;
-    return out.set(nx * f, 0, nz * f);
-  }
-
-  /** Yard angle that gives the most forward drive right now. */
+  /** Yard angle that squares the sail to the apparent wind (for looks). */
   private bestTrim(): number {
-    const apparent = this.updateApparentWind();
-    let best = 0;
-    let bestDrive = -Infinity;
-    for (let i = 0; i <= 24; i++) {
-      const t = -RAFT_DRIVE.maxTrim + (i / 24) * 2 * RAFT_DRIVE.maxTrim;
-      const drive = -this.sailForce(t, apparent, _sf).z;
-      if (drive > bestDrive + 1e-6) {
-        bestDrive = drive;
-        best = t;
-      }
-    }
-    return best;
+    const a = this.updateApparentWind();
+    if (a.lengthSq() < 0.01) return 0;
+    // sail normal (-sin t, -cos t) should point along the apparent wind
+    let t = Math.atan2(-a.x, -a.z);
+    // wind from ahead: can't fill, so just let the yard swing square-ish
+    if (Math.abs(t) > Math.PI / 2) t = 0;
+    return THREE.MathUtils.clamp(t, -RAFT_DRIVE.maxTrim, RAFT_DRIVE.maxTrim);
   }
 
   /** Fixed-step: turn sail / rudder into forces and integrate. */
   physicsStep(h: number): void {
     const b = this.body;
-    const apparent = this.updateApparentWind();
     if (this.sail >= 0) {
-      const f = this.sailForce(this.trim, apparent, _sf).multiplyScalar(this.sail);
-      b.thrust = -f.z;
-      b.sideForce = f.x * RAFT_DRIVE.leeway;
-      // Efficiency: forward drive as a fraction of the most this apparent wind
-      // could give (sail square to it, raft running with it). Reflects both
-      // trim and point of sail.
-      const ideal = RAFT_DRIVE.sailPower * (apparent.x * apparent.x + apparent.z * apparent.z);
-      this.sailEfficiency = this.sail > 0.05 && ideal > 1 ? THREE.MathUtils.clamp(-f.z / (ideal * this.sail), 0, 1) : 0;
+      // How much the wind is behind us: 1 dead downwind, ~0.25 on the beam, 0 into it.
+      const fwd = b.forward(_fw).setY(0).normalize();
+      const along = fwd.dot(this.wind.direction);
+      const behind = THREE.MathUtils.clamp((along + 0.3) / 1.3, 0, 1);
+      this.windBoost = behind * Math.min(this.wind.strength, 1.2);
+      const headwind = Math.max(0, -along) * this.wind.strength * RAFT_DRIVE.headwindPenalty;
+      b.thrust = this.sail * (RAFT_DRIVE.baseThrust * (1 - headwind) + RAFT_DRIVE.windBoost * this.windBoost);
+      b.sideForce = 0;
     } else {
       b.thrust = (this.sail / 0.4) * RAFT_DRIVE.reverseThrust;
       b.sideForce = 0;
-      this.sailEfficiency = 0;
+      this.windBoost = 0;
     }
     const speed = b.forwardSpeed;
     const gain = 1 + RAFT_DRIVE.steerSpeedGain * Math.abs(speed);
@@ -292,5 +272,5 @@ export class Raft {
 }
 
 const _aw = new THREE.Vector3();
-const _sf = new THREE.Vector3();
+const _fw = new THREE.Vector3();
 const _qi = new THREE.Quaternion();

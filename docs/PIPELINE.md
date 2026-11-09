@@ -37,7 +37,7 @@ Everything after step 1 is pure geometry, so it can run in a Web Worker and prev
 
 ## 2. Ocean (vertex shader + CPU twin)
 
-- **Gerstner waves** (`src/ocean/waves.ts`): a sum of up to 6 directional waves. Gerstner moves water sideways as well as up, which gives the sharp crests and wide troughs of cartoon seas.
+- **Gerstner waves** (`src/ocean/waves.ts`): a sum of up to 12 directional waves in three systems (long swell, cross swell, wind chop). Each wave's height is modulated by a slow "wave group" envelope travelling at half its speed, so sets of bigger waves roll through and the sea differs from place to place. Foam only breaks on the tallest crests inside a set. Gerstner moves water sideways as well as up, which gives the sharp crests and wide troughs of cartoon seas.
 - **One set of parameters, two evaluators.** The shader reads them as uniforms, and `WaveField.sample()` runs identical math in TS. Because Gerstner displaces horizontally, the CPU inverts it with 4 fixed-point iterations to find the true height at a world (x, z).
 - **Toon fragment shader** (`src/ocean/oceanMaterial.ts`): hard colour bands by wave height, two-step lighting, crest caps, noise-driven foam "brush strokes", noisy golden sun glints, fresnel to the horizon colour, and fog.
 - **Mesh:** one 512² grid whose spacing grows cubically outward (≈0.5 m under the ship, kilometres at the horizon), re-centred on the camera focus and snapped to its vertex spacing so it never swims. Waves fade out with distance to avoid aliasing.
@@ -48,7 +48,7 @@ Everything after step 1 is pure geometry, so it can run in a Web Worker and prev
 - **Fixed step** (`src/physics/Simulation.ts`): 120 Hz. Waves and bodies advance in lockstep so buoyancy always sees the water at the right moment, independent of frame rate.
 - **Buoyancy** (`FloatingBody`): each probe samples water height; submerged depth → upward spring force applied *at the probe*, so pitch and roll emerge naturally. Stiffness is derived from mass and the desired rest draft. Heave damping acts on velocity *relative to the water*, so the hull rides the swell instead of being buried by crests.
 - **Drag in body space:** low along the keel, high sideways (gives that boat-like carve), each with linear + quadratic terms. These are exactly the knobs the hull generator will set.
-- **Propulsion:** a square-sail model. The apparent wind (true wind minus the hull's velocity) pushes along the sail's normal, and only when it hits the back face. Force ∝ apparent speed² × cos²(angle). The forward part drives the hull, and part of the sideways part becomes leeway that the high lateral drag resists. Auto-trim searches yard angles for the most forward drive. The rudder is a yaw torque that scales with speed.
+- **Propulsion (arcade):** the sail always gives a base thrust along the keel, so ships can go anywhere. The wind adds a boost that scales with how far it is behind the ship (full downwind, a little on the beam, none upwind, plus a small headwind penalty). The yard swings to the wind for looks only. The rudder is a yaw torque that scales with speed.
 
 ## 4. Multithreading
 
@@ -63,8 +63,23 @@ Combat is where the frame budget goes (barrages, splashes, hit tests), so it is 
 
 ## Roadmap
 
-1. ~~Wind + sail trim; wake/foam trail behind hulls.~~ Done in Step 2, together with the swivel gun, worker projectiles, sounds and detailed palms.
-2. **Shipyard scene:** 2D draw canvas → lofted hull preview → HullSpec → test sail. *(next)*
-3. Snap points + mast/cannon components with weight affecting draft and stability.
-4. Broadside aiming: water-draped ribbon arc (the swivel gun's dotted arc + impact ring is the first version), cannon types with arcs and reloads.
-5. Procedural islands + resource pickups; round/shipyard loop; enemy ships.
+Done so far: ocean + raft (Step 1); swivel gun, worker projectiles, wind, wake, sounds, palms (Step 2); arcade sailing, wave groups, broadside ribbon, island types and wrecks (Step 3).
+
+**Next, in order**
+
+1. **Shipyard:** 2D draw canvas → lofted hull preview → HullSpec → test sail.
+2. **Snap points + components:** masts and cannon types (weight, arc, reload) placed on the drawn hull; weight affects draft and stability. The broadside battery and ribbon from Step 3 plug into these mounts.
+3. **Island collision + resources:** hulls ground on the coastline (`Island.coastAt`), shells hit terrain, resource pickups per island type, wrecks as salvage sites.
+4. **Round loop + title menu:** title screen, expedition round, shipyard phase, next round.
+
+**Planned features (from Devin, 2026-11-09)**
+
+- **Bigger, scaling maps + overworld map.** Larger default world; size scales with player count. Fog-of-war overworld map that fills in as players explore. *Design note: `createIslands(seed, count, worldRadius)` already takes these as parameters.*
+- **Persistent map.** The world stays the same between rounds and regenerates only on a new game. *The world is fully determined by its seed, so persistence is "keep the seed + a list of changes" (ports built, forts captured, wrecks salvaged).*
+- **Ports.** Build a port on an island for a steady stream of resources that depends on island type and size.
+- **Capture, destroy, fortify.** Islands can hold NPC bases or enemy player bases; players can capture or destroy them and fortify their own.
+- **NPC fortress bonuses.** A captured fortress gives its holder a small bonus, which transfers to whoever captures it next.
+- **Ship and cannon modifiers** applied between rounds.
+- **Defence fleets.** Spawnable ships (perk, upgrade or port building, to be decided) that can be ordered to defend or patrol areas from the minimap.
+- **Multiplayer.** *Design note: gameplay state is already kept apart from rendering (FloatingBody, ProjectileSim, WaveField are plain data + pure stepping, and waves are a function of a shared clock), which is what a server-authoritative or lockstep model needs. Decide the netcode model before building ports/capture so ownership is networked from the start.*
+- **Title menu.**

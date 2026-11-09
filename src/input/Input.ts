@@ -80,10 +80,6 @@ export class Input {
     return this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
   }
 
-  get trim(): number {
-    return this.axis(['KeyQ'], ['KeyE']);
-  }
-
   /** Fire request this frame: a click on the sea or Space. */
   get fire(): boolean {
     return this.clicked || this.wasPressed('Space');
