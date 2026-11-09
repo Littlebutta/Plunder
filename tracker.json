@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:56Z",
+  "updated": "2026-11-09T22:15:59Z",
   "categories": [
     {
       "key": "feature",
@@ -1226,6 +1226,18 @@
       "priority": "high",
       "milestone": "M-7",
       "updated": "2026-11-09T22:15:56Z",
+      "by": "Claude"
+    },
+    {
+      "id": "P-3",
+      "cat": "playtest",
+      "title": "Devin 2026-11-09: vision = mid-paced round-based territory game, build a fleet, RTS-like map controls, lose when home island is taken",
+      "status": "new",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:59Z",
+      "updated": "2026-11-09T22:15:59Z",
       "by": "Claude"
     }
   ],
