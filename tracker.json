@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:17:38Z",
+  "updated": "2026-11-09T22:17:40Z",
   "categories": [
     {
       "key": "feature",
@@ -1318,18 +1318,18 @@
       "id": "F-54",
       "cat": "feature",
       "title": "Player hull health and damage",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [
         "combat"
       ],
-      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.",
+      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.\n\n2026-11-09 (Claude): Merged in PR #10 (2026-11-09).",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/10"
       ],
       "created": "2026-11-09T22:16:12Z",
       "priority": "medium",
       "milestone": "M-6",
-      "updated": "2026-11-09T22:16:12Z",
+      "updated": "2026-11-09T22:17:40Z",
       "by": "Claude"
     },
     {
