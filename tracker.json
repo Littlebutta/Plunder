@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:54Z",
+  "updated": "2026-11-09T22:15:56Z",
   "categories": [
     {
       "key": "feature",
@@ -1212,6 +1212,20 @@
       "priority": "high",
       "milestone": "M-7",
       "updated": "2026-11-09T22:15:54Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-49",
+      "cat": "feature",
+      "title": "Home island: hut by default, upgrades to a fort; lose when it is taken; smaller forts on other islands",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:56Z",
+      "priority": "high",
+      "milestone": "M-7",
+      "updated": "2026-11-09T22:15:56Z",
       "by": "Claude"
     }
   ],
