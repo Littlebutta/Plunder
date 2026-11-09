@@ -51,6 +51,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Left mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
+| Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | M | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
@@ -77,6 +78,10 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 ## Gathering and ports
 
 Each island holds resources that depend on its type and size (wood, stone, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+
+## Enemy ship
+
+A white-sailed NPC sloop, the *Marauder* (`src/world/EnemyShip.ts`), patrols a circle around the middle of the map. It is built from a shipyard design and sails on the same physics as the player. Come within 150 m and it closes to about 60 m, keeps you on its beam and trades broadsides (its shots scatter a little); its hits take points off your hull. It has 100 hull points (a swivel shot takes 7, a cannon shell 16), sinks when they are gone, and a fresh one sails in 25 s later. Numbers are in `ENEMY`.
 
 ## Shipyard
 
