@@ -48,8 +48,10 @@ export function createDebugPanel(waves: WaveField, ocean: Ocean, wind: Wind, onS
 
   const combat = gui.addFolder('Combat').close();
   combat.add(SWIVEL, 'muzzleSpeed', 20, 120, 1).name('swivel muzzle m/s');
+  combat.add(SWIVEL, 'maxRange', 20, 140, 1).name('swivel max range m');
   combat.add(SWIVEL, 'reload', 0.05, 5, 0.05).name('swivel reload s');
   combat.add(BROADSIDE, 'muzzleSpeed', 20, 120, 1).name('broadside muzzle m/s');
+  combat.add(BROADSIDE, 'maxRange', 30, 200, 1).name('broadside max range m');
   combat.add(BROADSIDE, 'reload', 0.2, 8, 0.1).name('broadside reload s');
   combat.add(barrage, 'size', 10, 4000, 10).name('barrage shells');
   combat.add(barrage, 'fire').name('fire barrage (B)');

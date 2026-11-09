@@ -6,7 +6,7 @@ import { WaveField } from '../ocean/waves';
  * Third-person orbit camera that follows the ship smoothly.
  *
  * - Drag to orbit, wheel to zoom.
- * - After a moment without input it eases back behind the ship.
+ * - The view stays where you leave it; it never swings back behind the ship.
  * - The focus point ignores the ship's roll/pitch, so the horizon stays calm
  *   while the ship rocks in front of you.
  * - Never dips below the water surface.
@@ -18,9 +18,6 @@ export class FollowCamera {
 
   minDistance = 5;
   maxDistance = 60;
-  /** Seconds of no orbit input before auto-recentering kicks in. */
-  recenterDelay = 2.5;
-
   private readonly focus = new THREE.Vector3();
   private readonly smoothPos = new THREE.Vector3();
   private initialised = false;
@@ -37,20 +34,12 @@ export class FollowCamera {
     return this.focus;
   }
 
-  update(dt: number, targetPos: THREE.Vector3, targetHeading: number, targetSpeed: number): void {
+  update(dt: number, targetPos: THREE.Vector3): void {
     const { dx, dy, wheel } = this.input.consumeMouse();
     this.yaw -= dx * 0.005;
     this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.004, 0.08, 1.35);
     this.targetDistance = THREE.MathUtils.clamp(this.targetDistance * (1 + wheel * 0.12), this.minDistance, this.maxDistance);
     this.distance = THREE.MathUtils.damp(this.distance, this.targetDistance, 8, dt);
-
-    // Ease back behind the ship when the player isn't orbiting.
-    if (this.input.idleOrbit > this.recenterDelay) {
-      const behind = targetHeading; // camera yaw that looks along the ship's heading
-      const diff = Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw));
-      const rate = 0.6 + Math.min(Math.abs(targetSpeed), 6) * 0.25;
-      this.yaw += diff * (1 - Math.exp(-rate * dt));
-    }
 
     // Smooth the focus: tight horizontally, soft vertically so swell doesn't jerk the view.
     const goal = _goal.set(targetPos.x, targetPos.y + 1.4, targetPos.z);

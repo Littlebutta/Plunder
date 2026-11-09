@@ -8,6 +8,8 @@ import { solveElevation } from './SwivelGun';
 export const BROADSIDE = {
   muzzleSpeed: 46, // m/s
   reload: 3.2, // s per side
+  /** Furthest the battery will aim (m). Upgrades will extend this later. */
+  maxRange: 120,
   /** Small side-to-side aim either way; the ship's heading does the rest. */
   traverse: THREE.MathUtils.degToRad(12),
   minElevation: THREE.MathUtils.degToRad(1),
@@ -42,8 +44,9 @@ export interface BroadsideShot {
  * its distance sets the elevation, and its bearing gives a few degrees of
  * side-to-side adjustment.
  *
- * The firing preview is an outlined white ribbon draped on the water from the
- * ship to the impact zone.
+ * The firing preview is a 3D model, not a decal on the water: an outlined
+ * white ribbon that follows the shells' arc through the air from the guns to
+ * the impact zone, ending in a reticle that floats on the swell there.
  *
  * Arcade rule: the gun crews fully correct for the ship's roll and pitch, and
  * shots do not inherit the ship's own motion. The ribbon therefore only moves
@@ -59,6 +62,10 @@ export class Broadside {
   private targetTraverse = 0;
   /** True when the aim point is outside what the battery can reach by itself. */
   outOfArc = false;
+  /** True when the aim point is beyond max range (the reticle turns red and stops at the limit). */
+  outOfRange = false;
+  private readonly reticle = new THREE.Group();
+  private readonly reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
   private readonly cooldown = { '1': 0, '-1': 0 };
 
   readonly ribbon: THREE.Mesh;
@@ -68,6 +75,9 @@ export class Broadside {
   private readonly trackB: THREE.Vector3[] = [];
 
   private queue: { delay: number; gun: Gun }[] = [];
+  /** Level the preview ends at: mean sea level, or the ship's own level when it sits in a trough. */
+  private seaLevel = 0;
+  private readonly surf = { height: 0, normal: new THREE.Vector3() };
 
   /**
    * @param ship group the guns are parented to (forward = -Z)
@@ -103,11 +113,10 @@ export class Broadside {
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -4,
         uniforms: {
           uTime: { value: 0 },
           uReady: { value: 1 },
+          uTooFar: { value: 0 },
           uAspect: { value: 10 }, // ribbon length / width, keeps the outline even
         },
         vertexShader: /* glsl */ `
@@ -115,7 +124,7 @@ export class Broadside {
           void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
         `,
         fragmentShader: /* glsl */ `
-          uniform float uTime, uReady, uAspect;
+          uniform float uTime, uReady, uAspect, uTooFar;
           varying vec2 vUv;
           void main() {
             float edgeX = min(vUv.x, 1.0 - vUv.x);
@@ -123,15 +132,15 @@ export class Broadside {
             float startFade = smoothstep(0.02, 0.1, vUv.y);
             // crisp white outline along both sides and across the far end
             float outline = max(1.0 - smoothstep(0.05, 0.075, edgeX), 1.0 - smoothstep(0.05, 0.075, edgeY));
-            // impact zone: the last stretch is filled more strongly
-            float zone = smoothstep(1.6, 1.2, edgeY);
             // chevrons marching toward the target
             float chev = step(0.5, fract(vUv.y * uAspect * 0.6 - uTime * 1.2 + abs(vUv.x - 0.5) * 1.2));
-            float fill = 0.1 + chev * 0.08 + zone * 0.3;
+            float fill = 0.16 + chev * 0.12;
             float a = max(outline * 0.95, fill) * startFade;
             vec3 ready = vec3(1.0);
             vec3 loading = vec3(1.0, 0.72, 0.5);
-            gl_FragColor = vec4(mix(loading, ready, uReady), a * mix(0.55, 1.0, uReady));
+            vec3 tooFar = vec3(1.0, 0.42, 0.35);
+            vec3 col = mix(mix(loading, ready, uReady), tooFar, uTooFar);
+            gl_FragColor = vec4(col, a * mix(0.55, 1.0, uReady));
           }
         `,
       }),
@@ -139,6 +148,29 @@ export class Broadside {
     this.ribbon.frustumCulled = false;
     this.ribbon.name = 'broadside-ribbon';
     this.ribbon.renderOrder = 5;
+
+    // Reticle: a ring with four ticks and a centre pip, built at radius 1 and
+    // scaled to the impact zone each frame.
+    const rm = this.reticleMat;
+    const ring = new THREE.TorusGeometry(1, 0.045, 6, 48);
+    ring.rotateX(Math.PI / 2);
+    this.reticle.add(new THREE.Mesh(ring, rm));
+    const inner = new THREE.TorusGeometry(0.45, 0.03, 6, 32);
+    inner.rotateX(Math.PI / 2);
+    this.reticle.add(new THREE.Mesh(inner, rm));
+    for (let i = 0; i < 4; i++) {
+      const tick = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.5), rm);
+      const a = (i / 4) * Math.PI * 2;
+      tick.position.set(Math.sin(a) * 1.05, 0, Math.cos(a) * 1.05);
+      tick.rotation.y = a;
+      this.reticle.add(tick);
+    }
+    this.reticle.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 1), rm));
+    this.reticle.traverse((o) => {
+      o.frustumCulled = false;
+      o.renderOrder = 6;
+    });
+    this.ribbon.add(this.reticle);
     for (let i = 0; i < 400; i++) {
       this.trackA.push(new THREE.Vector3());
       this.trackB.push(new THREE.Vector3());
@@ -174,9 +206,12 @@ export class Broadside {
     this.outOfArc = Math.abs(bearing) > BROADSIDE.traverse + 0.02 || s * local.x < 0;
     this.targetTraverse = THREE.MathUtils.clamp(bearing, -BROADSIDE.traverse, BROADSIDE.traverse);
     const origin = this.ship.getWorldPosition(_p);
-    const range = Math.max(4, Math.hypot(target.x - origin.x, target.z - origin.z) - 1.2);
-    // guns sit a little above the water; aim for mean sea level
-    const elev = solveElevation(range, -0.9, BROADSIDE.muzzleSpeed, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
+    const dist = Math.hypot(target.x - origin.x, target.z - origin.z);
+    this.outOfRange = dist > BROADSIDE.maxRange;
+    const range = Math.max(4, Math.min(dist, BROADSIDE.maxRange) - 1.2);
+    // guns sit a little above the water; aim for the sea level the ribbon ends at
+    this.seaLevel = Math.min(0, origin.y);
+    const elev = solveElevation(range, this.seaLevel - (origin.y + 0.9), BROADSIDE.muzzleSpeed, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
     this.targetElevation = THREE.MathUtils.clamp(elev, BROADSIDE.minElevation, BROADSIDE.maxElevation);
   }
 
@@ -262,8 +297,8 @@ export class Broadside {
       vel.z -= vel.z * drag * speed * h;
       pos.addScaledVector(vel, h);
       out[n++].copy(pos);
-      // end at mean sea level, not the passing wave, so the ribbon holds still
-      if (pos.y <= 0) break;
+      // end at a steady sea level, not the passing wave, so the ribbon holds still
+      if (pos.y <= this.seaLevel) break;
     }
     return n;
   }
@@ -294,11 +329,14 @@ export class Broadside {
       a.addScaledVector(across, -spread);
       b.addScaledVector(across, spread);
       const o = i * 6;
+      // the ribbon rides the shells' arc through the air; both edges share a
+      // height so it stays a flat band, and it never dips into a wave
+      const y = Math.max((a.y + b.y) / 2, this.waves.heightAt((a.x + b.x) / 2, (a.z + b.z) / 2) + 0.2);
       this.ribbonPos[o] = a.x;
-      this.ribbonPos[o + 1] = this.waves.heightAt(a.x, a.z) + 0.14;
+      this.ribbonPos[o + 1] = y;
       this.ribbonPos[o + 2] = a.z;
       this.ribbonPos[o + 3] = b.x;
-      this.ribbonPos[o + 4] = this.waves.heightAt(b.x, b.z) + 0.14;
+      this.ribbonPos[o + 4] = y;
       this.ribbonPos[o + 5] = b.z;
       if (i > 0) length += Math.hypot(a.x - _prev.x, a.z - _prev.z);
       _prev.copy(a);
@@ -309,6 +347,22 @@ export class Broadside {
     u.uTime.value += dt;
     u.uReady.value = this.ready ? 1 : 0;
     u.uAspect.value = length / Math.max(width, 0.5);
+    u.uTooFar.value = this.outOfRange ? 1 : 0;
+
+    // Reticle at the far end: floats on the swell there, tilted with the wave
+    // and turned to face along the line of fire.
+    const last = (RIBBON_POINTS - 1) * 6;
+    const p = this.ribbonPos;
+    const cx = (p[last] + p[last + 3]) / 2;
+    const cz = (p[last + 2] + p[last + 5]) / 2;
+    const surf = this.waves.sample(cx, cz, this.surf);
+    this.reticle.position.set(cx, surf.height + 0.3, cz);
+    const dir = this.fireDirection(_d);
+    _yaw.setFromAxisAngle(_up, Math.atan2(dir.x, dir.z));
+    this.reticle.quaternion.setFromUnitVectors(_up, surf.normal).multiply(_yaw);
+    const r = Math.max(width / 2, 1);
+    this.reticle.scale.set(r, r, r * 1.25);
+    this.reticleMat.color.setRGB(1, this.outOfRange ? 0.42 : this.ready ? 1 : 0.72, this.outOfRange ? 0.35 : this.ready ? 1 : 0.5);
   }
 
   private buildGun(mount: THREE.Vector3): Gun {
@@ -377,3 +431,5 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _x = new THREE.Vector3();
 const _prev = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _yaw = new THREE.Quaternion();

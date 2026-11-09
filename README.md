@@ -42,10 +42,10 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | W / S (or ↑ / ↓) | Raise / lower the sail. Hold S at 0% to back-paddle. |
 | A / D (or ← / →) | Steer (stronger at speed, reverses when going backwards) |
 | Mouse | Aim at the sea |
-| Click / Space | Fire the swivel gun (dotted arc + impact ring) |
+| Space | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
 | C | Fit / remove a test broadside battery (two cannons per side) |
 | F | Fire the broadside on the side you're aiming at (outlined ribbon) |
-| Mouse drag | Orbit the camera (it eases back behind the raft after ~2.5 s) |
+| Mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
 | M | Mute |
@@ -61,13 +61,14 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 
 ## Guns
 
-- **Swivel gun:** free aim with the mouse, dotted trajectory. The ring lands on the water under the cursor.
-- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. The outlined ribbon on the water shows where the side will land. The crews correct for the ship's roll, so the ribbon only moves when you turn the ship or move the aim point.
+- **Swivel gun:** free aim with the mouse, dotted trajectory. The ring lands on the water under the cursor. Max range 90 m.
+- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. A white 3D ribbon follows the shells' arc through the air and ends in a reticle floating on the impact zone. Max range 120 m. The crews correct for the ship's roll, so the ribbon only moves when you turn the ship or move the aim point.
+- Past max range the ring or reticle turns red and stops at the limit. Ranges are set in `SWIVEL.maxRange` / `BROADSIDE.maxRange` so upgrades can extend them later.
 - Shots do not inherit the ship's own motion, and shells that hit an island stop there.
 
 ## Islands
 
-Generated from a seed: peaks (some with craters or snow caps), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
+Generated from a seed: peaks (some with craters), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
 
 ## Sound
 

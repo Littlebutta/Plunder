@@ -322,8 +322,7 @@ function frame(): void {
   wake.update(dt, stern, starboard, raft.body.forwardSpeed);
 
   raft.body.forward(fwd);
-  const heading = Math.atan2(-fwd.x, -fwd.z); // camera yaw that sits behind the ship
-  follow.update(dt, raft.body.position, heading, raft.body.forwardSpeed);
+  follow.update(dt, raft.body.position);
 
   ocean.update(follow.focusPoint);
   sky.update(dt, camera.position);
@@ -349,7 +348,7 @@ function frame(): void {
   audio.updateAmbience(wind.strength, raft.sail, Math.abs(raft.body.forwardSpeed));
 
   renderer.render(scene, camera);
-  input.endFrame(dt);
+  input.endFrame();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
