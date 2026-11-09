@@ -1,19 +1,25 @@
 // Plunder desktop shell (Electron main process).
 //
-// Packaged builds: show a small "checking for updates" window, pull the newest
-// release from GitHub (Littlebutta/Plunder), install it and relaunch if there is
-// one, then open the game. Offline or on any updater error the game just starts.
+// Plunder is a portable folder: no installer, nothing written outside it.
+// Packaged builds show a small "checking for updates" window, pull the newest
+// release from GitHub (Littlebutta/Plunder) into the folder, then open the game.
+// Offline or on any updater error the game just starts. See updater.cjs.
 //
-// The game itself is the normal Vite build in dist/, served over a custom
+// The game itself is the normal Vite build (dist/, or a newer downloaded copy in
+// <folder>/game/), served over a custom
 // app:// protocol with cross-origin isolation headers so Web Workers and
 // SharedArrayBuffer (multithreaded physics/projectiles) are available.
 
 const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { runUpdateCheck } = require('./updater.cjs');
+const { runUpdateCheck, installedGame, portableDir } = require('./updater.cjs');
 
-const DIST_DIR = path.join(__dirname, '..', 'dist');
+const BUNDLED_DIST = path.join(__dirname, '..', 'dist');
+let gameRoot = BUNDLED_DIST; // swapped for <folder>/game when a newer game build was downloaded
+
+// Keep settings, saves and caches inside the portable folder (data/), not in %APPDATA%.
+if (app.isPackaged) app.setPath('userData', path.join(portableDir(), 'data'));
 const DEV_URL = process.env.PLUNDER_DEV_URL; // e.g. http://localhost:5173 (see `npm run desktop:dev`)
 
 // Headers that make the page "crossOriginIsolated" (needed for SharedArrayBuffer).
@@ -48,8 +54,8 @@ function registerAppProtocol() {
   protocol.handle('app', async (request) => {
     const { pathname } = new URL(request.url);
     const rel = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
-    const file = path.normalize(path.join(DIST_DIR, rel));
-    if (!file.startsWith(DIST_DIR + path.sep)) {
+    const file = path.normalize(path.join(gameRoot, rel));
+    if (!file.startsWith(gameRoot + path.sep)) {
       return new Response('Not found', { status: 404 });
     }
     const res = await net.fetch(pathToFileURL(file).toString());
@@ -67,7 +73,7 @@ function createGameWindow() {
     minHeight: 540,
     show: false,
     backgroundColor: '#7fc8e8',
-    title: `Plunder ${app.getVersion()}`,
+    title: `Plunder ${installedGame().version}`,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -103,9 +109,14 @@ async function start() {
   Menu.setApplicationMenu(null);
   registerAppProtocol();
 
-  if (app.isPackaged && !process.argv.includes('--no-update')) {
-    const result = await runUpdateCheck(ipcMain);
-    if (result === 'installing') return; // app is about to quit and relaunch on the new version
+  if (app.isPackaged) {
+    if (process.argv.includes('--no-update')) {
+      gameRoot = installedGame().dir || BUNDLED_DIST;
+    } else {
+      const result = await runUpdateCheck(ipcMain);
+      if (result.action === 'restart') return app.quit(); // files get swapped, then Plunder relaunches
+      gameRoot = result.gameDir || BUNDLED_DIST;
+    }
   }
 
   gameWindow = createGameWindow();

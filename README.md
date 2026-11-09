@@ -13,21 +13,27 @@ npm run dev        # opens http://localhost:5173
 
 `npm run build` type-checks and produces a static build in `dist/` (`npm run preview` serves it).
 
-## Desktop app (Windows)
+## Desktop app (Windows, portable)
 
-Plunder ships as a Windows desktop app built with Electron. It **updates itself on launch**: every push to `main` makes GitHub Actions build a new installer and publish it as a [GitHub Release](https://github.com/Littlebutta/Plunder/releases); when the installed game starts it shows a small "Checking for updates" window, downloads anything newer, installs it silently and relaunches. Offline (or if the check takes over 10 s) it just starts the installed version, and "Play now" skips the wait.
+Plunder ships as a **portable folder**: no installer, nothing written outside the folder. Unzip it anywhere (Desktop, a USB stick) and run `Plunder.exe`. Settings and saves live in `data/` inside the folder, so copying the folder copies everything.
 
-**First install:** download `Plunder-Setup-<version>.exe` from the latest release and run it. It installs per user (no admin prompt) and adds desktop and Start menu shortcuts. The build is not code-signed yet, so Windows SmartScreen will warn the first time: click *More info → Run anyway*.
+**First time:** download `Plunder-win-x64.zip` from the [latest release](https://github.com/Littlebutta/Plunder/releases/latest), unzip, run `Plunder.exe`. The exe isn't code-signed yet, so Windows SmartScreen may warn: click *More info → Run anyway*.
+
+**Updates happen on launch.** Every push to `main` makes GitHub Actions publish a release. When Plunder starts it shows a small "Checking for updates" window and reads that release's `latest.json`:
+
+- **Game-only change** (the usual case): downloads `game-<version>.zip` (a couple of MB) into `game/` inside the folder and starts it.
+- **Desktop shell changed** (Electron or anything in `electron/`, detected by a fingerprint from `scripts/shell-id.mjs`): downloads the full folder zip, quits, swaps the files in place (keeping `data/`) and relaunches.
+- Offline, slow (>10 s to check) or any error: plays what's already in the folder. "Play now" skips the wait, and `--no-update` skips the check entirely. A read-only folder never updates.
 
 | Command | What it does |
 | --- | --- |
 | `npm run desktop` | Build the game and open it in the desktop shell |
 | `npm run desktop:dev` | Desktop shell on the Vite dev server (hot reload) |
-| `npm run dist:win` | Build the Windows installer locally into `release/` (no publish) |
+| `npm run package:win` | Build the portable folder locally into `release/win-unpacked/` |
 
-In the desktop app, F11 toggles fullscreen and F12 opens dev tools. Launch with `--no-update` to skip the update check.
+In the desktop app, F11 toggles fullscreen and F12 opens dev tools.
 
-The game is served over an `app://` protocol with cross-origin isolation headers (the Vite dev server sends the same ones), so `crossOriginIsolated` is true and Web Workers + `SharedArrayBuffer` are available for multithreaded simulation. Static assets such as sounds belong in `public/` (served from `/`) or are imported from `src/`; both end up in `dist/` and inside the app.
+The game is served over an `app://` protocol with cross-origin isolation headers (the Vite dev server sends the same ones), so `crossOriginIsolated` is true and Web Workers + `SharedArrayBuffer` are available for multithreaded simulation. Static assets such as sounds belong in `public/` (served from `/`) or are imported from `src/`; both end up in `dist/`, which is what game updates ship.
 
 ## Controls
 
@@ -61,6 +67,7 @@ src/
   input/Input.ts          keyboard/mouse state
   ui/                     HUD + lil-gui tuning panel
 electron/                 desktop shell: main process, launch-time updater, splash
-.github/workflows/        Windows build + GitHub Release on every push to main
+scripts/                  shell fingerprint + zip helpers used by the release workflow
+.github/workflows/        portable Windows build + GitHub Release on every push to main
 docs/PIPELINE.md          technical plan: drawing → hull, waves, physics
 ```
