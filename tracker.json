@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:26Z",
+  "updated": "2026-11-09T23:45:29Z",
   "categories": [
     {
       "key": "feature",
@@ -616,17 +616,19 @@
       "id": "F-22",
       "cat": "feature",
       "title": "Overworld map showing what players have explored",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-6",
       "tags": [
         "map",
         "ui"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): PR #15: fog of war on a paper chart plus HUD minimap",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/15"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T23:45:29Z",
       "by": "Claude"
     },
     {
