@@ -83,6 +83,23 @@ Open it from the main menu. On the **top view** drag to draw the hull's outline 
 
 A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, mast and cannon slots. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Building is free for now; costs are shown for balancing.
 
+## Weather and day-night
+
+`src/weather/`. A day lasts about 10 minutes (nights run faster and are moonlit, with stars). Weather
+events roll in after a calm spell of a couple of minutes (meant to move to "between rounds" once the
+round loop exists), each at level I, II or III:
+
+- **Fog**: sea mist to blinding fog; the horizon and islands vanish.
+- **Storm**: squall, storm, tempest. Rain, lightning and thunder, rougher seas and stronger wind.
+- **Eyes in the deep**: one to three sea creatures, glowing eyes under the surface, follow your ship.
+  Get close and one rears a tentacle and smashes it down where you were heading; steer away during the
+  wind-up to dodge. Shoot the eyes or tentacle to make it dive, enough hits drive it off.
+- **Armageddon**: the sky and sea turn blood red and a cursed fleet rises out of the sea, circles you
+  and fires volleys. Sink them all to end it early.
+
+Hull damage shows in a bar above the stats; it repairs slowly once you're out of trouble. Tuning panel
+(G) → *Weather & time*: time of day, day length, start/stop any event at any level.
+
 ## Main menu
 
 The game opens on a title menu: options on the left, the raft sailing by itself on the right. Drag to look around. Esc in play returns to it.

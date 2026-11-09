@@ -1,0 +1,36 @@
+/* Weather HUD: event banner, clock/weather chip, hull bar. */
+.weather-hud { position: absolute; inset: 0; pointer-events: none; }
+.weather-chip {
+  position: absolute; top: calc(64px + env(safe-area-inset-top, 0px)); right: calc(18px + env(safe-area-inset-right, 0px));
+  background: rgba(42, 23, 8, 0.6); border: 2px solid #c0814a; border-radius: 999px;
+  padding: 4px 14px; font-size: 13px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.weather-chip i { font-style: normal; color: #ffd27a; letter-spacing: 1px; }
+.weather-chip[data-kind='storm'] { border-color: #8fa6c4; }
+.weather-chip[data-kind='fog'] { border-color: #c7d3d8; }
+.weather-chip[data-kind='lurker'] { border-color: #63e6d2; }
+.weather-chip[data-kind='armageddon'] { border-color: #ff5a26; color: #ffd0c0; }
+
+.weather-banner {
+  position: absolute; top: 18%; left: 50%; transform: translate(-50%, -10px); text-align: center;
+  opacity: 0; transition: opacity .6s, transform .6s; max-width: calc(100% - 32px);
+}
+.weather-banner.show { opacity: 1; transform: translate(-50%, 0); }
+.weather-banner b {
+  display: block; font-family: 'Pirata One', serif; font-weight: 400; font-size: 54px; letter-spacing: 1px;
+  text-shadow: 0 3px 0 #3a1f0c, 0 0 18px rgba(0,0,0,.45);
+}
+.weather-banner span { display: block; font-size: 16px; font-weight: 800; text-shadow: 0 2px 0 #3a1f0c, 0 0 10px rgba(0,0,0,.5); }
+.weather-banner[data-tone='danger'] b { color: #ffb08a; }
+.weather-banner[data-tone='good'] b { color: #b8f59a; }
+@media (max-width: 600px) { .weather-banner b { font-size: 36px; } }
+
+.weather-hull {
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+}
+.weather-hull span { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }
+.weather-hull-bar { width: 180px; height: 12px; border-radius: 6px; background: rgba(255,255,255,.18); overflow: hidden; }
+.weather-hull-bar i { display: block; height: 100%; background: #9be37a; border-radius: 6px; transition: width .2s; }
+.weather-hull-bar i.low { background: #e65050; }
+.weather-hull.hit { border-color: #ff5a3a; }

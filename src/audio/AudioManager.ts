@@ -381,6 +381,45 @@ export class AudioManager {
     // Wind: a soft low whoosh, not a hiss.
     this.windFilter = filter('bandpass', 400, 1.1);
     this.windGain = loop([this.windFilter, filter('lowpass', 900)], 0.8);
+    // Rain (weather): a soft patter, silent until a storm sets it.
+    this.rainGain = loop([filter('highpass', 900), filter('lowpass', 5000)], 1);
+  }
+
+  // --- Weather sounds (src/weather) ------------------------------------------
+  private rainGain: GainNode | null = null;
+
+  /** Rain bed loudness, 0..1. */
+  setRain(amount: number): void {
+    if (!this.ctx || !this.rainGain) return;
+    this.rainGain.gain.setTargetAtTime(Math.min(Math.max(amount, 0), 1) * 0.05, this.ctx.currentTime, 0.8);
+  }
+
+  /** Thunder: a crack (if close) and a long low rumble, arriving after the flash. */
+  thunder(distance: number, strength = 1): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.noise || !this.ambience) return;
+    const t = ctx.currentTime + Math.min(distance / 340, 4);
+    const near = Math.max(0, 1 - distance / 120);
+    const dur = 3.5 + Math.random() * 2;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.playbackRate.value = 0.35;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(260 + near * 1800, t);
+    lp.frequency.exponentialRampToValueAtTime(90, t + dur);
+    const g = ctx.createGain();
+    const peak = (0.25 + 0.35 * near) * strength;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.05 + (1 - near) * 0.5);
+    // a couple of rolling swells in the rumble
+    g.gain.exponentialRampToValueAtTime(peak * 0.45, t + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(peak * 0.7, t + dur * 0.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(lp).connect(g).connect(this.ambience);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + dur + 0.1);
   }
 }
 
