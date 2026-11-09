@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:37Z",
+  "updated": "2026-11-09T21:20:06Z",
   "categories": [
     {
       "key": "feature",
@@ -524,16 +524,18 @@
       "id": "F-17",
       "cat": "feature",
       "title": "Draw-your-hull shipyard (top-down + side profile → 3D hull)",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "high",
       "milestone": "M-4",
       "tags": [
         "shipyard"
       ],
-      "notes": "Core design from the start: drawing is lofted into a hull mesh + HullSpec. Reference sketches in project files.",
-      "links": [],
+      "notes": "Core design from the start: drawing is lofted into a hull mesh + HullSpec. Reference sketches in project files.\n\n2026-11-09 (Claude): First version in PR #7 (2026-11-09): draw outline + keel, loft, stats, launch. Building is free for now.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/7"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T21:20:06Z",
       "by": "Claude"
     },
     {
