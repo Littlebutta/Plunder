@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:15:27Z",
+  "updated": "2026-11-09T20:15:30Z",
   "categories": [
     {
       "key": "feature",
@@ -574,16 +574,18 @@
       "id": "F-20",
       "cat": "feature",
       "title": "Shipwrecks on some islands",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "low",
       "milestone": "M-6",
       "tags": [
         "islands"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:15:30Z",
       "by": "Claude"
     },
     {
