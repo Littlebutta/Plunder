@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:57Z",
+  "updated": "2026-11-09T22:30:59Z",
   "categories": [
     {
       "key": "feature",
@@ -1189,13 +1189,15 @@
       "id": "F-46",
       "cat": "feature",
       "title": "Faster ships",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T22:15:49Z",
       "priority": "medium",
-      "updated": "2026-11-09T22:15:49Z",
+      "updated": "2026-11-09T22:30:59Z",
       "by": "Claude"
     },
     {
