@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:24Z",
+  "updated": "2026-11-09T23:45:26Z",
   "categories": [
     {
       "key": "feature",
@@ -1224,14 +1224,15 @@
       "title": "Map view with RTS-style fleet orders",
       "status": "in-progress",
       "tags": [],
-      "notes": "2026-11-09 (Claude): Chart with sailing orders merged in PR #14; fleet orders still to come",
+      "notes": "2026-11-09 (Claude): Chart with sailing orders merged in PR #14; fleet orders still to come\n\n2026-11-09 (Claude): PR #15: escorts ordered from the chart",
       "links": [
-        "https://github.com/Littlebutta/Plunder/pull/14"
+        "https://github.com/Littlebutta/Plunder/pull/14",
+        "https://github.com/Littlebutta/Plunder/pull/15"
       ],
       "created": "2026-11-09T22:15:54Z",
       "priority": "high",
       "milestone": "M-7",
-      "updated": "2026-11-09T22:47:47Z",
+      "updated": "2026-11-09T23:45:26Z",
       "by": "Claude"
     },
     {
