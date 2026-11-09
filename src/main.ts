@@ -28,6 +28,11 @@ import { Shipyard } from './ui/Shipyard';
 import { DesignedShip } from './ship/DesignedShip';
 import type { Vessel } from './ship/Vessel';
 import type { Island } from './world/Islands';
+// Weather events + day-night cycle
+import { DayNight } from './weather/DayNight';
+import { Weather, ShipState } from './weather/Weather';
+import { PlayerHull } from './weather/PlayerHull';
+import { WeatherUi, addWeatherControls } from './weather/WeatherUi';
 
 // --- Renderer ---------------------------------------------------------------
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -43,7 +48,10 @@ scene.fog = new THREE.Fog(PALETTE.horizon, 300, 1600);
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 6000);
 
 // --- Lighting (warm sun + sky/sea bounce) ---------------------------------
-const sunDir = new THREE.Vector3(-0.45, 0.55, -0.7).normalize();
+// The day-night cycle moves the key light (sun by day, moon by night); the
+// weather sets its colour and strength each frame (src/weather).
+const dayNight = new DayNight();
+const sunDir = dayNight.lightDir;
 const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -54,14 +62,15 @@ sc.near = 1;
 sc.far = 80;
 sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3));
+const hemi = new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3);
+scene.add(hemi);
 
 // --- World ----------------------------------------------------------------
 const world = createIslands();
 const waves = new WaveField();
 waves.shore = world.shore; // calm shallows around the islands
 const ocean = new Ocean(waves, sunDir, world.shore);
-const sky = new Sky(sunDir);
+const sky = new Sky(dayNight.sunDir, dayNight.moonDir);
 scene.add(sky.group, ocean.mesh, world.group);
 
 const wind = new Wind();
@@ -151,6 +160,53 @@ const input = new Input(canvas);
 const follow = new FollowCamera(camera, input, waves);
 const hudRoot = document.getElementById('hud')!;
 const hud = new Hud(hudRoot);
+
+// --- Weather events + day-night cycle (src/weather) -------------------------
+const hull = new PlayerHull();
+const weatherUi = new WeatherUi(hudRoot);
+const weather = new Weather({
+  dayNight,
+  waves,
+  wind,
+  ocean,
+  sky,
+  scene,
+  sun,
+  hemi,
+  refreshSea: () => {
+    waves.syncUniforms();
+    ocean.refreshAmplitude();
+    projectiles.markSeaDirty();
+  },
+  splash: (at, size) => {
+    effects.splash(at, size);
+    audio.splash(at, size);
+  },
+  splinters: (at, count) => {
+    effects.splinters(at, count);
+    audio.woodHit(at);
+  },
+  hitShip: (damage, at, shove) => {
+    hull.damage(damage);
+    ship.body.velocity.add(shove);
+    effects.splinters(at, 14);
+    audio.woodHit(at);
+  },
+  fire: (from, vel, owner, dir) => {
+    projectiles.spawn(from, vel, 1, owner);
+    effects.muzzle(from, dir, _zero, 1.3);
+    audio.play('cannon', { volume: 0.8, rate: 0.8, rateJitter: 0.06, position: from });
+  },
+  announce: (title, sub, tone) => weatherUi.announce(title, sub, tone),
+});
+scene.add(weather.group);
+const _zero = new THREE.Vector3();
+hull.onDamage = () => weatherUi.hit();
+hull.onBattered = () => {
+  ship.sail = 0;
+  weatherUi.announce('Battered!', 'Your ship limps on with a patched hull', 'danger');
+};
+const shipState = (): ShipState => ({ position: ship.body.position, velocity: ship.body.velocity, length: ship.length });
 
 // --- Gathering --------------------------------------------------------------
 const hold = new Hold();
@@ -289,6 +345,7 @@ const barrage = {
   fire: () => fireBarrage(barrage.size),
 };
 const gui = createDebugPanel(waves, ocean, wind, () => projectiles.markSeaDirty(), barrage);
+addWeatherControls(gui, weather, shipState); // weather
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -319,6 +376,8 @@ Object.assign(window, {
     targets,
     audio,
     barrage,
+    weather,
+    hull,
     get raft() {
       return ship;
     },
@@ -344,6 +403,12 @@ projectiles.onImpact = (e: ImpactEvent) => {
     audio.woodHit(e.position);
     return;
   }
+  // weather: sea creatures and cursed ships
+  if (weather.owns(e.colliderId)) {
+    const at = weather.hit(e.colliderId, e.kind);
+    if (at) audio.woodHit(at);
+    return;
+  }
   if (e.colliderId >= TARGET_ID_BASE) {
     const at = targets.hit(e.colliderId);
     if (at) {
@@ -354,6 +419,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
   } else if (e.colliderId === RAFT_ID) {
     effects.splinters(e.position, 8);
     audio.woodHit(e.position);
+    hull.damage(e.kind === 1 ? 9 : 3); // weather: enemy fire
   }
 };
 
@@ -542,7 +608,7 @@ function frame(): void {
   if (playing) updateGathering(dt);
 
   targets.update(dt, waves.currentTime);
-  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders()]);
+  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...weather.colliders()]);
   projectiles.update(dt);
   effects.update(dt);
 
@@ -553,6 +619,11 @@ function frame(): void {
 
   ship.body.forward(fwd);
   follow.update(dt, ship.body.position);
+
+  // weather + day-night: lights, fog, sky and sea colours, events
+  weather.update(dt, shipState(), camera, playing);
+  hull.update(dt);
+  weatherUi.update(dt, weather, hull, playing);
 
   ocean.update(follow.focusPoint);
   sky.update(dt, camera.position);
