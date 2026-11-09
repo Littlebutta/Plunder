@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:27Z",
+  "updated": "2026-11-09T21:20:31Z",
   "categories": [
     {
       "key": "feature",
@@ -979,6 +979,20 @@
       "priority": "medium",
       "milestone": "M-5",
       "updated": "2026-11-09T21:20:27Z",
+      "by": "Claude"
+    },
+    {
+      "id": "P-2",
+      "cat": "playtest",
+      "title": "Devin 2026-11-09: no camera auto-recentre, no snow on tropical peaks, Space fires guns (not click)",
+      "status": "actioned",
+      "tags": [],
+      "notes": "All three in PR #5.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/5"
+      ],
+      "created": "2026-11-09T21:20:31Z",
+      "updated": "2026-11-09T21:20:31Z",
       "by": "Claude"
     }
   ],
