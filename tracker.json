@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:38Z",
+  "updated": "2026-11-09T23:45:40Z",
   "categories": [
     {
       "key": "feature",
@@ -1379,6 +1379,19 @@
       "priority": "medium",
       "milestone": "M-6",
       "updated": "2026-11-09T22:17:43Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-56",
+      "cat": "feature",
+      "title": "Shipyard rework: cannons in preview, rail cutouts, no cannon cap (extra guns cost metals), cargo on deck",
+      "status": "idea",
+      "tags": [],
+      "notes": "PR #15. Devin 2026-11-09 batch 3.",
+      "links": [],
+      "created": "2026-11-09T23:45:40Z",
+      "priority": "medium",
+      "updated": "2026-11-09T23:45:40Z",
       "by": "Claude"
     }
   ],
