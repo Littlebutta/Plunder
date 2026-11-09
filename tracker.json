@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:26Z",
+  "updated": "2026-11-09T21:58:28Z",
   "categories": [
     {
       "key": "feature",
@@ -1041,6 +1041,21 @@
       "created": "2026-11-09T21:58:26Z",
       "priority": "high",
       "updated": "2026-11-09T21:58:26Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-6",
+      "cat": "bug",
+      "title": "Wave hiss too loud",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "PR #8: deeper, quieter sea and wind beds. Needs Devin's ears to confirm.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/8"
+      ],
+      "created": "2026-11-09T21:58:28Z",
+      "priority": "medium",
+      "updated": "2026-11-09T21:58:28Z",
       "by": "Claude"
     }
   ],
