@@ -1,0 +1,54 @@
+name: Desktop build
+
+# Every push to main builds the Windows app and publishes it as a GitHub Release.
+# Installed copies of Plunder check that release on launch and update themselves.
+# Pull requests build the installer too (downloadable from the run's artifacts) but publish nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Each build gets a unique, increasing version (0.2.<run number>) so the updater sees it as newer.
+      - name: Set build version
+        shell: bash
+        run: npm version "0.2.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+
+      - run: npm run build
+
+      - name: Package and publish release
+        if: github.event_name != 'pull_request'
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (no publish)
+        if: github.event_name == 'pull_request'
+        run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plunder-Setup-${{ github.run_number }}
+          path: release/*.exe
+          if-no-files-found: error

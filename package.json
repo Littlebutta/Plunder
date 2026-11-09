@@ -7,15 +7,24 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "lil-gui": "^0.21.0",
-    "three": "^0.187.0"
+    "typecheck": "tsc --noEmit",
+    "desktop": "npm run build && electron .",
+    "desktop:dev": "node electron/dev.mjs",
+    "dist:win": "npm run build && electron-builder --win --publish never"
   },
   "devDependencies": {
     "@types/three": "^0.187.0",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "lil-gui": "^0.21.0",
+    "three": "^0.187.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.7"
-  }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "main": "electron/main.cjs",
+  "description": "Plunder: stylized 3D sailing and naval combat",
+  "author": "Devin"
 }

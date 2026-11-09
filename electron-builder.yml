@@ -1,0 +1,35 @@
+appId: com.littlebutta.plunder
+productName: Plunder
+copyright: Copyright © 2026 Devin
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - "!electron/dev.mjs"
+  - package.json
+
+asar: true
+
+publish:
+  provider: github
+  owner: Littlebutta
+  repo: Plunder
+  releaseType: release
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Plunder-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true          # one-click install, no wizard
+  perMachine: false       # installs to %LOCALAPPDATA%, no admin prompt; lets updates install silently
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Plunder
+  deleteAppDataOnUninstall: false
