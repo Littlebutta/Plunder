@@ -1,0 +1,24 @@
+# Portable build: a self-contained folder (release/win-unpacked) with Plunder.exe.
+# No installer. CI zips it as Plunder-win-x64.zip; see .github/workflows/desktop.yml.
+appId: com.littlebutta.plunder
+productName: Plunder
+executableName: Plunder
+copyright: Copyright © 2026 Devin
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - "!electron/dev.mjs"
+  - package.json
+
+asar: true
+publish: null
+
+win:
+  target:
+    - target: dir
+      arch: [x64]
