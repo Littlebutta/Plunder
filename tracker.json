@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:30:00Z",
+  "updated": "2026-11-09T20:15:15Z",
   "categories": [
     {
       "key": "feature",
@@ -450,17 +450,19 @@
       "id": "F-13",
       "cat": "feature",
       "title": "Arcade wind: wind acts as a boost, ships can always move",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "high",
       "milestone": "M-2",
       "tags": [
         "sailing",
         "feel"
       ],
-      "notes": "Make sailing more arcade friendly. Wind should give a speed boost, but ships must still move regardless of wind direction.",
-      "links": [],
+      "notes": "Make sailing more arcade friendly. Wind should give a speed boost, but ships must still move regardless of wind direction.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:15:15Z",
       "by": "Claude"
     },
     {
