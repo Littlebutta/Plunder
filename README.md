@@ -70,4 +70,5 @@ electron/                 desktop shell: main process, launch-time updater, spla
 scripts/                  shell fingerprint + zip helpers used by the release workflow
 .github/workflows/        portable Windows build + GitHub Release on every push to main
 docs/PIPELINE.md          technical plan: drawing → hull, waves, physics
+tracker/                  dev tracker: open tracker/index.html (data on the tracker-data branch, see CLAUDE.md)
 ```

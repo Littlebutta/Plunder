@@ -3,3 +3,4 @@ dist
 release
 electron/shell.json
 .DS_Store
+.tracker-data

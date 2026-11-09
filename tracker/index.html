@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plunder Dev Tracker</title>
+<!--
+  Plunder dev tracker. Open this file in Edge or Chrome (double-click it).
+  Data: tracker.json on the `tracker-data` branch of github.com/Littlebutta/Plunder.
+  Reading needs nothing; saving needs a fine-grained GitHub token (Settings ⚙).
+  Claude reads/updates the same file with `node tracker/cli.mjs` (see CLAUDE.md).
+-->
+<style>
+:root {
+  --bg: #f4efe4; --panel: #fffaf0; --panel-2: #f9f2e3; --ink: #2a2a33; --muted: #6f6a60; --line: #e2d8c3;
+  --accent: #1f6f8b; --accent-ink: #fff; --danger: #b2412e; --shadow: 0 1px 2px rgba(60,40,10,.08), 0 4px 14px rgba(60,40,10,.06);
+  --sky: #2f7fb8; --amber: #c27a0e; --teal: #1d8a7d; --green: #3a8a3a; --grey: #8a857b; --red: #c0432e;
+  --chip: #efe6d2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181f; --panel: #1c222b; --panel-2: #222a35; --ink: #e8e4da; --muted: #9a958a; --line: #2f3946;
+    --accent: #4fb0d0; --accent-ink: #0b1a20; --danger: #e0725e; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    --sky: #5aa7de; --amber: #e3a03a; --teal: #3fb8a8; --green: #6cbf6c; --grey: #8d8a83; --red: #e66a52; --chip: #2a3340;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181f; --panel: #1c222b; --panel-2: #222a35; --ink: #e8e4da; --muted: #9a958a; --line: #2f3946;
+  --accent: #4fb0d0; --accent-ink: #0b1a20; --danger: #e0725e; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  --sky: #5aa7de; --amber: #e3a03a; --teal: #3fb8a8; --green: #6cbf6c; --grey: #8d8a83; --red: #e66a52; --chip: #2a3340;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px 60px; }
+
+header { display: flex; align-items: center; gap: 12px; padding: 18px 0 12px; flex-wrap: wrap; }
+header h1 { font: 700 22px/1.1 Georgia, "Times New Roman", serif; margin: 0; letter-spacing: .2px; }
+header h1 small { display: block; font: 12px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--muted); letter-spacing: 0; margin-top: 2px; }
+.spacer { flex: 1; }
+.sync { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); padding: 5px 10px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); }
+.sync i { width: 8px; height: 8px; border-radius: 50%; background: var(--grey); display: inline-block; }
+.sync[data-s="synced"] i { background: var(--green); }
+.sync[data-s="pending"] i, .sync[data-s="saving"] i, .sync[data-s="loading"] i { background: var(--amber); }
+.sync[data-s="error"] i { background: var(--red); }
+.sync[data-s="local"] i { background: var(--sky); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.danger { color: var(--danger); }
+.btn.icon { padding: 6px 9px; }
+
+.banner { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--sky); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.banner.err { border-left-color: var(--red); }
+.banner p { margin: 0; flex: 1; min-width: 220px; }
+
+nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+nav.tabs button { border: 0; background: none; padding: 9px 12px 10px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 600; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav.tabs .count { font-weight: 500; font-size: 12px; background: var(--chip); border-radius: 99px; padding: 1px 7px; margin-left: 5px; color: var(--muted); }
+
+.toolbar { display: flex; gap: 8px; align-items: center; padding: 12px 0; flex-wrap: wrap; }
+.toolbar input[type=search] { flex: 1; min-width: 160px; padding: 7px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.toolbar select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 10px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 99px; padding: 3px 11px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip b { font-weight: 600; margin-left: 4px; opacity: .8; }
+
+.list { display: grid; gap: 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 11px 14px 11px 16px; position: relative; cursor: pointer; }
+.card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--c, var(--grey)); }
+.card:hover { border-color: var(--accent); }
+.card.closed { opacity: .72; }
+.card .row { display: flex; gap: 10px; align-items: flex-start; }
+.card .id { font: 12px/1.9 ui-monospace, Consolas, monospace; color: var(--muted); flex: none; min-width: 38px; }
+.card .title { font-weight: 600; flex: 1; padding-top: 1px; overflow-wrap: anywhere; }
+.card.closed .title { text-decoration: none; }
+.status-sel { flex: none; appearance: none; -webkit-appearance: none; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 14%, var(--panel)); color: var(--c); font-weight: 600; font-size: 12px; border-radius: 99px; padding: 3px 12px; cursor: pointer; max-width: 150px; text-overflow: ellipsis; }
+.status-sel option { color: var(--ink); background: var(--panel); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 48px; align-items: center; font-size: 12px; color: var(--muted); }
+.tag { background: var(--chip); border-radius: 5px; padding: 1px 7px; }
+.tag.pri-high { color: var(--red); font-weight: 600; }
+.tag.pri-medium { color: var(--amber); font-weight: 600; }
+.tag.ms { color: var(--accent); }
+.notes-preview { margin: 6px 0 0 48px; color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.progress { margin: 8px 0 0 48px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.progress .bar { flex: 1; max-width: 320px; height: 6px; background: var(--chip); border-radius: 99px; overflow: hidden; }
+.progress .bar span { display: block; height: 100%; background: var(--green); }
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; border: 1px dashed var(--line); border-radius: 10px; }
+
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 0; width: min(640px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+dialog::backdrop { background: rgba(10,15,20,.45); }
+dialog form { padding: 18px 20px; display: grid; gap: 12px; }
+dialog h2 { margin: 0; font: 700 18px Georgia, serif; }
+dialog label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+dialog input, dialog select, dialog textarea { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font-size: 14px; font-weight: 400; color: var(--ink); width: 100%; }
+dialog textarea { resize: vertical; min-height: 120px; line-height: 1.45; }
+dialog .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { dialog .grid3 { grid-template-columns: 1fr; } .meta, .notes-preview, .progress { margin-left: 0; } }
+dialog .foot { display: flex; gap: 8px; align-items: center; padding-top: 4px; }
+dialog .small { font-size: 12px; color: var(--muted); }
+dialog .linked { font-size: 13px; margin: 0; padding-left: 18px; max-height: 160px; overflow: auto; }
+.help { font-size: 13px; color: var(--muted); margin: 0; }
+.help code { background: var(--chip); padding: 0 4px; border-radius: 4px; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Plunder Dev Tracker<small id="sub">Features, bugs and the roadmap, shared with Claude</small></h1>
+    <span class="spacer"></span>
+    <span class="sync" id="sync" data-s="loading" title=""><i></i><span>Loading…</span></span>
+    <button class="btn icon" id="refreshBtn" title="Reload from GitHub">⟳</button>
+    <button class="btn icon" id="settingsBtn" title="Settings">⚙</button>
+  </header>
+  <div id="banner"></div>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Search titles, notes, tags…  ( / )">
+    <select id="sort" title="Sort">
+      <option value="priority">Sort: priority</option>
+      <option value="updated">Sort: recently updated</option>
+      <option value="id">Sort: ID</option>
+    </select>
+    <button class="btn primary" id="addBtn">+ New</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="list" id="list"></div>
+</div>
+
+<dialog id="edit">
+  <form method="dialog" id="editForm">
+    <h2 id="editTitle">Edit</h2>
+    <label>Title<input name="title" required autocomplete="off"></label>
+    <div class="grid3">
+      <label>Status<select name="status"></select></label>
+      <label data-field="priority">Priority<select name="priority"><option value="">—</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+      <label data-field="milestone">Roadmap step<select name="milestone"></select></label>
+    </div>
+    <label data-field="tags">Tags (comma separated)<input name="tags" autocomplete="off" placeholder="combat, ocean"></label>
+    <label>Notes<textarea name="notes" placeholder="Details, repro steps, what good looks like…"></textarea></label>
+    <label>Links (one per line: PRs, screenshots…)<textarea name="links" style="min-height:54px"></textarea></label>
+    <div id="linkedWrap" hidden><div class="small" style="font-weight:600;margin-bottom:4px">Linked to this step</div><ul class="linked" id="linked"></ul></div>
+    <div class="small" id="editMeta"></div>
+    <div class="foot">
+      <button type="button" class="btn danger" id="delBtn">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="cancelBtn">Cancel</button>
+      <button type="submit" class="btn primary" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h2>Settings</h2>
+    <p class="help">Anyone can read the tracker. To <b>save</b> changes to GitHub (so Claude sees them), paste a fine-grained token:
+      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">create one here</a>,
+      set <i>Repository access</i> → <i>Only select repositories</i> → <code>Plunder</code>, and
+      <i>Permissions</i> → <i>Contents</i> → <i>Read and write</i>. It stays in this browser only.</p>
+    <label>GitHub token<input name="token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <label>Your name (shown on items you change)<input name="name" autocomplete="off"></label>
+    <div class="grid3">
+      <label>Repository<input name="repo" autocomplete="off"></label>
+      <label>Branch<input name="branch" autocomplete="off"></label>
+      <label>File<input name="path" autocomplete="off"></label>
+    </div>
+    <label>Theme<select name="theme"><option value="">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <div class="foot">
+      <button type="button" class="btn" id="testBtn">Test token</button>
+      <button type="button" class="btn" id="exportBtn">Export JSON</button>
+      <button type="button" class="btn" id="importBtn">Import JSON</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <span class="spacer"></span>
+      <button type="submit" class="btn primary">Done</button>
+    </div>
+    <div class="small" id="testResult"></div>
+  </form>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------- state
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const CFG_KEY = 'plunder-tracker:cfg', CACHE_KEY = 'plunder-tracker:cache', VIEW_KEY = 'plunder-tracker:view';
+const cfg = Object.assign({ token: '', name: 'Devin', repo: 'Littlebutta/Plunder', branch: 'tracker-data', path: 'tracker.json', theme: '' }, LS.get(CFG_KEY, {}));
+const view = Object.assign({ tab: 'feature', filter: 'open', sort: 'priority', q: '' }, LS.get(VIEW_KEY, {}));
+
+let doc = null;          // working copy
+let base = null;         // the remote copy `doc` was last in sync with (for merging)
+let sha = null;          // blob sha of the remote file we last saw
+let dirty = false;       // unsaved local changes
+let version = 0;         // bumps on every local change
+let changeLog = [];      // human-readable changes since last save (commit message)
+let saveTimer = null, saving = false, lastFetch = 0, syncState = 'loading', lastError = '';
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const now = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const PRI = { high: 0, medium: 1, low: 2 };
+const SINGULAR = { feature: 'feature', bug: 'bug', milestone: 'roadmap step', playtest: 'playtest note', asset: 'asset' };
+
+function applyTheme() { if (cfg.theme) document.documentElement.dataset.theme = cfg.theme; else delete document.documentElement.dataset.theme; }
+applyTheme();
+
+// ---------------------------------------------------------------- GitHub I/O
+const b64encode = (str) => { const bytes = new TextEncoder().encode(str); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
+const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+function apiUrl() { return `https://api.github.com/repos/${cfg.repo}/contents/${cfg.path.split('/').map(encodeURIComponent).join('/')}`; }
+function headers() { const h = { Accept: 'application/vnd.github+json' }; if (cfg.token) h.Authorization = `Bearer ${cfg.token.trim()}`; return h; }
+async function ghError(res) {
+  let msg = `${res.status}`; try { const j = await res.json(); if (j.message) msg += ` ${j.message}`; } catch {}
+  if (res.status === 401) msg += ' (token invalid or expired)';
+  if (res.status === 403 && /rate limit/i.test(msg)) msg += ' (add a token in Settings to raise the limit)';
+  if (res.status === 403 && !/rate/i.test(msg)) msg += ' (token lacks Contents: write on this repo)';
+  if (res.status === 404) msg += ` (no ${cfg.path} on branch ${cfg.branch}, or the token can't see the repo)`;
+  const e = new Error(msg); e.status = res.status; return e;
+}
+async function fetchRemote() {
+  const res = await fetch(`${apiUrl()}?ref=${encodeURIComponent(cfg.branch)}&t=${Date.now()}`, { headers: headers(), cache: 'no-store' });
+  if (!res.ok) {
+    if (!cfg.token && (res.status === 403 || res.status === 429)) { // anonymous API limit hit: read the raw file instead
+      const raw = await fetch(`https://raw.githubusercontent.com/${cfg.repo}/${encodeURIComponent(cfg.branch)}/${cfg.path}?t=${Date.now()}`, { cache: 'no-store' });
+      if (raw.ok) return { sha: null, doc: normalize(await raw.json()) };
+    }
+    throw await ghError(res);
+  }
+  const j = await res.json();
+  return { sha: j.sha, doc: normalize(JSON.parse(b64decode(j.content))) };
+}
+async function putRemote(content, message) {
+  const res = await fetch(apiUrl(), {
+    method: 'PUT', headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, content: b64encode(content), sha, branch: cfg.branch }),
+  });
+  if (!res.ok) throw await ghError(res);
+  return res.json();
+}
+
+function normalize(d) {
+  d.items ||= []; d.deleted ||= {}; d.categories ||= [];
+  for (const it of d.items) { it.tags ||= []; it.links ||= []; it.notes ??= ''; }
+  return d;
+}
+const serialize = (d) => JSON.stringify(d, null, 2) + '\n';
+
+// Merge our unsaved edits onto a newer remote copy (three-way, against `base` = the remote copy
+// our edits started from). Items only we changed keep our version, items only they changed keep
+// theirs, items both changed go to the newer `updated`. Deletions are tombstones in `deleted`.
+// Same id created on both sides = renumber ours.
+function merge(local, remote, base) {
+  const out = clone(remote);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const bById = new Map((base?.items || []).map((i) => [i.id, i]));
+  const rById = new Map(out.items.map((i) => [i.id, i]));
+  for (const [id, t] of Object.entries(local.deleted)) if (!out.deleted[id] || out.deleted[id] < t) out.deleted[id] = t;
+  for (const L of local.items) {
+    const R = rById.get(L.id), B = bById.get(L.id);
+    if (B && same(L, B)) continue; // we didn't touch it: remote wins (including remote deletes)
+    if (R) {
+      if (!B && R.created !== L.created) { // both sides created this id
+        const moved = { ...L, id: nextId(out, out.categories.find((c) => c.key === L.cat)) };
+        out.items.push(moved); rById.set(moved.id, moved);
+      } else if (!B || same(R, B) || (L.updated || '') >= (R.updated || '')) Object.assign(R, L);
+    } else { // new on our side (or they deleted it: the tombstone filter below handles that)
+      out.items.push(clone(L)); rById.set(L.id, L);
+    }
+  }
+  out.items = out.items.filter((i) => !(i.id in out.deleted)); // ids are never reused, so a tombstone is final
+  out.updated = now();
+  return out;
+}
+
+async function load({ quiet = false } = {}) {
+  if (saving) return;
+  if (!quiet) setSync('loading');
+  lastFetch = Date.now();
+  try {
+    const r = await fetchRemote();
+    if (dirty && doc) { if (r.sha !== sha) { doc = merge(doc, r.doc, base); base = r.doc; sha = r.sha; } scheduleSave(200); }
+    else if (r.sha !== sha || !r.sha || !doc) { doc = r.doc; base = clone(r.doc); sha = r.sha; }
+    lastError = '';
+    LS.set(CACHE_KEY, { doc, base, sha, dirty, changeLog });
+    if (!dirty) setSync(cfg.token ? 'synced' : 'local-clean');
+  } catch (e) {
+    lastError = e.message;
+    if (!doc) {
+      const c = LS.get(CACHE_KEY, null);
+      if (c?.doc) { doc = normalize(c.doc); base = c.base ? normalize(c.base) : null; sha = c.sha; dirty = !!c.dirty; changeLog = c.changeLog || []; }
+    }
+    setSync('error');
+  }
+  render();
+}
+
+function markChanged(msg) {
+  version++; dirty = true; doc.updated = now();
+  if (msg) changeLog.push(msg);
+  LS.set(CACHE_KEY, { doc, base, sha, dirty, changeLog });
+  scheduleSave();
+  render();
+}
+function scheduleSave(ms = 1200) {
+  clearTimeout(saveTimer);
+  if (!cfg.token) { setSync('local'); return; }
+  setSync('pending');
+  saveTimer = setTimeout(save, ms);
+}
+async function save() {
+  if (saving || !dirty || !cfg.token) return;
+  saving = true; setSync('saving');
+  const v = version;
+  const summary = [...new Set(changeLog)];
+  let message = 'Tracker: ' + (summary.length ? summary.join('; ') : 'update');
+  if (message.length > 72) message = `Tracker: ${summary.length} changes\n\n- ${summary.join('\n- ')}`;
+  message += `\n\nEdited by ${cfg.name || 'Devin'} in tracker/index.html`;
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const sent = clone(doc);
+        const res = await putRemote(serialize(sent), message);
+        sha = res.content.sha; base = sent;
+        break;
+      } catch (e) {
+        if ((e.status === 409 || e.status === 422) && attempt < 3) { // someone (Claude?) saved first
+          const r = await fetchRemote();
+          doc = merge(doc, r.doc, base); base = r.doc; sha = r.sha; render();
+          continue;
+        }
+        throw e;
+      }
+    }
+    lastError = '';
+    if (version === v) { dirty = false; changeLog = []; }
+    else changeLog = changeLog.slice(summary.length);
+    LS.set(CACHE_KEY, { doc, base, sha, dirty, changeLog });
+    setSync(dirty ? 'pending' : 'synced');
+    if (dirty) scheduleSave(400);
+  } catch (e) {
+    lastError = e.message; setSync('error');
+  } finally { saving = false; render(); }
+}
+
+function setSync(s) {
+  syncState = s;
+  const el = $('#sync');
+  const labels = { loading: 'Loading…', synced: 'Saved to GitHub', 'local-clean': 'Read-only (no token)', pending: 'Unsaved changes…', saving: 'Saving…', local: 'Saved in this browser only', error: 'Sync problem' };
+  el.dataset.s = s === 'local-clean' ? 'local' : s;
+  el.querySelector('span').textContent = labels[s] || s;
+  el.title = lastError || (sha ? `GitHub file version ${sha.slice(0, 7)}` : '');
+  renderBanner();
+}
+
+// ---------------------------------------------------------------- helpers
+const cats = () => doc?.categories || [];
+const catByKey = (k) => cats().find((c) => c.key === k);
+const statusDef = (cat, k) => cat.statuses.find((s) => s.key === k) || { key: k, label: k, color: 'grey' };
+const isClosed = (cat, it) => !!statusDef(cat, it.status).closed;
+function nextId(d, cat) {
+  const n = d.items.concat(Object.keys(d.deleted).map((id) => ({ id })))
+    .filter((i) => i.id.startsWith(cat.prefix + '-'))
+    .reduce((m, i) => Math.max(m, parseInt(i.id.split('-')[1], 10) || 0), 0);
+  return `${cat.prefix}-${n + 1}`;
+}
+function ago(iso) {
+  if (!iso) return '';
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  return iso.slice(0, 10);
+}
+const idNum = (id) => parseInt(id.split('-')[1], 10) || 0;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+const saveView = () => LS.set(VIEW_KEY, view);
+
+// ---------------------------------------------------------------- render
+function renderBanner() {
+  const b = $('#banner');
+  if (syncState === 'error') {
+    b.innerHTML = `<div class="banner err"><p><b>Couldn't reach GitHub:</b> ${esc(lastError)}. ${dirty ? 'Your changes are kept in this browser and will save once this is fixed.' : 'Showing the last copy this browser saw.'}</p><button class="btn" data-act="retry">Try again</button><button class="btn" data-act="settings">Settings</button></div>`;
+  } else if (!cfg.token && doc) {
+    b.innerHTML = `<div class="banner"><p><b>Read-only.</b> ${dirty ? 'Your edits are saved in this browser only, so Claude can\'t see them yet.' : 'You can browse everything.'} Add a GitHub token to save changes where Claude can read them.</p><button class="btn primary" data-act="settings">Add token</button></div>`;
+  } else b.innerHTML = '';
+}
+
+function render() {
+  if (!doc) { $('#list').innerHTML = `<div class="empty">${syncState === 'error' ? 'Nothing loaded yet.' : 'Loading tracker…'}</div>`; return; }
+  if (!catByKey(view.tab)) view.tab = cats()[0]?.key;
+  const cat = catByKey(view.tab);
+  $('#sub').textContent = `Features, bugs and the roadmap, shared with Claude · updated ${ago(doc.updated)}`;
+
+  // tabs
+  $('#tabs').innerHTML = cats().map((c) => {
+    const open = doc.items.filter((i) => i.cat === c.key && !isClosed(c, i)).length;
+    return `<button role="tab" data-tab="${c.key}" aria-selected="${c.key === view.tab}">${esc(c.label)}<span class="count">${open}</span></button>`;
+  }).join('');
+
+  // chips
+  const inCat = doc.items.filter((i) => i.cat === cat.key);
+  const chipDefs = [{ key: 'open', label: 'Open', n: inCat.filter((i) => !isClosed(cat, i)).length },
+    ...cat.statuses.map((s) => ({ key: 's:' + s.key, label: s.label, n: inCat.filter((i) => i.status === s.key).length })),
+    { key: 'all', label: 'All', n: inCat.length }];
+  if (!chipDefs.some((c) => c.key === view.filter)) view.filter = 'open';
+  $('#chips').innerHTML = chipDefs.map((c) => `<button class="chip" data-filter="${c.key}" aria-pressed="${c.key === view.filter}">${esc(c.label)}<b>${c.n}</b></button>`).join('');
+  $('#addBtn').textContent = `+ New ${SINGULAR[cat.key] || cat.label.toLowerCase()}`;
+
+  // items
+  const q = view.q.trim().toLowerCase();
+  let items = inCat.filter((i) => view.filter === 'all' ? true : view.filter === 'open' ? !isClosed(cat, i) : i.status === view.filter.slice(2));
+  if (q) items = items.filter((i) => [i.id, i.title, i.notes, i.tags.join(' '), i.milestone && msTitle(i.milestone)].join(' ').toLowerCase().includes(q));
+  const statusIdx = (i) => cat.statuses.findIndex((s) => s.key === i.status);
+  const sorters = {
+    priority: (a, b) => (isClosed(cat, a) - isClosed(cat, b)) || (cat.key === 'milestone' ? idNum(a.id) - idNum(b.id) : 0) || ((PRI[a.priority] ?? 3) - (PRI[b.priority] ?? 3)) || statusIdx(a) - statusIdx(b) || idNum(a.id) - idNum(b.id),
+    updated: (a, b) => (b.updated || '').localeCompare(a.updated || ''),
+    id: (a, b) => idNum(a.id) - idNum(b.id),
+  };
+  items.sort(sorters[view.sort] || sorters.priority);
+  $('#list').innerHTML = items.length ? items.map((i) => card(cat, i)).join('')
+    : `<div class="empty">${q ? 'No matches.' : `Nothing here yet. <a href="#" data-act="add">Add a ${esc(SINGULAR[cat.key] || 'item')}</a>.`}</div>`;
+}
+
+function msTitle(id) { const m = doc.items.find((i) => i.id === id); return m ? m.title.replace(/^Step (\d+):\s*/, 'Step $1: ') : id; }
+function linkedTo(msId) { return doc.items.filter((i) => i.milestone === msId && i.cat !== 'milestone'); }
+
+function card(cat, it) {
+  const st = statusDef(cat, it.status);
+  const opts = cat.statuses.map((s) => `<option value="${s.key}" ${s.key === it.status ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
+  const meta = [];
+  if (it.priority) meta.push(`<span class="tag pri-${it.priority}">${it.priority}</span>`);
+  if (it.milestone) meta.push(`<span class="tag ms" title="Roadmap step">⚑ ${esc(msTitle(it.milestone))}</span>`);
+  for (const t of it.tags) meta.push(`<span class="tag">#${esc(t)}</span>`);
+  if (it.links.length) meta.push(`<span class="tag">🔗 ${it.links.length} link${it.links.length > 1 ? 's' : ''}</span>`);
+  meta.push(`<span>${ago(it.updated)}${it.by ? ' · ' + esc(it.by) : ''}</span>`);
+  let progress = '';
+  if (cat.key === 'milestone') {
+    const linked = linkedTo(it.id);
+    const done = linked.filter((l) => isClosed(catByKey(l.cat), l)).length;
+    if (linked.length) progress = `<div class="progress"><div class="bar"><span style="width:${(100 * done / linked.length).toFixed(0)}%"></span></div>${done} / ${linked.length} done</div>`;
+  }
+  return `<div class="card ${st.closed ? 'closed' : ''}" data-id="${esc(it.id)}" style="--c: var(--${st.color || 'grey'})">
+    <div class="row"><span class="id">${esc(it.id)}</span><span class="title">${esc(it.title)}</span>
+      <select class="status-sel" data-status="${esc(it.id)}" title="Change status" aria-label="Status">${opts}</select></div>
+    ${it.notes ? `<div class="notes-preview">${esc(it.notes)}</div>` : ''}
+    ${progress}
+    <div class="meta">${meta.join('')}</div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- editing
+let editing = null; // item id or null for new
+function openEdit(id) {
+  const cat = id ? catByKey(doc.items.find((i) => i.id === id).cat) : catByKey(view.tab);
+  const it = id ? doc.items.find((i) => i.id === id) : { title: '', status: (view.filter.startsWith('s:') ? view.filter.slice(2) : cat.statuses[0].key), tags: [], notes: '', links: [] };
+  editing = id;
+  const f = $('#editForm');
+  $('#editTitle').textContent = id ? `${id} · ${cat.label}` : `New ${SINGULAR[cat.key] || 'item'}`;
+  f.title.value = it.title;
+  f.status.innerHTML = cat.statuses.map((s) => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
+  f.status.value = it.status;
+  const fields = cat.fields || [];
+  f.querySelectorAll('[data-field]').forEach((el) => { el.hidden = !fields.includes(el.dataset.field); });
+  f.priority.value = it.priority || '';
+  const ms = doc.items.filter((i) => i.cat === 'milestone').sort((a, b) => idNum(a.id) - idNum(b.id));
+  f.milestone.innerHTML = `<option value="">—</option>` + ms.map((m) => `<option value="${m.id}">${esc(m.id + ' ' + m.title)}</option>`).join('');
+  f.milestone.value = it.milestone || '';
+  f.tags.value = it.tags.join(', ');
+  f.notes.value = it.notes;
+  f.links.value = it.links.join('\n');
+  $('#delBtn').hidden = !id;
+  $('#editMeta').textContent = id ? `Created ${it.created?.slice(0, 10) || '?'} · last changed ${ago(it.updated)}${it.by ? ' by ' + it.by : ''}` : '';
+  const linked = id && cat.key === 'milestone' ? linkedTo(id) : [];
+  $('#linkedWrap').hidden = !linked.length;
+  $('#linked').innerHTML = linked.map((l) => `<li>${esc(l.id)} ${esc(l.title)} <span class="small">(${esc(statusDef(catByKey(l.cat), l.status).label)})</span></li>`).join('');
+  $('#edit').showModal();
+  if (!id) f.title.focus();
+}
+
+function commitEdit() {
+  const f = $('#editForm');
+  const cat = editing ? catByKey(doc.items.find((i) => i.id === editing).cat) : catByKey(view.tab);
+  const vals = {
+    title: f.title.value.trim(), status: f.status.value,
+    tags: f.tags.value.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
+    notes: f.notes.value.replace(/\s+$/, ''), links: f.links.value.split('\n').map((l) => l.trim()).filter(Boolean),
+    priority: (cat.fields || []).includes('priority') ? f.priority.value : '', milestone: (cat.fields || []).includes('milestone') ? f.milestone.value : '',
+  };
+  if (!vals.title) return;
+  let it, msg;
+  if (editing) {
+    it = doc.items.find((i) => i.id === editing);
+    const before = JSON.stringify([it.title, it.status, it.tags, it.notes, it.links, it.priority || '', it.milestone || '']);
+    const after = JSON.stringify([vals.title, vals.status, vals.tags, vals.notes, vals.links, vals.priority, vals.milestone]);
+    if (before === after) return;
+    msg = it.status !== vals.status ? `${it.id} → ${vals.status}` : `edit ${it.id}`;
+  } else {
+    it = { id: nextId(doc, cat), cat: cat.key, created: now() };
+    doc.items.push(it);
+    msg = `add ${it.id} "${vals.title.slice(0, 40)}"`;
+  }
+  Object.assign(it, vals, { updated: now(), by: cfg.name || 'Devin' });
+  if (!it.priority) delete it.priority;
+  if (!it.milestone) delete it.milestone;
+  markChanged(msg);
+  if (!editing) toast(`Added ${it.id}`);
+}
+
+function setStatus(id, status) {
+  const it = doc.items.find((i) => i.id === id);
+  if (!it || it.status === status) return;
+  it.status = status; it.updated = now(); it.by = cfg.name || 'Devin';
+  markChanged(`${id} → ${status}`);
+  toast(`${id} → ${statusDef(catByKey(it.cat), status).label}`);
+}
+
+function deleteItem(id) {
+  const it = doc.items.find((i) => i.id === id);
+  if (!it || !confirm(`Delete ${id} "${it.title}"? (Marking it Dropped keeps a record instead.)`)) return false;
+  doc.items = doc.items.filter((i) => i.id !== id);
+  doc.deleted[id] = now();
+  for (const o of doc.items) if (o.milestone === id) { delete o.milestone; o.updated = now(); }
+  markChanged(`delete ${id}`);
+  return true;
+}
+
+// ---------------------------------------------------------------- events
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const act = t.closest('[data-act]')?.dataset.act;
+  if (act === 'retry') { e.preventDefault(); dirty && cfg.token ? save() : load(); return; }
+  if (act === 'settings') { e.preventDefault(); openSettings(); return; }
+  if (act === 'add') { e.preventDefault(); openEdit(null); return; }
+  const tab = t.closest('[data-tab]');
+  if (tab) { view.tab = tab.dataset.tab; view.filter = 'open'; saveView(); render(); return; }
+  const chip = t.closest('[data-filter]');
+  if (chip) { view.filter = chip.dataset.filter; saveView(); render(); return; }
+  if (t.closest('.status-sel')) return;
+  const c = t.closest('.card');
+  if (c) openEdit(c.dataset.id);
+});
+document.addEventListener('change', (e) => { if (e.target.matches('.status-sel')) setStatus(e.target.dataset.status, e.target.value); });
+$('#search').value = view.q;
+$('#search').addEventListener('input', (e) => { view.q = e.target.value; saveView(); render(); });
+$('#sort').value = view.sort;
+$('#sort').addEventListener('change', (e) => { view.sort = e.target.value; saveView(); render(); });
+$('#addBtn').addEventListener('click', () => doc && openEdit(null));
+$('#refreshBtn').addEventListener('click', () => (dirty && cfg.token ? save() : load()));
+$('#editForm').addEventListener('submit', (e) => { e.preventDefault(); commitEdit(); $('#edit').close(); });
+$('#cancelBtn').addEventListener('click', () => $('#edit').close());
+$('#delBtn').addEventListener('click', () => { if (deleteItem(editing)) $('#edit').close(); });
+
+function openSettings() {
+  const f = $('#settingsForm');
+  for (const k of ['token', 'name', 'repo', 'branch', 'path', 'theme']) f[k].value = cfg[k] || '';
+  $('#testResult').textContent = '';
+  $('#settings').showModal();
+}
+$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const f = e.target, prev = JSON.stringify([cfg.repo, cfg.branch, cfg.path]);
+  for (const k of ['token', 'name', 'repo', 'branch', 'path', 'theme']) cfg[k] = f[k].value.trim();
+  LS.set(CFG_KEY, cfg); applyTheme(); $('#settings').close();
+  if (JSON.stringify([cfg.repo, cfg.branch, cfg.path]) !== prev) { doc = null; base = null; sha = null; dirty = false; changeLog = []; load(); }
+  else if (dirty && cfg.token) save(); else load({ quiet: true });
+});
+$('#testBtn').addEventListener('click', async () => {
+  const f = $('#settingsForm'), out = $('#testResult');
+  const token = f.token.value.trim();
+  if (!token) { out.textContent = 'Paste a token first.'; return; }
+  out.textContent = 'Checking…';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${f.repo.value.trim()}`, { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    const j = await res.json();
+    if (!res.ok) out.textContent = `✗ ${res.status} ${j.message || ''}`;
+    else out.textContent = j.permissions?.push ? '✓ Token works and can save to this repo.' : '✗ Token can read but not write. Give it Contents: Read and write.';
+  } catch (err) { out.textContent = `✗ ${err.message}`; }
+});
+$('#exportBtn').addEventListener('click', () => {
+  if (!doc) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([serialize(doc)], { type: 'application/json' }));
+  a.download = 'tracker.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try {
+    const incoming = normalize(JSON.parse(await file.text()));
+    if (!Array.isArray(incoming.items) || !incoming.categories.length) throw new Error('not a tracker file');
+    if (!confirm(`Merge ${incoming.items.length} items from ${file.name} into the tracker? Newer edits win.`)) return;
+    doc = merge(incoming, doc, null); markChanged(`import ${file.name}`); $('#settings').close();
+  } catch (err) { alert(`Couldn't import: ${err.message}`); }
+});
+document.addEventListener('keydown', (e) => {
+  if (document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  if (e.key === '/') { e.preventDefault(); $('#search').focus(); }
+  else if (e.key === 'n' && doc) { e.preventDefault(); openEdit(null); }
+});
+// Pick up Claude's changes when you come back to the tab.
+window.addEventListener('focus', () => { if (!saving && Date.now() - lastFetch > 20000) load({ quiet: true }); });
+window.addEventListener('beforeunload', (e) => { if (dirty && cfg.token) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------------------------------------------------------------- boot
+(function boot() {
+  const c = LS.get(CACHE_KEY, null);
+  if (c?.doc) { doc = normalize(c.doc); base = c.base ? normalize(c.base) : null; sha = c.sha; dirty = !!c.dirty; changeLog = c.changeLog || []; }
+  render();
+  load({ quiet: !!doc });
+})();
+</script>
+</body>
+</html>
