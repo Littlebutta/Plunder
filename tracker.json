@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:55Z",
+  "updated": "2026-11-09T22:30:57Z",
   "categories": [
     {
       "key": "feature",
@@ -1173,14 +1173,16 @@
       "id": "F-45",
       "cat": "feature",
       "title": "Cannons on several deck levels (must be above the waterline; guns under water cannot fire)",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T22:15:47Z",
       "priority": "high",
       "milestone": "M-5",
-      "updated": "2026-11-09T22:15:47Z",
+      "updated": "2026-11-09T22:30:57Z",
       "by": "Claude"
     },
     {
