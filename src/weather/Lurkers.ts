@@ -3,6 +3,7 @@ import { toonMaterial, addOutline } from '../render/toon';
 import type { WaveField } from '../ocean/waves';
 import type { Collider } from '../combat/ProjectileSystem';
 import { MAX_LURKERS } from '../ocean/oceanMaterial';
+import { keepInside } from './bounds';
 
 /** Collider ids for the creatures: LURKER_ID_BASE + index. */
 export const LURKER_ID_BASE = 700;
@@ -233,7 +234,7 @@ export class Lurkers {
     const back = Math.atan2(-target.velocity.z, -target.velocity.x);
     const a = (target.velocity.lengthSq() > 0.5 ? back : Math.random() * Math.PI * 2) + (Math.random() - 0.5) * 2.2;
     const r = dist + Math.random() * 30;
-    l.pos.set(target.position.x + Math.cos(a) * r, 0, target.position.z + Math.sin(a) * r);
+    keepInside(l.pos.set(target.position.x + Math.cos(a) * r, 0, target.position.z + Math.sin(a) * r), 660);
     l.heading = a + Math.PI;
   }
 
@@ -301,6 +302,7 @@ export class Lurkers {
           const speed = LEVELS.speed[lv] * (dist > 120 ? 1.6 : 1);
           l.pos.x += Math.cos(l.heading) * speed * dt;
           l.pos.z += Math.sin(l.heading) * speed * dt;
+          keepInside(l.pos);
           if (dist < strikeRange && l.strength > 0.8) this.beginWindup(l, target);
           if (this.presence < 0.3) {
             l.state = 'retreat';
@@ -346,6 +348,7 @@ export class Lurkers {
           l.strength = Math.max(0, l.strength - dt * 0.35);
           l.pos.x += Math.cos(l.heading) * 2.5 * dt;
           l.pos.z += Math.sin(l.heading) * 2.5 * dt;
+          keepInside(l.pos);
           if (l.timer <= 0) {
             l.state = 'deep';
             l.timer = 7 + Math.random() * 8 - lv * 2;
