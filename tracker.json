@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:46:00Z",
+  "updated": "2026-11-09T23:46:02Z",
   "categories": [
     {
       "key": "feature",
@@ -1424,13 +1424,13 @@
       "id": "B-8",
       "cat": "bug",
       "title": "Steering wheel faces backwards",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
       "notes": "Fixed in PR #15.",
       "links": [],
       "created": "2026-11-09T23:45:46Z",
       "priority": "low",
-      "updated": "2026-11-09T23:45:46Z",
+      "updated": "2026-11-09T23:46:02Z",
       "by": "Claude"
     }
   ],
