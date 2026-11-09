@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
+import { createWaterMask } from '../render/waterMask';
 import { HullSpec } from '../physics/FloatingBody';
 import { DriveSpec, Vessel } from '../ship/Vessel';
 import { WaveField } from '../ocean/waves';
@@ -101,6 +102,17 @@ export class Raft extends Vessel {
         this.group.add(cap);
       }
     }
+
+    // Keep the sea from washing up between and over the logs: a dark bed at
+    // mid-log height closes the gaps, and an invisible lid on it masks the water.
+    const bedGeo = new THREE.PlaneGeometry(BEAM - 0.5, LENGTH - 0.35);
+    bedGeo.rotateX(-Math.PI / 2);
+    const bed = new THREE.Mesh(bedGeo, woodDark);
+    bed.position.y = 0.02;
+    this.group.add(bed);
+    const lid = createWaterMask(bedGeo.clone());
+    lid.position.y = 0.04;
+    this.group.add(lid);
 
     // Cross beams + rope lashings
     for (const z of [-1.2, 0.2, 1.3]) {

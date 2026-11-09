@@ -15,6 +15,8 @@ export class Input {
   private dragDist = 0;
   private downAt = 0;
   private clickedNow = false;
+  /** Right mouse button held (fires the swivel gun). */
+  rightDown = false;
 
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -23,15 +25,30 @@ export class Input {
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.rightDown = false;
+    });
+    // a second button going down or up while one is held arrives as a move, not a down/up
+    target.addEventListener('pointermove', (e) => (this.rightDown = (e.buttons & 2) !== 0));
 
     target.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) {
+        this.rightDown = true;
+        return;
+      }
+      if (e.button !== 0) return;
       this.dragging = true;
       this.dragDist = 0;
       this.downAt = performance.now();
       target.setPointerCapture(e.pointerId);
     });
     target.addEventListener('pointerup', (e) => {
+      if (e.button === 2) {
+        this.rightDown = false;
+        return;
+      }
+      if (e.button !== 0) return;
       this.dragging = false;
       target.releasePointerCapture(e.pointerId);
       // A short press that barely moved is a click (select), not an orbit drag.
@@ -77,9 +94,14 @@ export class Input {
     return this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
   }
 
-  /** Fire request: Space, held or tapped (the gun's reload sets the pace). The mouse only aims. */
+  /** Main guns: Space, held or tapped (the reload sets the pace). */
   get fire(): boolean {
     return this.isDown('Space');
+  }
+
+  /** Swivel gun: right mouse button, held or tapped. */
+  get fireSwivel(): boolean {
+    return this.rightDown;
   }
 
   /** True on the frame the player clicked (not dragged) on the scene. Used to select things. */

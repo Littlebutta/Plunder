@@ -21,6 +21,15 @@ export const BROADSIDE = {
 };
 
 const RIBBON_POINTS = 28;
+/** Aim dead zone: cursor movement smaller than this is ignored (radians of bearing, fraction of range). */
+const AIM_DEAD_ANGLE = THREE.MathUtils.degToRad(1.3);
+const AIM_DEAD_RANGE = 0.035;
+/** Time constant for easing the aim toward where the cursor points (s). */
+const AIM_EASE = 0.22;
+
+function wrapAngle(a: number): number {
+  return a - Math.PI * 2 * Math.round(a / (Math.PI * 2));
+}
 
 interface Gun {
   side: 1 | -1;
@@ -46,11 +55,14 @@ export interface BroadsideShot {
  *
  * The firing preview is a 3D model, not a decal on the water: an outlined
  * white ribbon that follows the shells' arc through the air from the guns to
- * the impact zone, ending in a reticle that floats on the swell there.
+ * the impact zone.
  *
  * Arcade rule: the gun crews fully correct for the ship's roll and pitch, and
- * shots do not inherit the ship's own motion. The ribbon therefore only moves
- * when you turn the ship or move the aim point, never because of the swell.
+ * shots do not inherit the ship's own motion. The aim itself is held in world
+ * space (a compass bearing and a range): the cursor gives the general
+ * direction, small movements of it are ignored (a dead zone), larger ones are
+ * eased in, and the guns traverse against the ship's yaw so the swell turning
+ * the hull a few degrees does not swing the ribbon.
  */
 export class Broadside {
   readonly guns: Gun[] = [];
@@ -59,13 +71,10 @@ export class Broadside {
   elevation = 0.12;
   traverse = 0;
   private targetElevation = 0.12;
-  private targetTraverse = 0;
   /** True when the aim point is outside what the battery can reach by itself. */
   outOfArc = false;
-  /** True when the aim point is beyond max range (the reticle turns red and stops at the limit). */
+  /** True when the aim point is beyond max range (the ribbon turns red and stops at the limit). */
   outOfRange = false;
-  private readonly reticle = new THREE.Group();
-  private readonly reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
   private readonly cooldown = { '1': 0, '-1': 0 };
 
   readonly ribbon: THREE.Mesh;
@@ -77,7 +86,12 @@ export class Broadside {
   private queue: { delay: number; gun: Gun }[] = [];
   /** Level the preview ends at: mean sea level, or the ship's own level when it sits in a trough. */
   private seaLevel = 0;
-  private readonly surf = { height: 0, normal: new THREE.Vector3() };
+  /** Steadied aim, held in world space: compass bearing of the line of fire and range (m). */
+  private aimBearing = 0;
+  private aimRange = 40;
+  private goalBearing = 0;
+  private goalRange = 40;
+  private aimStarted = false;
 
   /**
    * @param ship group the guns are parented to (forward = -Z)
@@ -149,28 +163,6 @@ export class Broadside {
     this.ribbon.name = 'broadside-ribbon';
     this.ribbon.renderOrder = 5;
 
-    // Reticle: a ring with four ticks and a centre pip, built at radius 1 and
-    // scaled to the impact zone each frame.
-    const rm = this.reticleMat;
-    const ring = new THREE.TorusGeometry(1, 0.045, 6, 48);
-    ring.rotateX(Math.PI / 2);
-    this.reticle.add(new THREE.Mesh(ring, rm));
-    const inner = new THREE.TorusGeometry(0.45, 0.03, 6, 32);
-    inner.rotateX(Math.PI / 2);
-    this.reticle.add(new THREE.Mesh(inner, rm));
-    for (let i = 0; i < 4; i++) {
-      const tick = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.5), rm);
-      const a = (i / 4) * Math.PI * 2;
-      tick.position.set(Math.sin(a) * 1.05, 0, Math.cos(a) * 1.05);
-      tick.rotation.y = a;
-      this.reticle.add(tick);
-    }
-    this.reticle.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 1), rm));
-    this.reticle.traverse((o) => {
-      o.frustumCulled = false;
-      o.renderOrder = 6;
-    });
-    this.ribbon.add(this.reticle);
     for (let i = 0; i < 400; i++) {
       this.trackA.push(new THREE.Vector3());
       this.trackB.push(new THREE.Vector3());
@@ -195,22 +187,52 @@ export class Broadside {
     return this.cooldown[this.side] <= 0;
   }
 
-  /** Aim at a world point: picks the side, sets elevation from range, small traverse from bearing. */
-  aimAt(target: THREE.Vector3): void {
-    const local = this.ship.worldToLocal(_t.copy(target));
-    // A little hysteresis so the side doesn't flicker when aiming dead ahead/astern.
-    if (Math.abs(local.x) > 1.5) this.side = local.x >= 0 ? 1 : -1;
-    const s = this.side;
-    // Bearing off the beam, positive toward the bow.
-    const bearing = Math.atan2(-local.z, s * local.x);
-    this.outOfArc = Math.abs(bearing) > BROADSIDE.traverse + 0.02 || s * local.x < 0;
-    this.targetTraverse = THREE.MathUtils.clamp(bearing, -BROADSIDE.traverse, BROADSIDE.traverse);
+  /**
+   * Aim toward a world point: picks the side, then steers the held bearing and
+   * range toward it. Call every frame with the frame time.
+   */
+  aimAt(target: THREE.Vector3, dt = 1 / 60): void {
+    const m = this.ship.matrixWorld;
     const origin = this.ship.getWorldPosition(_p);
-    const dist = Math.hypot(target.x - origin.x, target.z - origin.z);
+    const dx = target.x - origin.x;
+    const dz = target.z - origin.z;
+    const beam = _x.set(1, 0, 0).transformDirection(m).setY(0).normalize();
+    // Which side: needs a clear lead before it switches, so it never flickers.
+    const across = dx * beam.x + dz * beam.z;
+    if (Math.abs(across) > 3) this.side = across >= 0 ? 1 : -1;
+
+    const dist = Math.hypot(dx, dz);
     this.outOfRange = dist > BROADSIDE.maxRange;
-    const range = Math.max(4, Math.min(dist, BROADSIDE.maxRange) - 1.2);
+    const wantRange = Math.max(6, Math.min(dist, BROADSIDE.maxRange));
+    const wantBearing = Math.atan2(dx, dz);
+    if (!this.aimStarted) {
+      this.aimStarted = true;
+      this.goalBearing = this.aimBearing = wantBearing;
+      this.goalRange = this.aimRange = wantRange;
+    }
+    // Dead zone: the goal only moves once the cursor has clearly moved, and
+    // then only by the excess, so wobble inside the zone does nothing.
+    const db = wrapAngle(wantBearing - this.goalBearing);
+    if (Math.abs(db) > AIM_DEAD_ANGLE) this.goalBearing = wrapAngle(this.goalBearing + db - Math.sign(db) * AIM_DEAD_ANGLE);
+    const deadRange = Math.max(1, this.goalRange * AIM_DEAD_RANGE);
+    const dr = wantRange - this.goalRange;
+    if (Math.abs(dr) > deadRange) this.goalRange += dr - Math.sign(dr) * deadRange;
+    // Ease toward the goal.
+    const k = 1 - Math.exp(-dt / AIM_EASE);
+    this.aimBearing = wrapAngle(this.aimBearing + wrapAngle(this.goalBearing - this.aimBearing) * k);
+    this.aimRange += (this.goalRange - this.aimRange) * k;
+
+    // Traverse is whatever it takes to hold the bearing against the ship's yaw.
+    const s = this.side;
+    const beamBearing = Math.atan2(s * beam.x, s * beam.z);
+    // positive = toward the bow
+    const off = wrapAngle(this.aimBearing - beamBearing) * s;
+    this.outOfArc = Math.abs(off) > BROADSIDE.traverse + 0.02;
+    this.traverse = THREE.MathUtils.clamp(off, -BROADSIDE.traverse, BROADSIDE.traverse);
+
     // guns sit a little above the water; aim for the sea level the ribbon ends at
     this.seaLevel = Math.min(0, origin.y);
+    const range = Math.max(4, this.aimRange - 1.2);
     const elev = solveElevation(range, this.seaLevel - (origin.y + 0.9), BROADSIDE.muzzleSpeed, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
     this.targetElevation = THREE.MathUtils.clamp(elev, BROADSIDE.minElevation, BROADSIDE.maxElevation);
   }
@@ -221,7 +243,6 @@ export class Broadside {
     this.cooldown['-1'] -= dt;
     const step = (cur: number, target: number, rate: number) => cur + THREE.MathUtils.clamp(target - cur, -rate * dt, rate * dt);
     this.elevation = step(this.elevation, this.targetElevation, BROADSIDE.elevateRate);
-    this.traverse = step(this.traverse, this.targetTraverse, BROADSIDE.traverseRate);
 
     // Roll toward the active side: how far the ship's beam axis tips up or down.
     const outward = _x.set(this.side, 0, 0).transformDirection(this.ship.matrixWorld);
@@ -274,6 +295,7 @@ export class Broadside {
     const m = this.ship.matrixWorld;
     const beam = _x.set(this.side, 0, 0).transformDirection(m).setY(0).normalize();
     const bow = _c.set(0, 0, -1).transformDirection(m).setY(0).normalize();
+    // bow is 90 degrees from the beam whichever side is firing
     out.copy(beam).multiplyScalar(Math.cos(this.traverse)).addScaledVector(bow, Math.sin(this.traverse)).normalize();
     out.multiplyScalar(Math.cos(this.elevation));
     out.y = Math.sin(this.elevation);
@@ -348,21 +370,6 @@ export class Broadside {
     u.uReady.value = this.ready ? 1 : 0;
     u.uAspect.value = length / Math.max(width, 0.5);
     u.uTooFar.value = this.outOfRange ? 1 : 0;
-
-    // Reticle at the far end: floats on the swell there, tilted with the wave
-    // and turned to face along the line of fire.
-    const last = (RIBBON_POINTS - 1) * 6;
-    const p = this.ribbonPos;
-    const cx = (p[last] + p[last + 3]) / 2;
-    const cz = (p[last + 2] + p[last + 5]) / 2;
-    const surf = this.waves.sample(cx, cz, this.surf);
-    this.reticle.position.set(cx, surf.height + 0.3, cz);
-    const dir = this.fireDirection(_d);
-    _yaw.setFromAxisAngle(_up, Math.atan2(dir.x, dir.z));
-    this.reticle.quaternion.setFromUnitVectors(_up, surf.normal).multiply(_yaw);
-    const r = Math.max(width / 2, 1);
-    this.reticle.scale.set(r, r, r * 1.25);
-    this.reticleMat.color.setRGB(1, this.outOfRange ? 0.42 : this.ready ? 1 : 0.72, this.outOfRange ? 0.35 : this.ready ? 1 : 0.5);
   }
 
   private buildGun(mount: THREE.Vector3): Gun {
@@ -422,7 +429,6 @@ function sampleTrack(track: THREE.Vector3[], n: number, u: number, out: THREE.Ve
   return out.lerpVectors(track[i], track[i + 1], f - i);
 }
 
-const _t = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _v = new THREE.Vector3();
@@ -431,5 +437,3 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _x = new THREE.Vector3();
 const _prev = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0);
-const _yaw = new THREE.Quaternion();

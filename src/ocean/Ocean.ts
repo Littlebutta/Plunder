@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WaveField } from './waves';
 import { createOceanMaterial } from './oceanMaterial';
 import { ShoreField } from './shore';
+import { OCEAN_ORDER } from '../render/waterMask';
 
 /** Fraction of linear spacing in the grid mapping; lower = denser centre. */
 const LINEAR = 0.04;
@@ -31,6 +32,7 @@ export class Ocean {
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.frustumCulled = false; // vertices move in the shader
     this.mesh.name = 'ocean';
+    this.mesh.renderOrder = OCEAN_ORDER; // after the hull lids (see waterMask.ts)
     this.snap = (LINEAR * radius * 2) / segments; // = centre vertex spacing
     this.refreshAmplitude();
   }

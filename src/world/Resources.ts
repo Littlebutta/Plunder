@@ -1,29 +1,28 @@
 import type { IslandType } from './Islands';
 
-export type ResourceId = 'wood' | 'stone' | 'food' | 'salvage';
+export type ResourceId = 'wood' | 'stone' | 'salvage';
 
-export const RESOURCE_IDS: ResourceId[] = ['wood', 'stone', 'food', 'salvage'];
+export const RESOURCE_IDS: ResourceId[] = ['wood', 'stone', 'salvage'];
 
 export const RESOURCES: Record<ResourceId, { label: string; color: string }> = {
   wood: { label: 'Wood', color: '#c0814a' },
   stone: { label: 'Stone', color: '#b9b2a6' },
-  food: { label: 'Food', color: '#9be37a' },
   salvage: { label: 'Salvage', color: '#8fc7e8' },
 };
 
 export type Stock = Record<ResourceId, number>;
 
 export function emptyStock(): Stock {
-  return { wood: 0, stone: 0, food: 0, salvage: 0 };
+  return { wood: 0, stone: 0, salvage: 0 };
 }
 
 /** What each island type offers, as shares of its total (which grows with island size). */
 const YIELD: Record<IslandType, Partial<Stock>> = {
-  peak: { stone: 0.55, wood: 0.3, food: 0.15 },
+  peak: { stone: 0.6, wood: 0.4 },
   ridge: { stone: 0.7, wood: 0.3 },
-  mesa: { stone: 0.6, wood: 0.25, food: 0.15 },
-  hills: { wood: 0.55, food: 0.45 },
-  cay: { food: 0.8, wood: 0.2 },
+  mesa: { stone: 0.65, wood: 0.35 },
+  hills: { wood: 0.8, stone: 0.2 },
+  cay: { wood: 0.7, salvage: 0.3 },
   stacks: { stone: 1 },
   wreck: { salvage: 0.6, wood: 0.4 },
 };

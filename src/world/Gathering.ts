@@ -4,9 +4,9 @@ import { Hold, RESOURCE_IDS, ResourceId, Stock } from './Resources';
 
 export const GATHER = {
   /** How close to the shore the ship must be to work an island without a port (m). */
-  islandRange: 28,
+  islandRange: 60,
   /** How close to the pier the ship must be when the island has a port (m). */
-  portRange: 26,
+  portRange: 48,
   /** Seconds per haul. */
   haulTime: 2.5,
   /** Units brought aboard per haul; ports are better organised. */

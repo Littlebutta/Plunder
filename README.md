@@ -42,15 +42,16 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | W / S (or ↑ / ↓) | Raise / lower the sail. Hold S at 0% to back-paddle. |
 | A / D (or ← / →) | Steer (stronger at speed, reverses when going backwards) |
 | Mouse | Aim at the sea |
-| Space | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
+| Right mouse button | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
+| Space | Fire the main guns: the broadside when it is run out, otherwise the swivel. |
 | E / click island | Gather from the island in range (a marker floats over it). E again to stop. |
 | Esc | Main menu / resume |
 | C | Fit / remove the broadside battery (the raft gets a test battery; a designed ship uses its own cannons) |
-| F | Fire the broadside on the side you're aiming at (outlined ribbon) |
-| Mouse drag | Orbit the camera (it stays where you leave it) |
+| F | Also fires the broadside on the side you're aiming at (outlined ribbon) |
+| Left mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
-| M | Mute |
+| M | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
 | P | Show buoyancy probes (red = underwater) |
 | H | Hide the help panel |
@@ -64,8 +65,8 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 ## Guns
 
 - **Swivel gun:** free aim with the mouse, dotted trajectory. The ring lands on the water under the cursor. Max range 90 m.
-- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. A white 3D ribbon follows the shells' arc through the air and ends in a reticle floating on the impact zone. Max range 120 m. The crews correct for the ship's roll, so the ribbon only moves when you turn the ship or move the aim point.
-- Past max range the ring or reticle turns red and stops at the limit. Ranges are set in `SWIVEL.maxRange` / `BROADSIDE.maxRange` so upgrades can extend them later.
+- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. A white 3D ribbon follows the shells' arc through the air to the impact zone. Max range 120 m. The cursor only gives a general direction: the aim is held as a compass bearing and a range, small cursor movements are ignored, larger ones are eased in, and the guns traverse against the hull's yaw, so the swell does not swing the ribbon.
+- Past max range the ring or ribbon turns red and stops at the limit. Ranges are set in `SWIVEL.maxRange` / `BROADSIDE.maxRange` so upgrades can extend them later.
 - Shots do not inherit the ship's own motion, and shells that hit an island stop there.
 
 ## Islands
@@ -74,7 +75,7 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 ## Gathering and ports
 
-Each island holds resources that depend on its type and size (wood, stone, food, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+Each island holds resources that depend on its type and size (wood, stone, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
 
 ## Shipyard
 
@@ -89,6 +90,10 @@ The game opens on a title menu: options on the left, the raft sailing by itself 
 ## Sound
 
 Recorded sounds live in `public/sounds/` (`cannon-fire.mp3`, `sail-full.mp3`). Splashes, wood hits, the ocean bed and the wind bed are synthesized in `src/audio/AudioManager.ts` until recordings exist for them. To add a recording, drop the file in `public/sounds/` and add it to `SAMPLES` in that file.
+
+Volumes (master, sound effects, sea and wind, music) and mute are set in the Settings window (`src/ui/Settings.ts`) and remembered between sessions. Each has its own bus in `AudioManager`; the music bus is ready but nothing plays on it yet.
+
+The sea never shows inside a hull: each vessel carries an invisible lid (`src/render/waterMask.ts`) drawn after the boat and before the ocean.
 
 In the browser console, `plunder` exposes the scene, waves, raft and camera for tinkering.
 
