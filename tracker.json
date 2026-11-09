@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:43Z",
+  "updated": "2026-11-09T22:15:45Z",
   "categories": [
     {
       "key": "feature",
@@ -1143,6 +1143,20 @@
       "created": "2026-11-09T22:15:43Z",
       "priority": "medium",
       "updated": "2026-11-09T22:15:43Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-44",
+      "cat": "feature",
+      "title": "Broadside fire mode: sequential or all at once (with a little random spread in timing)",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:45Z",
+      "priority": "medium",
+      "milestone": "M-5",
+      "updated": "2026-11-09T22:15:45Z",
       "by": "Claude"
     }
   ],
