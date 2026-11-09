@@ -19,6 +19,11 @@ import { Effects } from './fx/Effects';
 import { Wake } from './fx/Wake';
 import { WindStreaks } from './fx/WindStreaks';
 import { AudioManager } from './audio/AudioManager';
+import { Gathering } from './world/Gathering';
+import { Hold } from './world/Resources';
+import { GatherUi } from './ui/GatherUi';
+import { MainMenu } from './ui/MainMenu';
+import type { Island } from './world/Islands';
 
 // --- Renderer ---------------------------------------------------------------
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -115,7 +120,117 @@ const sim = new Simulation();
 // --- Controls / UI --------------------------------------------------------
 const input = new Input(canvas);
 const follow = new FollowCamera(camera, input, waves);
-const hud = new Hud(document.getElementById('hud')!);
+const hudRoot = document.getElementById('hud')!;
+const hud = new Hud(hudRoot);
+
+// --- Gathering --------------------------------------------------------------
+const hold = new Hold();
+const gathering = new Gathering(world.islands, hold);
+const gatherUi = new GatherUi(hudRoot);
+gathering.onHaul = () => audio.woodHit(raft.body.position);
+// Marker that floats over the island (or its port) you can gather from.
+const marker = new THREE.Group();
+const markerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), markerMat);
+gem.scale.y = 1.5;
+const halo = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.08, 6, 32), markerMat);
+halo.rotation.x = Math.PI / 2;
+halo.position.y = -1.9;
+marker.add(gem, halo);
+marker.visible = false;
+scene.add(marker);
+const islandMeshes = new Map<THREE.Object3D, Island>();
+for (const island of world.islands) islandMeshes.set(island.group, island);
+
+function islandUnderPointer(): Island | null {
+  raycaster.setFromCamera(new THREE.Vector2(input.pointer.x, input.pointer.y), camera);
+  const hits = raycaster.intersectObject(world.group, true);
+  for (const hit of hits) {
+    for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
+      const island = islandMeshes.get(o);
+      if (island) return island;
+    }
+  }
+  return null;
+}
+
+function updateGathering(dt: number): void {
+  const ship = raft.body.position;
+  gathering.update(dt, ship);
+  if (input.wasPressed('KeyE')) gathering.toggle();
+  if (input.clicked && gathering.inRange && !gathering.selected && islandUnderPointer() === gathering.inRange) gathering.select(gathering.inRange);
+  gatherUi.update(gathering);
+
+  const target = gathering.selected ?? gathering.inRange;
+  marker.visible = !!target;
+  if (!target) return;
+  const bob = Math.sin(performance.now() * 0.003) * 0.4;
+  if (target.port) {
+    marker.position.set(target.port.x, target.port.y + 7 + bob, target.port.z);
+  } else {
+    // over the stretch of shore nearest the ship
+    const a = Math.atan2(ship.z - target.center.z, ship.x - target.center.x);
+    const r = target.shoreAt(a) * 0.85;
+    const lx = Math.cos(a) * r;
+    const lz = Math.sin(a) * r;
+    marker.position.set(target.center.x + lx, Math.max(0, target.heightAt(lx, lz)) + 7 + bob, target.center.z + lz);
+  }
+  marker.rotation.y += dt * 1.5;
+  markerMat.color.set(!gathering.selected ? 0xffffff : gathering.working ? 0x9be37a : 0xffb27a);
+}
+
+// --- Main menu ------------------------------------------------------------
+let mode: 'menu' | 'play' = 'menu';
+let voyageStarted = false;
+const menu = new MainMenu(document.body, {
+  play: () => startPlay(),
+  toggleSound: () => {
+    audio.setMuted(!audio.muted);
+    return !audio.muted;
+  },
+});
+
+/** In the menu the scene is shifted right, clear of the options column. */
+function applyViewOffset(): void {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (mode === 'menu') camera.setViewOffset(w, h, -w * 0.15, 0, w, h);
+  else camera.clearViewOffset();
+}
+
+function startPlay(): void {
+  mode = 'play';
+  if (!voyageStarted) raft.sail = 0;
+  voyageStarted = true;
+  menu.hide();
+  hudRoot.classList.remove('in-menu');
+  gun.preview.visible = true;
+  broadside.ribbon.visible = broadside.visible;
+  applyViewOffset();
+  canvas.focus();
+}
+
+function openMenu(): void {
+  mode = 'menu';
+  menu.show(voyageStarted);
+  hudRoot.classList.add('in-menu');
+  gun.preview.visible = false;
+  broadside.ribbon.visible = false;
+  marker.visible = false;
+  applyViewOffset();
+}
+
+/** Menu backdrop: the raft sails a lazy circle around the start on its own. */
+function autopilot(dt: number): void {
+  const p = raft.body.position;
+  raft.body.forward(fwd);
+  const r = Math.hypot(p.x, p.z) || 1;
+  const k = THREE.MathUtils.clamp((r - 45) / 30, -1, 1);
+  const dx = -p.z / r - (p.x / r) * k;
+  const dz = p.x / r - (p.z / r) * k;
+  const turn = fwd.x * dz - fwd.z * dx;
+  raft.control(dt, raft.sail < 0.75 ? 1 : 0, THREE.MathUtils.clamp(turn * 2, -1, 1));
+}
 // Barrage stress test: shells arc in from a ring of unseen ships and land around the raft.
 const barrage = {
   size: 400,
@@ -127,10 +242,11 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
+  applyViewOffset();
 });
 
 // Expose a handle for console tinkering / automated checks.
-Object.assign(window, { plunder: { aimPoint: () => aimPoint, scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
+Object.assign(window, { plunder: { aimPoint: () => aimPoint, gathering, hold, startPlay, openMenu, scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
 
 // --- Combat wiring ----------------------------------------------------------
 projectiles.onImpact = (e: ImpactEvent) => {
@@ -260,14 +376,22 @@ function frame(): void {
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 0.1);
 
-  if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
-  if (input.wasPressed('KeyH')) hud.toggleHelp();
-  if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
-  if (input.wasPressed('KeyM')) audio.setMuted(!audio.muted);
-  if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
+  const playing = mode === 'play';
+  if (input.wasPressed('Escape')) {
+    if (playing) openMenu();
+    else if (voyageStarted) startPlay();
+  }
+  if (playing) {
+    if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
+    if (input.wasPressed('KeyH')) hud.toggleHelp();
+    if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
+    if (input.wasPressed('KeyM')) audio.setMuted(!audio.muted);
+    if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
+  }
 
   wind.update(dt);
-  raft.control(dt, input.throttle, input.steer);
+  if (playing) raft.control(dt, input.throttle, input.steer);
+  else autopilot(dt);
   sim.advance(dt, (h) => {
     waves.update(h);
     raft.physicsStep(h);
@@ -275,10 +399,12 @@ function frame(): void {
   raft.syncVisuals(dt);
 
   // --- Gun ---
-  updateAimPoint(dt);
-  gun.aimAt(aimPoint);
+  if (playing) {
+    updateAimPoint(dt);
+    gun.aimAt(aimPoint);
+  }
   gun.update(dt);
-  if (input.fire && gun.tryFire()) {
+  if (playing && input.fire && gun.tryFire()) {
     gun.muzzle(muzzlePos, muzzleDir);
     shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed);
     projectiles.spawn(muzzlePos, shotVel, SWIVEL.kind, RAFT_ID);
@@ -286,8 +412,8 @@ function frame(): void {
     audio.play('cannon', { volume: 0.55, rate: 1.4, rateJitter: 0.05, position: muzzlePos });
   }
   // --- Broadside ---
-  if (input.wasPressed('KeyC')) broadside.setVisible(!broadside.visible);
-  if (broadside.visible) {
+  if (playing && input.wasPressed('KeyC')) broadside.setVisible(!broadside.visible);
+  if (playing && broadside.visible) {
     broadside.aimAt(aimPoint);
     if (input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
   }
@@ -310,6 +436,8 @@ function frame(): void {
     if (Math.random() < 0.15) audio.play('cannon', { volume: 0.9, rate: 0.85, rateJitter: 0.08, position: q.pos });
     queuedShots.splice(i, 1);
   }
+
+  if (playing) updateGathering(dt);
 
   targets.update(dt, waves.currentTime);
   projectiles.setColliders([{ id: RAFT_ID, position: raft.body.position, radius: 1.7 }, ...targets.colliders()]);
@@ -351,4 +479,7 @@ function frame(): void {
   input.endFrame();
   requestAnimationFrame(frame);
 }
+openMenu();
+follow.yaw = 2.3;
+follow.pitch = 0.2;
 requestAnimationFrame(frame);

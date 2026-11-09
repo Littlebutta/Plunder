@@ -6,6 +6,7 @@ import { Noise2D } from '../util/noise';
 import { buildWreck } from './Wreck';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ShoreField } from '../ocean/shore';
+import { islandCapacity, Stock } from './Resources';
 
 /**
  * Procedural islands. Each island is a single heightfield mesh on a polar
@@ -25,6 +26,16 @@ export interface Island {
   coastAt(angle: number): number;
   /** Terrain height at a point in the island's own space (negative = under water). */
   heightAt(x: number, z: number): number;
+  /** Distance from the centre to the waterline in a given world direction. */
+  shoreAt(angle: number): number;
+  /** Highest point of the terrain (m). */
+  topY: number;
+  name: string;
+  /** Resources the island holds when untouched, and what is left right now. */
+  capacity: Stock;
+  stock: Stock;
+  /** World position of the end of the island's pier, if it has a port. */
+  port: THREE.Vector3 | null;
 }
 
 export interface IslandWorld {
@@ -41,6 +52,8 @@ export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWo
   const group = new THREE.Group();
   group.name = 'islands';
   const rand = mulberry32(seed);
+  // names and ports draw from their own stream so they never disturb the island layout
+  const extraRand = mulberry32(seed * 7919 + 17);
   const islands: Island[] = [];
 
   for (let n = 0; n < count; n++) {
@@ -57,6 +70,9 @@ export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWo
       const island = buildIsland(type, radius, mulberry32(Math.floor(rand() * 1e9)));
       island.center.copy(center);
       island.group.position.copy(center);
+      island.name = islandName(type, extraRand);
+      // Trading-post islands get a pier on the side facing the middle of the map.
+      if (type === 'hills' || type === 'mesa') addPort(island, Math.atan2(-center.z, -center.x) + (extraRand() - 0.5) * 0.8);
       group.add(island.group);
       islands.push(island);
       break;
@@ -297,7 +313,121 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     if ((o as THREE.Mesh).isMesh) o.receiveShadow = true;
   });
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height };
+  // Waterline radius, tabulated around the island (scan inward from the shelf).
+  const SHORE_STEPS = 72;
+  const shoreTable = new Float32Array(SHORE_STEPS);
+  let topY = 0;
+  for (let i = 0; i < SHORE_STEPS; i++) {
+    const a = (i / SHORE_STEPS) * Math.PI * 2;
+    const coast = coastAt(a);
+    shoreTable[i] = coast * 0.5;
+    for (let k = 0; k <= 30; k++) {
+      const r = coast * (1.05 - k * 0.03);
+      const h = height(Math.cos(a) * r, Math.sin(a) * r);
+      topY = Math.max(topY, h);
+      if (h > 0 && shoreTable[i] === coast * 0.5) shoreTable[i] = r;
+    }
+  }
+  const shoreAt = (angle: number) => {
+    const f = (((angle / (Math.PI * 2)) % 1) + 1) % 1 * SHORE_STEPS;
+    const i = Math.floor(f) % SHORE_STEPS;
+    return THREE.MathUtils.lerp(shoreTable[i], shoreTable[(i + 1) % SHORE_STEPS], f - Math.floor(f));
+  };
+  const capacity = islandCapacity(type, radius);
+
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null };
+}
+
+const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];
+const NAME_B: Record<IslandType, string[]> = {
+  peak: ['Peak', 'Mount', 'Horn'],
+  ridge: ['Ridge', 'Spine', 'Reach'],
+  mesa: ['Table', 'Bluff', 'Landing'],
+  hills: ['Haven', 'Downs', 'Isle'],
+  cay: ['Cay', 'Key', 'Sands'],
+  stacks: ['Rocks', 'Teeth', 'Stacks'],
+  wreck: ['Wreck', 'Graveyard', 'Shoal'],
+};
+function islandName(type: IslandType, rand: () => number): string {
+  const a = NAME_A[Math.floor(rand() * NAME_A.length)];
+  const b = NAME_B[type][Math.floor(rand() * NAME_B[type].length)];
+  return `${a} ${b}`;
+}
+
+/**
+ * A small port: a pier running out from the beach into deeper water, a hut,
+ * some cargo and a flag. `island.port` is set to the pier head (world space);
+ * ships must come alongside it to trade or gather here.
+ */
+function addPort(island: Island, angle: number): void {
+  const dark = toonMaterial(PALETTE.woodDark);
+  const wood = toonMaterial(PALETTE.wood);
+  const light = toonMaterial(PALETTE.woodLight);
+  const port = new THREE.Group();
+  port.name = 'port';
+  const part = (mesh: THREE.Mesh, outline = 0.04) => {
+    mesh.castShadow = true;
+    if (outline > 0) addOutline(mesh, outline, PALETTE.outline);
+    port.add(mesh);
+    return mesh;
+  };
+
+  // The port group sits on the waterline with +X pointing out to sea.
+  const shore = island.shoreAt(angle);
+  port.position.set(Math.cos(angle) * shore, 0, Math.sin(angle) * shore);
+  port.rotation.y = -angle;
+
+  const PIER = 16;
+  const DECK_Y = 1.0;
+  const deck = part(new THREE.Mesh(new THREE.BoxGeometry(PIER + 4, 0.22, 2.6), wood));
+  deck.position.set(PIER / 2 - 2, DECK_Y, 0);
+  for (let x = -3; x <= PIER; x += 3.2) {
+    for (const z of [-1.15, 1.15]) {
+      const post = part(new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 5.5, 7), dark), 0.03);
+      post.position.set(x, DECK_Y - 2.2, z);
+    }
+  }
+  // pier head: a wider platform with mooring posts and cargo
+  const head = part(new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.24, 5), wood));
+  head.position.set(PIER, DECK_Y + 0.01, 0);
+  for (const z of [-2.3, 2.3]) {
+    const bollard = part(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 6.4, 7), dark), 0.03);
+    bollard.position.set(PIER + 1.8, DECK_Y - 1.8, z);
+  }
+  const crate = part(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.9), light), 0.03);
+  crate.position.set(PIER - 0.8, DECK_Y + 0.5, -1.5);
+  crate.rotation.y = 0.4;
+  const barrel = part(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.95, 10), wood), 0.03);
+  barrel.position.set(PIER + 0.6, DECK_Y + 0.6, 1.5);
+  // flag pole at the pier head
+  const pole = part(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 6, 6), dark), 0.02);
+  pole.position.set(PIER - 1.6, DECK_Y + 3, 1.9);
+  const flagGeo = new THREE.PlaneGeometry(1.8, 1.0, 6, 2);
+  flagGeo.translate(0.9, 0, 0);
+  const fp = flagGeo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < fp.count; i++) fp.setZ(i, Math.sin(fp.getX(i) * 3) * 0.12);
+  flagGeo.computeVertexNormals();
+  const flag = new THREE.Mesh(flagGeo, toonMaterial(0xf3e6c8, { side: THREE.DoubleSide }));
+  flag.position.set(PIER - 1.6, DECK_Y + 5.4, 1.9);
+  flag.rotation.y = 0.5;
+  port.add(flag);
+
+  // hut on the beach behind the pier
+  const hx = -7;
+  const local = new THREE.Vector3(hx, 0, 3.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), -angle).add(port.position);
+  const ground = Math.max(0.4, island.heightAt(local.x, local.z));
+  const walls = part(new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.6, 3.6), light));
+  walls.position.set(hx, ground + 1.2, 3.5);
+  const roofGeo = new THREE.ConeGeometry(3.6, 2.2, 4);
+  roofGeo.rotateY(Math.PI / 4);
+  const roof = part(new THREE.Mesh(roofGeo, toonMaterial(0xb5523a)));
+  roof.scale.set(1, 1, 0.9);
+  roof.position.set(hx, ground + 3.6, 3.5);
+  const door = part(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.7, 0.9), dark), 0);
+  door.position.set(hx + 2.12, ground + 0.85, 3.5);
+
+  island.group.add(port);
+  island.port = new THREE.Vector3(PIER, DECK_Y, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), -angle).add(port.position).add(island.center);
 }
 
 /** Un-share vertices so each triangle gets its own normal: faceted cel shading. */

@@ -54,3 +54,49 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .hud-score b { font-size: 18px; }
 
 [hidden] { display: none !important; }
+
+/* --- Gathering: hold, prompt, island panel --- */
+.hud-hold {
+  top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(18px + env(safe-area-inset-right, 0px));
+  display: flex; gap: 14px; align-items: center; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.hud-hold .hold-title { font-weight: 800; color: #ffd27a; }
+.hud-hold .res i, .hud-island .bar i { display: inline-block; }
+.hud-hold .res i { width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.hud-prompt { left: 50%; bottom: 110px; transform: translateX(-50%); font-size: 15px; white-space: nowrap; }
+.hud-prompt kbd, .hud-island kbd {
+  display: inline-block; min-width: 22px; text-align: center; padding: 0 5px; margin-right: 4px;
+  background: #fff8e6; color: #3a1f0c; border-radius: 4px; font: 800 12px 'Nunito', sans-serif; box-shadow: 0 2px 0 #c0814a;
+}
+.hud-island { top: 64px; right: 18px; width: 250px; font-size: 13px; }
+.hud-island .island-name { font-family: 'Pirata One', serif; font-size: 24px; line-height: 1.1; }
+.hud-island .island-type { opacity: .8; margin-bottom: 8px; }
+.hud-island .row { display: grid; grid-template-columns: 62px 1fr 26px; gap: 8px; align-items: center; margin: 4px 0; }
+.hud-island .row b { text-align: right; }
+.hud-island .bar, .hud-island .haul { height: 9px; border-radius: 5px; background: rgba(255,255,255,.16); overflow: hidden; }
+.hud-island .bar i { height: 100%; border-radius: 5px; }
+.hud-island .haul { margin-top: 10px; height: 6px; }
+.hud-island .haul i { display: block; height: 100%; width: 0; background: #fff8e6; }
+.hud-island .island-status { margin-top: 6px; min-height: 18px; }
+.hud-island .island-status.out-of-range, .hud-island .island-status.hold-full { color: #ffb27a; }
+.hud-island .island-hint { margin-top: 6px; opacity: .8; }
+
+/* --- Main menu --- */
+.menu { position: fixed; inset: 0; pointer-events: none; font-family: 'Nunito', system-ui, sans-serif; color: #fff8e6; }
+.menu-side {
+  position: absolute; left: 0; top: 0; bottom: 0; width: min(360px, 42vw); pointer-events: auto;
+  padding: 8vh 34px 28px; display: flex; flex-direction: column; gap: 12px;
+  background: linear-gradient(90deg, rgba(30, 16, 6, .88), rgba(30, 16, 6, .72) 75%, rgba(30, 16, 6, 0));
+}
+.menu-title { font-family: 'Pirata One', serif; font-size: 76px; line-height: 1; text-shadow: 0 3px 0 #3a1f0c; }
+.menu-sub { opacity: .85; margin-bottom: 22px; }
+.menu button {
+  font: 800 18px 'Nunito', sans-serif; color: #fff8e6; text-align: left; cursor: pointer;
+  background: rgba(192, 129, 74, .22); border: 2px solid #c0814a; border-radius: 10px; padding: 11px 16px;
+  width: 250px; max-width: 100%;
+}
+.menu button:hover:not(:disabled), .menu button:focus-visible { background: #c0814a; color: #2a1708; outline: none; }
+.menu button:disabled { opacity: .5; cursor: default; }
+.menu button small { display: block; font: 600 12px 'Nunito', sans-serif; opacity: .85; }
+.menu-foot { margin-top: auto; font-size: 13px; opacity: .7; }
+#hud.in-menu { display: none; }

@@ -43,6 +43,8 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | A / D (or ← / →) | Steer (stronger at speed, reverses when going backwards) |
 | Mouse | Aim at the sea |
 | Space | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
+| E / click island | Gather from the island in range (a marker floats over it). E again to stop. |
+| Esc | Main menu / resume |
 | C | Fit / remove a test broadside battery (two cannons per side) |
 | F | Fire the broadside on the side you're aiming at (outlined ribbon) |
 | Mouse drag | Orbit the camera (it stays where you leave it) |
@@ -69,6 +71,14 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 ## Islands
 
 Generated from a seed: peaks (some with craters), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
+
+## Gathering and ports
+
+Each island holds resources that depend on its type and size (wood, stone, food, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+
+## Main menu
+
+The game opens on a title menu: options on the left, the raft sailing by itself on the right. Drag to look around. Esc in play returns to it.
 
 ## Sound
 
@@ -99,6 +109,8 @@ src/
   audio/AudioManager.ts      Web Audio: samples, 3D panning, synth splashes + ambience
   world/Wind.ts              wandering wind with gusts
   world/Targets.ts           floating target barrels
+  world/Resources.ts         resource types, island yields, the ship's hold
+  world/Gathering.ts         in-range / port rule, hauling, regrowth
   camera/FollowCamera.ts     smoothed orbit/follow camera that stays above the swell
   sky/Sky.ts                 gradient sky dome, sun, toon clouds
   world/Islands.ts           procedural islands (7 types), palms, boulders, sea stacks
@@ -106,7 +118,7 @@ src/
   util/noise.ts              seeded value noise for terrain
   render/                    palette, toon materials, ink outlines
   input/Input.ts             keyboard/mouse state
-  ui/                        HUD + lil-gui tuning panel
+  ui/                        HUD, main menu, gathering panel, lil-gui tuning panel
 electron/                 desktop shell: main process, launch-time updater, splash
 scripts/                  shell fingerprint + zip helpers used by the release workflow
 .github/workflows/        portable Windows build + GitHub Release on every push to main

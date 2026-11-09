@@ -13,6 +13,8 @@ export class Input {
   /** Pointer position in normalized device coords (-1..1), for aiming. */
   readonly pointer = { x: 0, y: -0.2, inside: false };
   private dragDist = 0;
+  private downAt = 0;
+  private clickedNow = false;
 
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -26,11 +28,14 @@ export class Input {
     target.addEventListener('pointerdown', (e) => {
       this.dragging = true;
       this.dragDist = 0;
+      this.downAt = performance.now();
       target.setPointerCapture(e.pointerId);
     });
     target.addEventListener('pointerup', (e) => {
       this.dragging = false;
       target.releasePointerCapture(e.pointerId);
+      // A short press that barely moved is a click (select), not an orbit drag.
+      if (this.dragDist < 6 && performance.now() - this.downAt < 600 && e.button === 0) this.clickedNow = true;
     });
     target.addEventListener('pointermove', (e) => {
       const r = target.getBoundingClientRect();
@@ -77,6 +82,11 @@ export class Input {
     return this.isDown('Space');
   }
 
+  /** True on the frame the player clicked (not dragged) on the scene. Used to select things. */
+  get clicked(): boolean {
+    return this.clickedNow;
+  }
+
   get steer(): number {
     return this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
   }
@@ -90,6 +100,7 @@ export class Input {
   /** Call at the end of each frame. */
   endFrame(): void {
     this.pressed.clear();
+    this.clickedNow = false;
   }
 
   get element(): HTMLElement {
