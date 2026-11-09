@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:24Z",
+  "updated": "2026-11-09T21:58:26Z",
   "categories": [
     {
       "key": "feature",
@@ -1026,6 +1026,21 @@
       "priority": "medium",
       "milestone": "M-5",
       "updated": "2026-11-09T21:58:24Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-5",
+      "cat": "bug",
+      "title": "Water shows inside the boat through the floorboards",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Fixed in PR #8 with an invisible lid on each hull drawn before the ocean.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/8"
+      ],
+      "created": "2026-11-09T21:58:26Z",
+      "priority": "high",
+      "updated": "2026-11-09T21:58:26Z",
       "by": "Claude"
     }
   ],
