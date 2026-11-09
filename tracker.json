@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:08Z",
+  "updated": "2026-11-09T20:49:11Z",
   "categories": [
     {
       "key": "feature",
@@ -890,6 +890,19 @@
       "priority": "high",
       "milestone": "M-2",
       "updated": "2026-11-09T20:49:08Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-4",
+      "cat": "bug",
+      "title": "Yellowish noise layer (sun glints) clips through the waves",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest. Glint layer removed.",
+      "links": [],
+      "created": "2026-11-09T20:49:11Z",
+      "priority": "medium",
+      "updated": "2026-11-09T20:49:11Z",
       "by": "Claude"
     }
   ],
