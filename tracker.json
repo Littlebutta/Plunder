@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:45Z",
+  "updated": "2026-11-09T22:15:47Z",
   "categories": [
     {
       "key": "feature",
@@ -1157,6 +1157,20 @@
       "priority": "medium",
       "milestone": "M-5",
       "updated": "2026-11-09T22:15:45Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-45",
+      "cat": "feature",
+      "title": "Cannons on several deck levels (must be above the waterline; guns under water cannot fire)",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:47Z",
+      "priority": "high",
+      "milestone": "M-5",
+      "updated": "2026-11-09T22:15:47Z",
       "by": "Claude"
     }
   ],
