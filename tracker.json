@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:58Z",
+  "updated": "2026-11-09T21:59:00Z",
   "categories": [
     {
       "key": "feature",
@@ -1034,7 +1034,7 @@
       "id": "B-5",
       "cat": "bug",
       "title": "Water shows inside the boat through the floorboards",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
       "notes": "Fixed in PR #8 with an invisible lid on each hull drawn before the ocean.",
       "links": [
@@ -1042,7 +1042,7 @@
       ],
       "created": "2026-11-09T21:58:26Z",
       "priority": "high",
-      "updated": "2026-11-09T21:58:26Z",
+      "updated": "2026-11-09T21:59:00Z",
       "by": "Claude"
     },
     {
