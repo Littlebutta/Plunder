@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:59Z",
+  "updated": "2026-11-09T22:31:02Z",
   "categories": [
     {
       "key": "feature",
@@ -1144,13 +1144,13 @@
       "title": "Music: menu and at-sea tracks on the music slider",
       "status": "in-progress",
       "tags": [],
-      "notes": "3 tracks from Desktop/Plunder/music. Fog track reserved for fog weather.",
+      "notes": "3 tracks from Desktop/Plunder/music. Fog track reserved for fog weather.\n\n2026-11-09 (Claude): Merged in PR #9.",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/9"
       ],
       "created": "2026-11-09T22:15:43Z",
       "priority": "medium",
-      "updated": "2026-11-09T22:15:43Z",
+      "updated": "2026-11-09T22:31:02Z",
       "by": "Claude"
     },
     {
