@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:32Z",
+  "updated": "2026-11-09T21:58:35Z",
   "categories": [
     {
       "key": "feature",
@@ -1084,6 +1084,20 @@
       "priority": "medium",
       "milestone": "M-5",
       "updated": "2026-11-09T21:58:32Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-40",
+      "cat": "feature",
+      "title": "Free cannon placement along the hull edge, incl. gun ports in the side; movable bow/stern swivel",
+      "status": "idea",
+      "tags": [],
+      "notes": "Planned for the next update (shipyard v2).",
+      "links": [],
+      "created": "2026-11-09T21:58:35Z",
+      "priority": "high",
+      "milestone": "M-5",
+      "updated": "2026-11-09T21:58:35Z",
       "by": "Claude"
     }
   ],
