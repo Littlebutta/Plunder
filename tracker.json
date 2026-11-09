@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:06Z",
+  "updated": "2026-11-09T21:20:09Z",
   "categories": [
     {
       "key": "feature",
@@ -542,16 +542,18 @@
       "id": "F-18",
       "cat": "feature",
       "title": "Snap-on masts and cannons; weight affects draft and stability",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-5",
       "tags": [
         "shipyard"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): PR #7: masts and cannon pairs on snap points; weight feeds mass and speed. Stability effect not modelled yet.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/7"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T21:20:09Z",
       "by": "Claude"
     },
     {
