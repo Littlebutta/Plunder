@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:29Z",
+  "updated": "2026-11-09T23:45:31Z",
   "categories": [
     {
       "key": "feature",
@@ -651,16 +651,18 @@
       "id": "F-24",
       "cat": "feature",
       "title": "Build ports on islands for a steady stream of resources",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-7",
       "tags": [
         "economy"
       ],
-      "notes": "Resource type and amount depend on island type and size.\n\n2026-11-09 (Claude): PR #6: islands can have a port (pier); gathering there needs the ship in range of the pier. Player-built ports still to do.",
-      "links": [],
+      "notes": "Resource type and amount depend on island type and size.\n\n2026-11-09 (Claude): PR #6: islands can have a port (pier); gathering there needs the ship in range of the pier. Player-built ports still to do.\n\n2026-11-09 (Claude): PR #15: held islands send income to stores",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/15"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T21:20:17Z",
+      "updated": "2026-11-09T23:45:31Z",
       "by": "Claude"
     },
     {
