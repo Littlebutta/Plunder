@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:16:19Z",
+  "updated": "2026-11-09T22:17:30Z",
   "categories": [
     {
       "key": "feature",
@@ -1244,18 +1244,18 @@
       "id": "F-50",
       "cat": "feature",
       "title": "Weather: fog, levels I-III",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [
         "weather"
       ],
-      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.",
+      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.\n\n2026-11-09 (Claude): Merged in PR #10 (2026-11-09).",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/10"
       ],
       "created": "2026-11-09T22:16:03Z",
       "priority": "medium",
       "milestone": "M-6",
-      "updated": "2026-11-09T22:16:03Z",
+      "updated": "2026-11-09T22:17:30Z",
       "by": "Claude"
     },
     {
