@@ -1,3 +1,4 @@
+import { WORLD_RADIUS } from '../world/worldConfig';
 import * as THREE from 'three';
 import { GERSTNER_GLSL, WaveField } from './waves';
 import { PALETTE } from '../render/palette';
@@ -39,6 +40,8 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
       uHorizon: { value: new THREE.Color(PALETTE.horizon) },
       uFogRange: { value: new THREE.Vector2(250, 1400) },
       uFoamAmount: { value: 1 },
+      // The sea stops here and falls off the edge of the world (src/world/WorldEdge.ts)
+      uWorldRadius: { value: WORLD_RADIUS },
       // Day-night + weather (see src/weather): light multiplier, tint toward a colour (red tide)
       uLight: { value: new THREE.Color(1, 1, 1) },
       uTint: { value: new THREE.Color(0x8a1010) },
@@ -94,6 +97,7 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
       uniform vec3 uHorizon;
       uniform vec2 uFogRange;
       uniform float uFoamAmount;
+      uniform float uWorldRadius;
       uniform vec3 uLight;
       uniform vec3 uTint;
       uniform float uTintAmount;
@@ -139,6 +143,9 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
       }
 
       void main() {
+        // the edge of the world: no sea beyond the rim
+        float rim = uWorldRadius - length(vWorldPos.xz);
+        if (rim < 0.0) discard;
         vec3 N = normalize(vNormal);
         vec3 V = normalize(cameraPosition - vWorldPos);
         vec3 L = normalize(uSunDir);
@@ -226,6 +233,9 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
         // Fresnel toward the sky at grazing angles.
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
         col = mix(col, uHorizon, fres * 0.45);
+
+        // white water where the sea gathers speed toward the rim
+        col = mix(col, uFoam * uLight, (1.0 - smoothstep(0.0, 14.0, rim)) * 0.85);
 
         // Fog into the horizon colour.
         // linear like the scene fog, so the sea and islands fade together in thick weather

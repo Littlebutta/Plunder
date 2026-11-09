@@ -2,6 +2,7 @@ export interface MenuActions {
   play(): void;
   shipyard(): void;
   settings(): void;
+  newMap(): void;
 }
 
 /**
@@ -23,6 +24,7 @@ export class MainMenu {
         <button data-act="play">Set sail</button>
         <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
         <button data-act="multi" disabled>Multiplayer <small>with Steam friends, later</small></button>
+        <button data-act="newmap">New map <small>generate a fresh set of islands</small></button>
         <button data-act="settings">Settings <small>sound and music volume</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
         <div class="menu-foot">Drag to look around</div>
@@ -38,6 +40,9 @@ export class MainMenu {
           break;
         case 'shipyard':
           actions.shipyard();
+          break;
+        case 'newmap':
+          actions.newMap();
           break;
         case 'settings':
           actions.settings();

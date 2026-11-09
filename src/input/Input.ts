@@ -22,7 +22,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
-      if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+      if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => {

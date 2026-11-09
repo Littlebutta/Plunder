@@ -25,6 +25,10 @@ import { GatherUi } from './ui/GatherUi';
 import { IslandMarkers } from './world/IslandMarkers';
 import { EnemyShip, ENEMY_ID } from './world/EnemyShip';
 import { TargetUi } from './ui/TargetUi';
+import { MapView } from './ui/MapView';
+import { WorldEdge } from './world/WorldEdge';
+import { edgeCurrent, steerToward } from './world/navigation';
+import { rollWorldSeed, worldSeed } from './world/worldConfig';
 import { NPC_COLOUR } from './ui/Settings';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
@@ -70,7 +74,7 @@ const hemi = new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3);
 scene.add(hemi);
 
 // --- World ----------------------------------------------------------------
-const world = createIslands();
+const world = createIslands(worldSeed());
 const waves = new WaveField();
 waves.shore = world.shore; // calm shallows around the islands
 const ocean = new Ocean(waves, sunDir, world.shore);
@@ -277,6 +281,48 @@ function updateTargeting(playing: boolean): void {
   );
 }
 
+// --- World's edge + chart -------------------------------------------------------
+const worldEdge = new WorldEdge(ocean.material.uniforms as never);
+scene.add(worldEdge.group);
+const edgeWarning = document.createElement('div');
+edgeWarning.className = 'hud-edge';
+edgeWarning.textContent = "The world's edge! The current is turning you back.";
+edgeWarning.hidden = true;
+hudRoot.append(edgeWarning);
+
+/** Where the flagship has been told to sail from the chart; any touch of the helm cancels it. */
+let course: THREE.Vector3 | null = null;
+const chart = new MapView(document.body, {
+  sailTo: (x, z) => {
+    course = new THREE.Vector3(x, 0, z);
+  },
+  close: () => {
+    chart.close();
+    canvas.focus();
+  },
+});
+const compass = (v: THREE.Vector3) => Math.atan2(v.x, -v.z);
+
+/** Sail the flagship along its ordered course. Returns false when there is none. */
+function followCourse(dt: number): boolean {
+  if (!course) return false;
+  if (input.throttle !== 0 || input.steer !== 0) {
+    course = null; // the player took the helm
+    return false;
+  }
+  const p = ship.body.position;
+  const left = Math.hypot(course.x - p.x, course.z - p.z);
+  if (left < Math.max(18, ship.length * 1.5)) {
+    course = null;
+    return false;
+  }
+  ship.body.forward(fwd).setY(0).normalize();
+  // ease the sail off on the approach so she does not overshoot
+  const want = left < 70 ? 0.35 : 1;
+  ship.control(dt, ship.sail < want - 0.03 ? 1 : ship.sail > want + 0.05 ? -1 : 0, steerToward(p, fwd, course, world.islands));
+  return true;
+}
+
 const islandMarkers = new IslandMarkers(world.islands);
 scene.add(islandMarkers.group);
 gathering.onHaul = (island) => {
@@ -360,6 +406,10 @@ const menu = new MainMenu(document.body, {
     yard.open();
   },
   settings: () => settings.open(),
+  newMap: () => {
+    rollWorldSeed();
+    location.reload();
+  },
 });
 
 const yard = new Shipyard(document.body, {
@@ -461,6 +511,10 @@ Object.assign(window, {
     projectiles,
     targets,
     enemy,
+    chart,
+    get course() {
+      return course;
+    },
     audio,
     barrage,
     weather,
@@ -633,6 +687,7 @@ function frame(): void {
   const playing = mode === 'play';
   if (input.wasPressed('Escape')) {
     if (settings.visible) settings.close();
+    else if (chart.visible) chart.close();
     else if (playing) openMenu();
     else if (mode === 'yard') {
       yard.close();
@@ -643,13 +698,16 @@ function frame(): void {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
     if (input.wasPressed('KeyH')) hud.toggleHelp();
     if (input.wasPressed('KeyV')) settings.toggleFireMode();
+    if (input.wasPressed('Tab')) chart.visible ? chart.close() : chart.open();
     if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
     if (input.wasPressed('KeyM')) settings.toggleMute();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
   }
 
   wind.update(dt);
-  if (playing) ship.control(dt, input.throttle, input.steer);
+  if (playing) {
+    if (!followCourse(dt)) ship.control(dt, input.throttle, input.steer);
+  }
   else autopilot(dt);
   sim.advance(dt, (h) => {
     waves.update(h);
@@ -701,6 +759,24 @@ function frame(): void {
   }
 
   enemy.update(dt, ship.body.position, playing);
+  // the current at the rim turns every ship back
+  const atEdge = edgeCurrent(ship.body.position, ship.body.velocity, dt);
+  if (enemy.alive) edgeCurrent(enemy.position, enemy.ship.body.velocity, dt);
+  edgeWarning.hidden = !playing || atEdge < 0.15;
+  worldEdge.update(dt);
+  if (chart.visible) {
+    if (!playing) chart.close();
+    else {
+      ship.body.forward(fwd);
+      chart.draw({
+        islands: world.islands,
+        player: { position: ship.body.position, heading: compass(fwd), colour: settings.settings.colour, name: ship.displayName, hostile: false },
+        others: enemy.alive ? [{ position: enemy.position, heading: compass(enemy.ship.body.forward(stern)), colour: NPC_COLOUR, name: enemy.name, hostile: true }] : [],
+        course,
+        playerColour: settings.settings.colour,
+      });
+    }
+  }
   if (playing) updateGathering(dt);
   islandMarkers.update(dt, wind.angle);
 
