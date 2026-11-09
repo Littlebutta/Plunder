@@ -198,6 +198,8 @@ const weather = new Weather({
     audio.play('cannon', { volume: 0.8, rate: 0.8, rateJitter: 0.06, position: from });
   },
   announce: (title, sub, tone) => weatherUi.announce(title, sub, tone),
+  thunder: (distance, strength) => audio.thunder(distance, strength),
+  rainSound: (amount) => audio.setRain(amount),
 });
 scene.add(weather.group);
 const _zero = new THREE.Vector3();

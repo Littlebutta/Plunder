@@ -63,6 +63,8 @@ export interface WeatherHooks {
   /** Show a message banner. */
   announce(title: string, subtitle: string, tone: 'calm' | 'danger' | 'good'): void;
   thunder?(distance: number, strength: number): void;
+  /** 0..1 rain loudness. */
+  rainSound?(amount: number): void;
 }
 
 export interface ShipState {
@@ -108,8 +110,6 @@ export class Weather {
 
   private readonly target = createAtmosphere();
   private nextStrike = 5;
-  private seaBase: number;
-  private seaSet: number;
   private seaTimer = 0;
   private windBase: number;
   private windSet: number;
@@ -142,7 +142,6 @@ export class Weather {
       },
     });
     this.group.add(this.lurkers.group, this.fleet.group);
-    this.seaBase = this.seaSet = hooks.waves.intensity;
     this.windBase = this.windSet = hooks.wind.baseStrength;
   }
 
@@ -246,6 +245,7 @@ export class Weather {
     }
     this.fleet.update(dt, ship, ev?.kind === 'armageddon' ? ev.weight : 0);
 
+    this.hooks.rainSound?.(this.rain.amount);
     this.rain.update(dt, camera.position, this.hooks.wind.direction, this.hooks.wind.strength, luminance(a.horizon));
     this.applySeaAndWind(dt, a);
     this.apply(a);
@@ -351,19 +351,18 @@ export class Weather {
   }
 
   /**
-   * Scale the sea's roughness and the wind by the weather. If someone changes
-   * them by hand (debug panel), that becomes the new base.
+   * Scale the sea's wave height (waves.amplitudeScale, which the tuning
+   * panel's roughness leaves alone) and the wind by the weather. If someone
+   * changes the wind by hand (debug panel), that becomes the new base.
    */
   private applySeaAndWind(dt: number, a: AtmosphereState): void {
     const { waves, wind } = this.hooks;
-    if (Math.abs(waves.intensity - this.seaSet) > 1e-6) this.seaBase = waves.intensity / Math.max(this.seaSet / this.seaBase, 0.01);
     if (Math.abs(wind.baseStrength - this.windSet) > 1e-6) this.windBase = wind.baseStrength;
     this.seaTimer -= dt;
-    const want = this.seaBase * a.waveScale;
-    if (this.seaTimer <= 0 && Math.abs(want - waves.intensity) > 0.004) {
+    const want = a.waveScale;
+    if (this.seaTimer <= 0 && Math.abs(want - waves.amplitudeScale) > 0.004) {
       this.seaTimer = 0.25;
-      waves.intensity = want;
-      this.seaSet = want;
+      waves.amplitudeScale = want;
       this.hooks.refreshSea();
     }
     wind.baseStrength = this.windSet = Math.min(1.2, this.windBase * a.windScale);
