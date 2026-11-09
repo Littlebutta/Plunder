@@ -618,9 +618,16 @@ function applyViewOffset(): void {
   else camera.clearViewOffset();
 }
 
+/** Sea music: "Sailing into the Fog" while a fog event is in, else the normal sea playlist (weather). */
+let fogMusic = false;
+function seaPlaylist(): ('fog' | 'calm' | 'log')[] {
+  fogMusic = weather.event?.kind === 'fog' && !weather.event.ending;
+  return fogMusic ? ['fog'] : ['calm', 'log'];
+}
+
 function startPlay(): void {
   mode = 'play';
-  audio.setPlaylist(['calm', 'log']);
+  audio.setPlaylist(seaPlaylist());
   if (!voyageStarted) ship.sail = 0;
   voyageStarted = true;
   menu.hide();
@@ -1008,6 +1015,7 @@ function frame(): void {
   // weather + day-night: lights, fog, sky and sea colours, events
   weather.update(dt, shipState(), camera, playing);
   hull.update(dt);
+  if (playing && fogMusic !== (weather.event?.kind === 'fog' && !weather.event.ending)) audio.setPlaylist(seaPlaylist());
   weatherUi.update(dt, weather, hull, playing);
 
   ocean.update(follow.focusPoint);

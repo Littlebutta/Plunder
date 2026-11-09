@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { toonMaterial, addOutline } from '../render/toon';
 import type { WaveField } from '../ocean/waves';
 import type { Collider } from '../combat/ProjectileSystem';
+import { keepInside } from './bounds';
 
 /** Collider ids for cursed ships: CURSED_ID_BASE + slot. */
 export const CURSED_ID_BASE = 800;
@@ -153,7 +154,7 @@ export class CursedFleet {
     const lv = this.level - 1;
     const a = Math.random() * Math.PI * 2;
     const r = 70 + Math.random() * 50;
-    const pos = new THREE.Vector3(target.position.x + Math.cos(a) * r, -8, target.position.z + Math.sin(a) * r);
+    const pos = keepInside(new THREE.Vector3(target.position.x + Math.cos(a) * r, -8, target.position.z + Math.sin(a) * r), 660);
     const id = CURSED_ID_BASE + (this.nextId++ % 64);
     const group = this.buildShip();
     const ship: CursedShip = {
@@ -215,6 +216,7 @@ export class CursedFleet {
     const speed = LEVELS.speed[lv] * (dist > 110 ? 1.5 : 1);
     s.pos.x += Math.cos(s.heading) * speed * dt;
     s.pos.z += Math.sin(s.heading) * speed * dt;
+    keepInside(s.pos);
     s.pos.y = this.waves.heightAt(s.pos.x, s.pos.z) - 0.35;
     this.place(s, dt, 0);
 
