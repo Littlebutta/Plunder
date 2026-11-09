@@ -47,3 +47,16 @@ export function addOutline(mesh: THREE.Mesh, thickness = 0.04, color: THREE.Colo
   mesh.add(outline);
   return outline;
 }
+
+/** Change a toon material's colour in place. */
+export function setToonColour(mat: THREE.MeshToonMaterial, colour: THREE.ColorRepresentation): void {
+  mat.color.set(colour);
+}
+
+const _tint = new THREE.Color();
+const _canvas = new THREE.Color(0xf3e6c8);
+
+/** An owner's colour as sailcloth: the colour, softened a little toward canvas so the cel bands still read. */
+export function sailTint(colour: THREE.ColorRepresentation): THREE.Color {
+  return _tint.set(colour).lerp(_canvas, 0.22).clone();
+}
