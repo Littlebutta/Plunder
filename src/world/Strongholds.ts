@@ -4,7 +4,7 @@ import { ballisticVelocity } from '../combat/ballistics';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
 import type { Island } from './Islands';
-import { Hold, RESOURCE_IDS, RESOURCES, Stock } from './Resources';
+import { emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
 
 /** Collider ids of strongholds: one per island, 300 + the island's index. */
 export const STRONGHOLD_ID_BASE = 300;
@@ -50,6 +50,11 @@ export const STRONGHOLD = {
   /** Repairs start this long after the last hit (s), at this rate (hp/s). */
   repairDelay: 12,
   repairRate: 4,
+  /** Every this many seconds each island you hold sends (1 + its stronghold's level) units to your stores. */
+  incomeEvery: 12,
+  /** A new escort ship, and how many the fleet can hold. */
+  shipCost: { wood: 30, stone: 0, salvage: 8 } as Stock,
+  fleetMax: 4,
 };
 
 export type Side = 'player' | 'npc';
@@ -62,8 +67,18 @@ export function costLabel(cost: Stock): string {
   );
 }
 
-export function canAfford(cost: Stock, hold: Hold): boolean {
-  return RESOURCE_IDS.every((id) => hold.stock[id] >= cost[id]);
+/** Can `cost` be met from the stores, plus the hold of a ship alongside (if one is)? */
+export function canAfford(cost: Stock, stores: Stock, hold: Hold | null): boolean {
+  return RESOURCE_IDS.every((id) => stores[id] + (hold ? hold.stock[id] : 0) >= cost[id]);
+}
+
+/** Take `cost` from the hold first (if a ship is alongside), then from the stores. */
+export function pay(cost: Stock, stores: Stock, hold: Hold | null): void {
+  for (const id of RESOURCE_IDS) {
+    const fromHold = hold ? Math.min(hold.stock[id], cost[id]) : 0;
+    if (hold) hold.stock[id] -= fromHold;
+    stores[id] -= cost[id] - fromHold;
+  }
 }
 
 /** A settlement on an island: the thing that holds it, and what a raider must break to take it. */
@@ -77,6 +92,8 @@ export class Stronghold {
   /** Seconds a hostile ship has stood over the ruins. */
   capture = 0;
   sinceHit = 99;
+  /** Running shares that decide which resource the next unit of income is. */
+  readonly yieldAcc = emptyStock();
   private readonly gunTimers: number[] = [];
   private readonly body = new THREE.Group();
   private readonly barBack: THREE.Sprite;
@@ -364,6 +381,9 @@ export class Territory {
   readonly home: Stronghold;
   /** The raiders' home island, if the map has a port for them. */
   readonly enemyHome: Stronghold | null = null;
+  /** The player's stores: income from held islands lands here, and building draws on it from anywhere. */
+  readonly stores = emptyStock();
+  private incomeTimer = 0;
   private playerColour: THREE.ColorRepresentation = 0xd8343a;
 
   constructor(
@@ -384,6 +404,11 @@ export class Territory {
       const portAngle = Math.atan2(far.port!.z - far.center.z, far.port!.x - far.center.x);
       this.enemyHome = this.add(far, 'npc', true, portAngle + 1.1);
       this.enemyHome.setLevel(2);
+      // ...and keep a stockade on every other port, each of which can be taken from them
+      for (const port of ports.slice(1)) {
+        const a = Math.atan2(port.port!.z - port.center.z, port.port!.x - port.center.x);
+        this.add(port, 'npc', false, a + 1.1).setLevel(1);
+      }
     }
   }
 
@@ -426,11 +451,20 @@ export class Territory {
     return { act: 'upgrade', label: `Upgrade to ${LEVELS[s.level + 1].name}`, cost: LEVELS[s.level + 1].cost };
   }
 
-  /** Build or upgrade on an island, paying from the hold. Returns false if it cannot be done. */
-  build(island: Island, hold: Hold): boolean {
+  /** Units a minute coming in from the islands the player holds. */
+  get incomePerMinute(): number {
+    return (this.strongholds.filter((s) => s.side === 'player' && !s.ruined).reduce((n, s) => n + 1 + s.level, 0) * 60) / STRONGHOLD.incomeEvery;
+  }
+
+  /**
+   * Build or upgrade on an island. An upgrade can be ordered from anywhere and
+   * is paid from the stores; a ship alongside (`hold`) pays from its hold
+   * first, and is needed to found a new outpost.
+   */
+  build(island: Island, hold: Hold | null): boolean {
     const offer = this.offer(island);
-    if (!offer || !canAfford(offer.cost, hold)) return false;
-    for (const id of RESOURCE_IDS) hold.stock[id] -= offer.cost[id];
+    if (!offer || (offer.act === 'build' && !hold) || !canAfford(offer.cost, this.stores, hold)) return false;
+    pay(offer.cost, this.stores, hold);
     const s = this.at(island);
     if (s) s.setLevel(s.level + 1);
     else {
@@ -449,10 +483,8 @@ export class Territory {
     return colliderId >= STRONGHOLD_ID_BASE && colliderId < STRONGHOLD_ID_END;
   }
 
-  /** Which side fired a shot, from its owner id. */
-  sideOf(owner: number, playerId: number, enemyId: number): Side | null {
-    if (owner === playerId) return 'player';
-    if (owner === enemyId) return 'npc';
+  /** Which side a stronghold's shot came from, from its owner id. */
+  sideOf(owner: number): Side | null {
     return this.strongholds.find((s) => s.id === owner)?.side ?? null;
   }
 
@@ -474,11 +506,40 @@ export class Territory {
     }
   }
 
-  update(dt: number, player: ShipSight, enemy: ShipSight, hostile: boolean): void {
+  /**
+   * @param friends the player's ships afloat (flagship and escorts)
+   * @param raiders the enemy's ships afloat
+   */
+  update(dt: number, friends: ShipSight[], raiders: ShipSight[], hostile: boolean): void {
+    // income from the islands the player holds
+    if (hostile) this.incomeTimer += dt;
+    if (this.incomeTimer >= STRONGHOLD.incomeEvery) {
+      this.incomeTimer -= STRONGHOLD.incomeEvery;
+      for (const s of this.strongholds) {
+        if (s.side !== 'player' || s.ruined) continue;
+        const total = RESOURCE_IDS.reduce((n, id) => n + s.island.capacity[id], 0) || 1;
+        for (let u = 0; u < 1 + s.level; u++) {
+          for (const id of RESOURCE_IDS) s.yieldAcc[id] += s.island.capacity[id] / total;
+          const pick = RESOURCE_IDS.reduce((a: ResourceId, b) => (s.yieldAcc[b] > s.yieldAcc[a] ? b : a));
+          s.yieldAcc[pick] -= 1;
+          this.stores[pick]++;
+        }
+      }
+      this.hooks.changed();
+    }
+
     for (let i = this.strongholds.length - 1; i >= 0; i--) {
       const s = this.strongholds[i];
-      const foe = s.side === 'player' ? enemy : player;
-      const range = foe.alive && hostile ? Math.hypot(foe.position.x - s.site.x, foe.position.z - s.site.z) : Infinity;
+      let foe: ShipSight = _nobody;
+      let range = Infinity;
+      for (const ship of s.side === 'player' ? raiders : friends) {
+        if (!ship.alive || !hostile) continue;
+        const d = Math.hypot(ship.position.x - s.site.x, ship.position.z - s.site.z);
+        if (d < range) {
+          range = d;
+          foe = ship;
+        }
+      }
       s.update(dt, range < STRONGHOLD.captureRange);
 
       // guns
@@ -510,6 +571,12 @@ export class Territory {
       s.island.owner = 'player';
       s.setColour(this.playerColour);
       s.setLevel(Math.max(0, s.level - 1));
+    } else if (s.island.port) {
+      // a port changes hands rather than burning
+      s.side = 'npc';
+      s.island.owner = 'npc';
+      s.setColour(0xffffff);
+      s.setLevel(Math.max(0, s.level - 1));
     } else if (!s.home) {
       // an outpost is burned to the ground
       s.island.owner = 'none';
@@ -521,6 +588,7 @@ export class Territory {
   }
 }
 
+const _nobody: ShipSight = { position: new THREE.Vector3(), velocity: new THREE.Vector3(), alive: false };
 const _from = new THREE.Vector3();
 const _to = new THREE.Vector3();
 const _vel = new THREE.Vector3();

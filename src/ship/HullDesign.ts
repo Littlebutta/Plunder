@@ -61,7 +61,10 @@ export const CANNON_MIN_HALF_BEAM = 0.95;
 /** Cannons can stand anywhere along this stretch of the hull. */
 export const CANNON_T_RANGE = [0.1, 0.92] as const;
 /** Least distance between two guns on the same side and deck (m). */
-export const CANNON_SPACING = 1.05;
+export const CANNON_SPACING = 0.9;
+/** A ship's first few cannons come with the hull; each one beyond that costs metals. */
+export const FREE_CANNONS = 4;
+export const METALS_PER_CANNON = 4;
 /** Lowest gun deck number. */
 export const MAX_GUN_LEVEL = 3;
 /** Height between gun decks (m). */
@@ -340,7 +343,7 @@ export function computeStats(d: HullDesign): ShipStats {
 
   // Arcade handling: long hulls are fast, fat and heavily armed ones slower,
   // and you need enough canvas for the hull you drew.
-  const hullSpeed = 3.5 + 0.25 * d.length;
+  const hullSpeed = 4.3 + 0.3 * d.length;
   const slim = THREE.MathUtils.clamp(1.15 - (d.beam / d.length) * 0.75 - (fullness - 0.6) * 0.5, 0.7, 1.1);
   const canvas = d.masts.length === 0 ? 0.3 : THREE.MathUtils.clamp(0.5 + (0.55 * sailArea) / (d.length * d.beam * 1.1), 0.5, 1.12);
   const load = 1 - Math.min(0.25, guns * 0.008);
@@ -360,7 +363,7 @@ export function computeStats(d: HullDesign): ShipStats {
     cost: {
       wood: Math.round(d.length * d.beam * fullness * 2 + d.masts.length * 10),
       stone: Math.round(d.depth * d.length * 0.6),
-      salvage: guns * 5,
+      salvage: Math.max(0, guns - FREE_CANNONS) * METALS_PER_CANNON,
     },
   };
 }

@@ -6,6 +6,8 @@ import { Wind } from '../world/Wind';
 import { computeStats, designToDrive, designToHullSpec, HullDesign, rigBoost, ShipStats } from './HullDesign';
 import { buildShipVisual, ShipVisual } from './ShipVisual';
 import { Vessel } from './Vessel';
+import { CargoPile } from './Cargo';
+import type { Stock } from '../world/Resources';
 
 /** A ship built from a shipyard design: lofted hull, derived physics and handling. */
 export class DesignedShip extends Vessel {
@@ -18,6 +20,7 @@ export class DesignedShip extends Vessel {
   readonly stats: ShipStats;
 
   private readonly visual: ShipVisual;
+  private readonly cargo: CargoPile;
   private time = 0;
   /** Which side the fore-and-aft sails are bellied out to (-1 / 1), eased. */
   private lee = 1;
@@ -34,6 +37,8 @@ export class DesignedShip extends Vessel {
     this.stats = stats;
     this.visual = buildShipVisual(design, colour);
     this.group.add(this.visual.group);
+    this.cargo = new CargoPile(this.visual.cargoPlaces);
+    this.visual.group.add(this.cargo.group);
     this.group.name = 'designed-ship';
     this.swivelMount = this.visual.swivelMount;
     this.swivelFacing = this.visual.swivelFacing;
@@ -45,6 +50,10 @@ export class DesignedShip extends Vessel {
 
   protected override rigBoost(along: number): number {
     return rigBoost(this.design, along);
+  }
+
+  override setCargo(stock: Stock, capacity: number): void {
+    this.cargo.set(stock, capacity);
   }
 
   setColour(colour: THREE.ColorRepresentation): void {

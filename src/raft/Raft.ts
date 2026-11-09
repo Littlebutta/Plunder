@@ -6,6 +6,8 @@ import { HullSpec } from '../physics/FloatingBody';
 import { DriveSpec, Vessel } from '../ship/Vessel';
 import { WaveField } from '../ocean/waves';
 import { Wind } from '../world/Wind';
+import { CargoPile } from '../ship/Cargo';
+import type { Stock } from '../world/Resources';
 
 /** Raft footprint (body space): x = beam, z = length, forward = -Z. */
 const BEAM = 2.6;
@@ -36,9 +38,9 @@ export const RAFT_HULL: HullSpec = {
  */
 export const RAFT_DRIVE: DriveSpec = {
   /** N at full sail with no help from the wind (~9 knots top speed). */
-  baseThrust: 1150,
+  baseThrust: 1400,
   /** Extra N at full sail running dead downwind in a strength-1 wind. */
-  windBoost: 1250,
+  windBoost: 1500,
   /** How much a headwind slows you (0 = not at all, 1 = cancels the base drive). */
   headwindPenalty: 0.15,
   reverseThrust: 450, // N when paddling backwards
@@ -73,9 +75,14 @@ export class Raft extends Vessel {
   private readonly sailPivot = new THREE.Group();
   private readonly flag: THREE.Mesh;
   private readonly tiller: THREE.Group;
+  private readonly cargo: CargoPile;
   private time = 0;
   private readonly sailMat = toonMaterial(PALETTE.sail, { side: THREE.DoubleSide });
   private readonly flagMat = toonMaterial(PALETTE.flag, { side: THREE.DoubleSide });
+
+  override setCargo(stock: Stock, capacity: number): void {
+    this.cargo.set(stock, capacity);
+  }
 
   setColour(colour: THREE.ColorRepresentation): void {
     setToonColour(this.sailMat, sailTint(colour));
@@ -179,6 +186,10 @@ export class Raft extends Vessel {
       hoop.position.y = y;
       barrel.add(hoop);
     }
+
+    // more cargo appears as the hold fills
+    this.cargo = new CargoPile([[-0.1, 0.95], [0.1, -0.9], [-0.75, -0.75], [0.8, -0.2], [-0.8, 0.2], [0.05, 1.55], [0.75, -1.3], [-0.2, -1.6]].map(([x, z]) => new THREE.Vector3(x, LOG_R + 0.1, z)));
+    this.group.add(this.cargo.group);
 
     // Steering oar at the stern
     this.tiller = new THREE.Group();

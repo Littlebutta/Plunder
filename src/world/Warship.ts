@@ -7,8 +7,10 @@ import { cloneDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
 import type { Island } from './Islands';
 import { Wind } from './Wind';
 
-/** Collider id of the enemy ship (the player is 0, barrels 100+, weather 700+). */
+/** Collider ids: the raiders' ship is 50, the player's fleet 60 to 89 (the player is 0, barrels 100+, strongholds 300+, weather 700+). */
 export const ENEMY_ID = 50;
+export const FLEET_ID_BASE = 60;
+export const FLEET_ID_END = 90;
 
 export const ENEMY = {
   hp: 100,
@@ -30,24 +32,42 @@ export const ENEMY = {
   patrolRadius: 190,
 };
 
-export interface EnemyHooks {
+export interface WarshipHooks {
   /** A shot leaves one of its guns. */
-  fire(position: THREE.Vector3, direction: THREE.Vector3): void;
+  fire(ship: Warship, position: THREE.Vector3, direction: THREE.Vector3): void;
   /** It has just been sunk. */
-  sunk(at: THREE.Vector3): void;
+  sunk(ship: Warship): void;
+}
+
+export interface WarshipOptions {
+  /** Collider id, also the owner id of its shots. */
+  id: number;
+  name: string;
+  side: 'player' | 'npc';
+  colour: THREE.ColorRepresentation;
+  /** Raiders are replaced after a while; the player's ships are gone for good. */
+  respawn: boolean;
+  /** Index into the shipyard presets. */
+  preset?: number;
 }
 
 /**
- * An NPC raider: a white-sailed sloop that patrols the middle of the map,
- * closes with the player when they come near, and trades broadsides. It is
- * built from a shipyard design and sails on the same physics as the player,
- * so anything the shipyard can draw can be an enemy later.
- *
- * It can be shot (hull points), sinks, and a fresh one sails in after a while.
+ * A ship that sails and fights on its own. The raiders' *Marauder* patrols
+ * the middle of the map, closes with any enemy that comes near and trades
+ * broadsides; the player's escorts follow the flagship or go where the chart
+ * sends them, and fight what they meet. Either kind can be sent to shell a
+ * stronghold. They are built from shipyard designs and sail on the same
+ * physics as the player.
  */
-export class EnemyShip {
+export class Warship {
   readonly ship: DesignedShip;
-  readonly name = 'Marauder';
+  readonly name: string;
+  readonly id: number;
+  readonly side: 'player' | 'npc';
+  /** Chart order: sail here and hold. */
+  order: THREE.Vector3 | null = null;
+  /** With no order: keep station on this point (the flagship). */
+  escort: THREE.Vector3 | null = null;
   hp = ENEMY.hp;
   readonly maxHp = ENEMY.hp;
   /** 'patrol' | 'fight' | 'raid' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
@@ -67,16 +87,31 @@ export class EnemyShip {
     waves: WaveField,
     wind: Wind,
     private readonly islands: Island[],
-    private readonly hooks: EnemyHooks,
-    colour: THREE.ColorRepresentation = 0xffffff,
+    private readonly hooks: WarshipHooks,
+    private readonly opts: WarshipOptions,
   ) {
-    const design = sanitizeDesign({ ...cloneDesign(PRESETS[1]), name: this.name });
-    this.ship = new DesignedShip(design, waves, wind, colour);
-    this.ship.group.name = 'enemy-ship';
+    this.name = opts.name;
+    this.id = opts.id;
+    this.side = opts.side;
+    const design = sanitizeDesign({ ...cloneDesign(PRESETS[opts.preset ?? 1]), name: this.name });
+    this.ship = new DesignedShip(design, waves, wind, opts.colour);
+    this.ship.group.name = 'warship';
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
-    this.collider = { id: ENEMY_ID, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
-    this.spawn();
+    this.collider = { id: opts.id, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
+    if (opts.respawn) this.spawn();
+  }
+
+  /** Put it on the water somewhere, ready to sail. */
+  placeAt(x: number, z: number, heading: number): void {
+    this.ship.body.placeOnWater(x, z, heading);
+    this.ship.body.velocity.set(0, 0, 0);
+    this.ship.sail = 0.4;
+    this.ship.group.visible = true;
+    this.ship.syncVisuals(0);
+    this.hp = this.maxHp;
+    this.state = 'patrol';
+    this.timer = 0;
   }
 
   get group(): THREE.Group {
@@ -105,7 +140,7 @@ export class EnemyShip {
     this.state = 'sinking';
     this.timer = 0;
     this.sunkCount++;
-    this.hooks.sunk(this.position);
+    this.hooks.sunk(this);
     return true;
   }
 
@@ -116,14 +151,15 @@ export class EnemyShip {
 
   /**
    * Per-frame: steer, fight, sink or wait.
-   * @param player the player's position
+   * @param foe the nearest enemy ship's position, if there is one afloat
    * @param hostile false in menus: it only patrols
    */
-  update(dt: number, player: THREE.Vector3, hostile: boolean): void {
+  update(dt: number, foe: THREE.Vector3 | null, hostile: boolean): void {
+    const player = foe ?? _far;
     const ship = this.ship;
     if (this.state === 'gone') {
       this.timer += dt;
-      if (this.timer > ENEMY.respawnTime) this.spawn(player);
+      if (this.opts.respawn && this.timer > ENEMY.respawnTime) this.spawn(foe ?? undefined);
       return;
     }
     if (this.state === 'sinking') {
@@ -143,15 +179,16 @@ export class EnemyShip {
 
     const pos = this.position;
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
-    if (this.state === 'patrol' && hostile && range < ENEMY.engageRange) this.state = 'fight';
-    else if (this.state === 'fight' && (!hostile || range > ENEMY.loseRange)) this.state = 'patrol';
+    if (this.state === 'patrol' && hostile && foe && range < ENEMY.engageRange) this.state = 'fight';
+    else if (this.state === 'fight' && (!hostile || !foe || range > ENEMY.loseRange)) this.state = 'patrol';
     // A raid goes ahead until the player comes close enough to fight instead.
     if (this.state === 'patrol' && hostile && this.raidTarget) this.state = 'raid';
     else if (this.state === 'raid' && (!hostile || !this.raidTarget)) this.state = 'patrol';
-    else if (this.state === 'raid' && range < ENEMY.engageRange) this.state = 'fight';
+    else if (this.state === 'raid' && foe && range < ENEMY.engageRange) this.state = 'fight';
     const raid = this.state === 'raid' ? this.raidTarget : null;
 
     // Where to head.
+    let cruise = 0.55;
     const want = _want.set(0, 0, 0);
     if (this.state === 'fight' || raid) {
       // circle the player (or the stronghold) at standoff range, which keeps it on the beam
@@ -161,6 +198,16 @@ export class EnemyShip {
       const rz = (pos.z - focus.z) / fr;
       const k = THREE.MathUtils.clamp((fr - (raid ? ENEMY.raidStandoff : ENEMY.standoff)) / 40, -1, 1);
       want.set(-rz - rx * k, 0, rx - rz * k);
+    } else if (this.order || this.escort) {
+      // go where the chart says, or keep station on the flagship; loiter in a slow circle on arrival
+      const to = this.order ?? this.escort!;
+      const dx = to.x - pos.x;
+      const dz = to.z - pos.z;
+      const left = Math.hypot(dx, dz) || 1;
+      const hold = this.order ? 30 : 42;
+      const k = THREE.MathUtils.clamp((left - hold) / 30, -0.4, 1);
+      want.set(dx / left, 0, dz / left).multiplyScalar(k).add(_v.set(-dz / left, 0, dx / left).multiplyScalar(1 - Math.abs(k)));
+      cruise = left > hold + 90 ? 0.9 : left > hold + 15 ? 0.6 : 0.22;
     } else {
       const a = (this.waypoint / 6) * Math.PI * 2;
       this.dest.set(Math.cos(a) * ENEMY.patrolRadius, 0, Math.sin(a) * ENEMY.patrolRadius);
@@ -181,7 +228,7 @@ export class EnemyShip {
     const turn = fwd.x * want.z - fwd.z * want.x;
     const ahead = fwd.dot(want);
     const steer = ahead < -0.2 ? Math.sign(turn || 1) : THREE.MathUtils.clamp(turn * 2.5, -1, 1);
-    const sailTarget = this.state === 'fight' ? 0.7 : raid ? 0.5 : 0.55;
+    const sailTarget = this.state === 'fight' ? 0.7 : raid ? 0.5 : cruise;
     ship.control(dt, ship.sail < sailTarget - 0.03 ? 1 : ship.sail > sailTarget + 0.03 ? -1 : 0, steer);
     ship.syncVisuals(dt);
     ship.group.updateMatrixWorld();
@@ -201,7 +248,7 @@ export class EnemyShip {
       shot.direction.applyAxisAngle(_up, yaw);
       shot.direction.y += (Math.random() - 0.5) * ENEMY.scatter;
       shot.direction.normalize();
-      this.hooks.fire(shot.position, shot.direction);
+      this.hooks.fire(this, shot.position, shot.direction);
     }
   }
 
@@ -235,3 +282,4 @@ const _want = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _far = new THREE.Vector3(1e6, 0, 1e6);

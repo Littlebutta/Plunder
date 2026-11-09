@@ -5,7 +5,7 @@ import { WaveField } from '../ocean/waves';
 /**
  * Third-person orbit camera that follows the ship smoothly.
  *
- * - Drag to orbit, wheel to zoom.
+ * - Middle-button drag to orbit, wheel to zoom.
  * - The view stays where you leave it; it never swings back behind the ship.
  * - The focus point ignores the ship's roll/pitch, so the horizon stays calm
  *   while the ship rocks in front of you.

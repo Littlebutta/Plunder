@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Stock } from '../world/Resources';
 import { FloatingBody, HullSpec } from '../physics/FloatingBody';
 import { WaveField } from '../ocean/waves';
 import { Wind } from '../world/Wind';
@@ -133,6 +134,9 @@ export abstract class Vessel {
   protected rigBoost(along: number): number {
     return THREE.MathUtils.clamp((along + 0.3) / 1.3, 0, 1);
   }
+
+  /** Show what is in the hold as cargo on deck. */
+  setCargo(_stock: Stock, _capacity: number): void {}
 
   /** Paint the sails and pennant in the owner's colour. */
   abstract setColour(colour: THREE.ColorRepresentation): void;

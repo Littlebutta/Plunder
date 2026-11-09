@@ -275,3 +275,62 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .hud-build kbd {
   display: inline-block; padding: 1px 7px; margin-right: 4px; border-radius: 5px; background: #fff8e6; color: #2a1708; font: 800 13px Nunito, sans-serif;
 }
+.hud-home .home-stores { display: flex; gap: 10px; align-items: center; margin-top: 6px; font-size: 13px; }
+.hud-home .home-stores > span:first-child { opacity: .75; }
+.hud-home .home-stores .res i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+.hud-home .home-stores .income { margin-left: auto; color: #b7e89a; font-weight: 800; }
+.hud-home .home-fleet { margin-top: 4px; font-size: 12px; opacity: .85; }
+
+/* --- Very wide screens (32:9): keep the HUD and menus in a centred band ------- */
+:root { --ui-side: max(0px, calc((100vw - 100vh * 2.4) / 2)); --yard-side: max(0px, calc((100vw - 1720px) / 2)); }
+#hud { left: var(--ui-side); right: var(--ui-side); }
+.menu { left: var(--ui-side); right: var(--ui-side); }
+.settings-gear { right: calc(18px + var(--ui-side) + env(safe-area-inset-right, 0px)); }
+.target-brackets, .target-arrow { position: fixed; }
+.chart-title { left: calc(34px + var(--ui-side)); top: 26px; color: #4a2f17; text-shadow: none; }
+.chart-info { right: calc(34px + var(--ui-side)); top: 96px; background: rgba(42, 23, 8, .9); }
+.chart-close { right: calc(74px + var(--ui-side)); top: 16px; }
+.chart .settings-gear { display: none; }
+.chart-help { bottom: 34px; background: rgba(42, 23, 8, .88); }
+
+/* --- Exploration window (minimap) ---------------------------------------------- */
+.minimap {
+  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  width: 196px; height: 196px; border: 3px solid #c0814a; border-radius: 12px; overflow: hidden; pointer-events: auto; cursor: pointer;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .25); background: #e7d2a0;
+}
+.minimap canvas { display: block; width: 100%; height: 100%; }
+.minimap:hover { border-color: #ffd27a; }
+.in-menu .minimap { display: none; }
+
+/* --- Shipyard v3: cards, tabs, capped width ---------------------------------------- */
+.yard {
+  grid-template-columns: minmax(440px, 660px) minmax(0, 1fr); gap: 20px;
+  padding: 18px calc(22px + var(--yard-side));
+  background: radial-gradient(ellipse at 70% 30%, #3a2212, #1c0f07 75%);
+}
+.yard-left { gap: 9px; }
+.yard-label { opacity: .7; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.yard [data-presets] button { padding: 5px 11px; font-size: 13px; border-radius: 999px; }
+.yard-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 2px solid #c0814a; border-radius: 12px; overflow: hidden; }
+.yard-tabs button { border: 0; border-radius: 0; padding: 10px 8px; font-size: 16px; background: rgba(192, 129, 74, .12); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.yard-tabs button + button { border-left: 2px solid #c0814a; }
+.yard-tabs button i {
+  font-style: normal; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255, 248, 230, .16); font-size: 12px;
+}
+.yard-tabs button.on i, .yard-tabs button:hover i { background: #2a1708; color: #fff8e6; }
+.yard-card { background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.yard-card .yard-tip { min-height: 34px; margin: 0; }
+.yard-sliders[hidden] { display: none; }
+.yard-right { min-width: 0; }
+.yard-view { position: relative; flex: 1; min-height: 240px; display: flex; }
+.yard-view canvas { flex: 1; min-height: 0; height: 100%; }
+.yard-viewbar { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
+.yard-viewbar button { pointer-events: auto; padding: 4px 10px; font-size: 12px; background: rgba(42, 23, 8, .75); }
+.yard-viewbar span { margin-left: auto; font-size: 12px; opacity: .8; text-shadow: 0 1px 2px #000; }
+.yard-stats { background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 12px; padding: 8px 14px; }
+.yard-stats > div:last-child { border-bottom: 0; }
+.yard-actions { justify-content: flex-end; }
+.yard-actions .primary { order: 3; }
+.yard-left > * { flex-shrink: 0; }

@@ -23,12 +23,14 @@ import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
 import { IslandMarkers } from './world/IslandMarkers';
-import { EnemyShip, ENEMY_ID } from './world/EnemyShip';
+import { Warship, WarshipHooks, ENEMY_ID, FLEET_ID_BASE, FLEET_ID_END } from './world/Warship';
+import { FogOfWar, Lookout } from './world/FogOfWar';
+import { computeStats, FREE_CANNONS, METALS_PER_CANNON } from './ship/HullDesign';
 import { TargetUi } from './ui/TargetUi';
-import { Territory } from './world/Strongholds';
+import { Territory, STRONGHOLD, canAfford, pay, Side } from './world/Strongholds';
 import { TerritoryUi } from './ui/TerritoryUi';
 import { ballisticVelocity } from './combat/ballistics';
-import { MapView } from './ui/MapView';
+import { MapView, MiniMap, MapState, MapShip } from './ui/MapView';
 import { WorldEdge } from './world/WorldEdge';
 import { edgeCurrent, steerToward } from './world/navigation';
 import { rollWorldSeed, worldSeed } from './world/worldConfig';
@@ -234,25 +236,31 @@ const hold = new Hold();
 const gathering = new Gathering(world.islands, hold);
 const gatherUi = new GatherUi(hudRoot);
 // --- Enemy ship + targeting ---------------------------------------------------
-const enemy = new EnemyShip(waves, wind, world.islands, {
-  fire: (from, dir) => {
+const warshipHooks: WarshipHooks = {
+  fire: (w, from, dir) => {
     shotVel.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed);
-    projectiles.spawn(from, shotVel, BROADSIDE.kind, ENEMY_ID);
-    effects.muzzle(from, dir, enemy.ship.body.velocity, 1.5);
+    projectiles.spawn(from, shotVel, BROADSIDE.kind, w.id);
+    effects.muzzle(from, dir, w.ship.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 0.95, rateJitter: 0.06, position: from });
   },
-  sunk: (at) => {
-    effects.splinters(at, 40);
-    effects.splash(at, 2.2);
-    audio.woodHit(at);
-    audio.splash(at, 1.6);
-    endRaid();
+  sunk: (w) => {
+    effects.splinters(w.position, 40);
+    effects.splash(w.position, 2.2);
+    audio.woodHit(w.position);
+    audio.splash(w.position, 1.6);
+    if (w === enemy) endRaid();
+    else weatherUi.announce(`${w.name} is lost`, 'One of your escorts has gone down', 'danger');
   },
-}, NPC_COLOUR);
+};
+const enemy = new Warship(waves, wind, world.islands, warshipHooks, { id: ENEMY_ID, name: 'Marauder', side: 'npc', colour: NPC_COLOUR, respawn: true });
+/** The player's escorts: built at home, ordered about from the chart. */
+const fleet: Warship[] = [];
+let fleetBuilt = 0;
+const FLEET_NAMES = ['Swift', 'Gannet', 'Petrel', 'Osprey', 'Heron', 'Kestrel', 'Curlew', 'Tern'];
 scene.add(enemy.group);
 const targetUi = new TargetUi(hudRoot);
 /** The ship the player has marked (click it; click it again or press T to let go). */
-let targeted: EnemyShip | null = null;
+let targeted: Warship | null = null;
 const targetAt = new THREE.Vector3();
 const screenPt = { x: 0, y: 0, onScreen: false, behind: false };
 
@@ -297,8 +305,16 @@ hudRoot.append(edgeWarning);
 /** Where the flagship has been told to sail from the chart; any touch of the helm cancels it. */
 let course: THREE.Vector3 | null = null;
 const chart = new MapView(document.body, {
-  sailTo: (x, z) => {
-    course = new THREE.Vector3(x, 0, z);
+  order: (id, x, z) => {
+    if (id === 0) course = new THREE.Vector3(x, 0, z);
+    else {
+      const w = fleet.find((f) => f.id === id);
+      if (w) w.order = new THREE.Vector3(x, 0, z);
+    }
+  },
+  follow: (id) => {
+    const w = fleet.find((f) => f.id === id);
+    if (w) w.order = null;
   },
   close: () => {
     chart.close();
@@ -371,13 +387,85 @@ const territoryUi = new TerritoryUi(hudRoot, document.body, {
 /** The island the flagship is alongside, close enough to build on. */
 let buildIsland: Island | null = null;
 function tryBuild(island: Island): void {
-  if (island !== buildIsland || !territory.build(island, hold)) return;
+  if (!territory.build(island, island === buildIsland ? hold : null)) return;
   audio.woodHit(ship.body.position);
   const s = territory.at(island)!;
   weatherUi.announce(s.levelName, s.home ? `Your home at ${island.name} grows stronger` : `${island.name} flies your colours`, 'good');
 }
-chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold);
-chart.onIslandAction = (island) => tryBuild(island);
+chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length);
+chart.onIslandAction = (island, act) => (act === 'ship' ? buildEscort() : tryBuild(island));
+
+/** Lay down an escort at the home island, paid from the stores (and the hold, if the flagship is alongside). */
+function buildEscort(): void {
+  const home = territory.home;
+  const alongside = buildIsland === home.island ? hold : null;
+  if (home.side !== 'player' || fleet.length >= STRONGHOLD.fleetMax || !canAfford(STRONGHOLD.shipCost, territory.stores, alongside)) return;
+  pay(STRONGHOLD.shipCost, territory.stores, alongside);
+  const n = fleetBuilt++;
+  const w = new Warship(waves, wind, world.islands, warshipHooks, {
+    id: FLEET_ID_BASE + (n % (FLEET_ID_END - FLEET_ID_BASE)),
+    name: FLEET_NAMES[n % FLEET_NAMES.length],
+    side: 'player',
+    colour: settings.settings.colour,
+    respawn: false,
+  });
+  const c = home.island.center;
+  const a = Math.atan2(home.site.z - c.z, home.site.x - c.x) + (n % 2 ? 0.5 : -0.5);
+  const r = home.island.shoreAt(a) + 55;
+  w.placeAt(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r, a + Math.PI / 2);
+  fleet.push(w);
+  scene.add(w.group);
+  audio.woodHit(w.position);
+  weatherUi.announce(`${w.name} launched`, 'She follows your flagship. Give her orders on the chart (Tab).', 'good');
+}
+
+// --- Fog of war and the charts that show it ----------------------------------------
+const fog = new FogOfWar();
+const lookouts: Lookout[] = [];
+function updateFog(dt: number): void {
+  lookouts.length = 0;
+  lookouts.push({ x: ship.body.position.x, z: ship.body.position.z, range: 210 });
+  for (const w of fleet) if (w.alive) lookouts.push({ x: w.position.x, z: w.position.z, range: 170 });
+  for (const s of territory.strongholds) if (s.side === 'player') lookouts.push({ x: s.site.x, z: s.site.z, range: 150 + s.level * 25 });
+  fog.update(dt, lookouts, world.islands);
+}
+const _hd = new THREE.Vector3();
+function mapState(): MapState {
+  const colour = settings.settings.colour;
+  const ships: MapShip[] = [
+    { id: 0, position: ship.body.position, heading: compass(ship.body.forward(_hd)), colour, name: ship.displayName, hostile: false, health: hull.fraction, course, note: course ? 'Under orders' : 'At your command' },
+  ];
+  for (const w of fleet) {
+    if (!w.alive) continue;
+    const note = w.state === 'fight' ? 'Engaging the enemy' : w.state === 'raid' ? 'Shelling a stronghold' : w.order ? 'Under orders' : 'Following the flagship';
+    ships.push({ id: w.id, position: w.position, heading: compass(w.ship.body.forward(_hd)), colour, name: w.name, hostile: false, health: w.hp / w.maxHp, course: w.order, note });
+  }
+  if (enemy.alive) ships.push({ id: enemy.id, position: enemy.position, heading: compass(enemy.ship.body.forward(_hd)), colour: NPC_COLOUR, name: enemy.name, hostile: true, health: enemy.hp / enemy.maxHp, course: null, note: '' });
+  return { islands: world.islands, ships, playerColour: colour, npcColour: NPC_COLOUR, strongholds: territory.strongholds, fog };
+}
+const miniMap = new MiniMap(hudRoot, () => {
+  if (mode === 'play') chart.open();
+});
+
+/** Which side fired a shot, from its owner id. */
+function sideOfOwner(owner: number): Side | null {
+  if (owner === RAFT_ID || (owner >= FLEET_ID_BASE && owner < FLEET_ID_END)) return 'player';
+  if (owner === ENEMY_ID) return 'npc';
+  return territory.sideOf(owner);
+}
+const nearestTo = (at: THREE.Vector3, list: { position: THREE.Vector3; alive: boolean }[]): THREE.Vector3 | null => {
+  let best: THREE.Vector3 | null = null;
+  let bestD = Infinity;
+  for (const o of list) {
+    if (!o.alive) continue;
+    const d = Math.hypot(o.position.x - at.x, o.position.z - at.z);
+    if (d < bestD) {
+      bestD = d;
+      best = o.position;
+    }
+  }
+  return best;
+};
 
 /** Raids: every so often the Marauder sails for the player's home and shells it. */
 const RAID = { first: 240, every: 200 };
@@ -419,6 +507,7 @@ function applySettings(): void {
   broadside.fireMode = s.fireMode;
   islandMarkers.setPlayerColour(s.colour);
   territory.setPlayerColour(s.colour);
+  for (const w of fleet) w.ship.setColour(s.colour);
   yard.colour = s.colour;
   hud.setFireMode(s.fireMode);
 }
@@ -491,8 +580,19 @@ const menu = new MainMenu(document.body, {
   },
 });
 
+/** Extra cannons (beyond the free ones) the player has already paid for. */
+let cannonsPaid = 0;
 const yard = new Shipyard(document.body, {
   launch: (design) => {
+    // cannons beyond the first few are paid for in metals, once each
+    const extra = Math.max(0, computeStats(design).guns - FREE_CANNONS);
+    const due = { wood: 0, stone: 0, salvage: Math.max(0, extra - cannonsPaid) * METALS_PER_CANNON };
+    if (!canAfford(due, territory.stores, hold)) {
+      yard.warn(`The extra cannons need ${due.salvage} metals and you have ${territory.stores.salvage + hold.stock.salvage}. Gather more, or take some guns off.`);
+      return;
+    }
+    pay(due, territory.stores, hold);
+    cannonsPaid = Math.max(cannonsPaid, extra);
     setShip(new DesignedShip(design, waves, wind, settings.settings.colour));
     yard.close();
     startPlay();
@@ -506,7 +606,8 @@ const yard = new Shipyard(document.body, {
     yard.close();
     openMenu();
   },
-  stock: () => hold.stock,
+  stock: () => ({ wood: hold.stock.wood + territory.stores.wood, stone: hold.stock.stone + territory.stores.stone, salvage: hold.stock.salvage + territory.stores.salvage }),
+  cannonsPaid: () => cannonsPaid,
 });
 
 /** In the menu the scene is shifted right, clear of the options column. */
@@ -591,6 +692,9 @@ Object.assign(window, {
     targets,
     enemy,
     territory,
+    fleet,
+    fog,
+    buildEscort,
     chart,
     get course() {
       return course;
@@ -619,7 +723,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
     audio.splash(e.position, size);
     return;
   }
-  const by = territory.sideOf(e.owner, RAFT_ID, ENEMY_ID);
+  const by = sideOfOwner(e.owner);
   if (e.type === 'land') {
     effects.splinters(e.position, e.kind === 1 ? 8 : 4);
     audio.woodHit(e.position);
@@ -638,6 +742,12 @@ projectiles.onImpact = (e: ImpactEvent) => {
     if (at) audio.woodHit(at);
     return;
   }
+  if (e.colliderId >= FLEET_ID_BASE && e.colliderId < FLEET_ID_END) {
+    effects.splinters(e.position, e.kind === 1 ? 14 : 7);
+    audio.woodHit(e.position);
+    if (by !== 'player') fleet.find((w) => w.id === e.colliderId)?.hit(e.kind);
+    return;
+  }
   if (e.colliderId === ENEMY_ID) {
     effects.splinters(e.position, e.kind === 1 ? 14 : 7);
     audio.woodHit(e.position);
@@ -654,7 +764,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
   } else if (e.colliderId === RAFT_ID) {
     effects.splinters(e.position, 8);
     audio.woodHit(e.position);
-    hull.damage(e.kind === 1 ? 9 : 3); // weather: enemy fire
+    if (by !== 'player') hull.damage(e.kind === 1 ? 9 : 3); // weather: enemy fire
   }
 };
 
@@ -746,6 +856,8 @@ function updateAimPoint(dt: number): void {
 
 const _playerSight = { position: ship.body.position, velocity: ship.body.velocity, alive: true };
 const _enemySight = { position: enemy.position, velocity: enemy.ship.body.velocity, alive: true };
+const friends = [_playerSight];
+const raiders = [_enemySight];
 const muzzlePos = new THREE.Vector3();
 const muzzleDir = new THREE.Vector3();
 const shotVel = new THREE.Vector3();
@@ -791,6 +903,7 @@ function frame(): void {
     waves.update(h);
     ship.physicsStep(h);
     enemy.physicsStep(h);
+    for (const w of fleet) w.physicsStep(h);
   });
   ship.syncVisuals(dt);
 
@@ -836,37 +949,46 @@ function frame(): void {
     queuedShots.splice(i, 1);
   }
 
-  enemy.update(dt, ship.body.position, playing);
+  // warships: each fights the nearest ship of the other side
+  _playerSight.alive = playing;
+  _playerSight.position = ship.body.position;
+  _playerSight.velocity = ship.body.velocity;
+  _enemySight.alive = enemy.alive;
+  friends.length = 1;
+  for (const w of fleet) if (w.alive) friends.push({ position: w.position, velocity: w.ship.body.velocity, alive: true });
+  enemy.update(dt, nearestTo(enemy.position, friends), playing);
+  for (let i = fleet.length - 1; i >= 0; i--) {
+    const w = fleet[i];
+    if (w.state === 'gone') {
+      scene.remove(w.group);
+      fleet.splice(i, 1);
+      continue;
+    }
+    w.escort = ship.body.position;
+    // an escort shells any raider stronghold it finds itself near
+    const mark = territory.strongholds.find((s) => s.side === 'npc' && !s.ruined && Math.hypot(s.site.x - w.position.x, s.site.z - w.position.z) < 150);
+    w.raidTarget = mark ? mark.site : null;
+    w.update(dt, enemy.alive ? enemy.position : null, playing);
+    if (w.alive) edgeCurrent(w.position, w.ship.body.velocity, dt);
+  }
+  ship.setCargo(hold.stock, hold.capacity);
   // the current at the rim turns every ship back
   const atEdge = edgeCurrent(ship.body.position, ship.body.velocity, dt);
   if (enemy.alive) edgeCurrent(enemy.position, enemy.ship.body.velocity, dt);
   edgeWarning.hidden = !playing || atEdge < 0.15;
   worldEdge.update(dt);
+  if (playing) updateFog(dt);
   if (chart.visible) {
     if (!playing) chart.close();
-    else {
-      ship.body.forward(fwd);
-      chart.draw({
-        islands: world.islands,
-        player: { position: ship.body.position, heading: compass(fwd), colour: settings.settings.colour, name: ship.displayName, hostile: false },
-        others: enemy.alive ? [{ position: enemy.position, heading: compass(enemy.ship.body.forward(stern)), colour: NPC_COLOUR, name: enemy.name, hostile: true }] : [],
-        course,
-        playerColour: settings.settings.colour,
-        strongholds: territory.strongholds,
-      });
-    }
-  }
+    else chart.draw(mapState());
+  } else if (playing) miniMap.update(dt, mapState());
   if (playing) updateGathering(dt);
   // territory
   buildIsland = playing ? territory.islandInReach(ship.body.position) : null;
   if (playing && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
   if (playing) updateRaids(dt);
-  _playerSight.alive = playing;
-  _playerSight.position = ship.body.position;
-  _playerSight.velocity = ship.body.velocity;
-  _enemySight.alive = enemy.alive;
-  territory.update(dt, _playerSight, _enemySight, playing);
-  territoryUi.update(territory, buildIsland, hold);
+  territory.update(dt, friends, raiders, playing);
+  territoryUi.update(territory, buildIsland, hold, fleet.length);
   islandMarkers.update(dt, wind.angle);
 
   targets.update(dt, waves.currentTime);
