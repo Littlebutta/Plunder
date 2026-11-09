@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:48Z",
+  "updated": "2026-11-09T22:30:51Z",
   "categories": [
     {
       "key": "feature",
@@ -1096,14 +1096,16 @@
       "id": "F-40",
       "cat": "feature",
       "title": "Free cannon placement along the hull edge, incl. gun ports in the side; movable bow/stern swivel",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "Planned for the next update (shipyard v2).",
-      "links": [],
+      "notes": "Planned for the next update (shipyard v2).\n\n2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T21:58:35Z",
       "priority": "high",
       "milestone": "M-5",
-      "updated": "2026-11-09T21:58:35Z",
+      "updated": "2026-11-09T22:30:51Z",
       "by": "Claude"
     },
     {
