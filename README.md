@@ -52,6 +52,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
 | Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
+| Tab | Chart: a map of the whole world. Left click selects an island, right click orders your ship to sail there (touch the helm to cancel), drag pans, wheel zooms. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | M | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
@@ -78,6 +79,14 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 ## Gathering and ports
 
 Each island holds resources that depend on its type and size (wood, stone, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+
+## The world
+
+The map is a disc of sea 760 m in radius (`src/world/worldConfig.ts`). At its rim the sea pours off the edge of the world in a waterfall that fades into nothing (`src/world/WorldEdge.ts`; the ocean shader stops drawing at the rim). A current inside the last 70 m turns every ship back, so nothing sails over.
+
+Islands are generated from a seed. The same map loads every time until you press **New map** in the main menu, which rolls a new seed and reloads.
+
+The **chart** (Tab, `src/ui/MapView.ts`) shows the whole world from above: islands with their names and owners' banners, ports, your ship, the enemy, and your ordered course. The game keeps running while it is open. Course-keeping and island avoidance are in `src/world/navigation.ts`.
 
 ## Enemy ship
 

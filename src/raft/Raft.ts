@@ -35,10 +35,10 @@ export const RAFT_HULL: HullSpec = {
  * and the wind adds a boost on top when it is behind you.
  */
 export const RAFT_DRIVE: DriveSpec = {
-  /** N at full sail with no help from the wind (~9.5 knots top speed). */
-  baseThrust: 1350,
+  /** N at full sail with no help from the wind (~9 knots top speed). */
+  baseThrust: 1150,
   /** Extra N at full sail running dead downwind in a strength-1 wind. */
-  windBoost: 1500,
+  windBoost: 1250,
   /** How much a headwind slows you (0 = not at all, 1 = cancels the base drive). */
   headwindPenalty: 0.15,
   reverseThrust: 450, // N when paddling backwards
