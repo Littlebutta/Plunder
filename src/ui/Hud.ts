@@ -28,6 +28,7 @@ export class Hud {
         <div><kbd>C</kbd> fit / stow broadside cannons (turn the ship to bring them to bear) · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
         <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go): a red arrow points to it when it is off screen</div>
         <div><kbd>Tab</kbd> chart: the whole map; right click on it to set a course</div>
+        <div><kbd>U</kbd> alongside an island: build an outpost or upgrade your stronghold</div>
         <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
         <div><kbd>Left drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>B</kbd> barrage test · <kbd>M</kbd> mute · <kbd>G</kbd> tuning · <kbd>P</kbd> probes · <kbd>H</kbd> hide help</div>

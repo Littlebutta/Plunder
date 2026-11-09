@@ -22,7 +22,7 @@ export const SNAP_STRIDE = 7; // x y z vx vy vz kind
 export const COLLIDER_STRIDE = 5;
 
 /** Per-event floats: type x y z kind colliderId */
-export const EVENT_STRIDE = 6;
+export const EVENT_STRIDE = 7; // type x y z kind colliderId owner
 export const EVENT_SPLASH = 1;
 export const EVENT_HIT = 2;
 /** Shell hit the ground (an island). */
@@ -183,7 +183,7 @@ export class ProjectileSim {
           const dy = py + sy * t - col[co + 1];
           const dz = pz + sz * t - col[co + 2];
           if (dx * dx + dy * dy + dz * dz <= r * r) {
-            this.events.push(EVENT_HIT, px + sx * t, py + sy * t, pz + sz * t, st[o + 7], col[co + 4]);
+            this.events.push(EVENT_HIT, px + sx * t, py + sy * t, pz + sz * t, st[o + 7], col[co + 4], st[o + 8]);
             dead = true;
             break;
           }
@@ -196,7 +196,7 @@ export class ProjectileSim {
       if (!dead && shore) {
         const ground = shore.heightAt(nx, nz);
         if (ground > -0.3 && ny <= ground) {
-          this.events.push(EVENT_LAND, nx, ground, nz, st[o + 7], -1);
+          this.events.push(EVENT_LAND, nx, ground, nz, st[o + 7], -1, st[o + 8]);
           dead = true;
         }
       }
@@ -205,7 +205,7 @@ export class ProjectileSim {
       if (!dead && ny < waterCeiling) {
         const water = this.waves.heightAt(nx, nz);
         if (ny <= water) {
-          this.events.push(EVENT_SPLASH, nx, water, nz, st[o + 7], -1);
+          this.events.push(EVENT_SPLASH, nx, water, nz, st[o + 7], -1, st[o + 8]);
           dead = true;
         }
       }

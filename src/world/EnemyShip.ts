@@ -19,6 +19,8 @@ export const ENEMY = {
   loseRange: 230,
   /** Distance it tries to hold while trading broadsides (m). */
   standoff: 60,
+  /** Distance it holds from a stronghold it is bombarding (m). */
+  raidStandoff: 85,
   /** How far its shots scatter (radians). */
   scatter: THREE.MathUtils.degToRad(3.2),
   /** Seconds a wreck takes to go down, and until the next one sails in. */
@@ -48,8 +50,10 @@ export class EnemyShip {
   readonly name = 'Marauder';
   hp = ENEMY.hp;
   readonly maxHp = ENEMY.hp;
-  /** 'patrol' | 'fight' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
-  state: 'patrol' | 'fight' | 'sinking' | 'gone' = 'patrol';
+  /** 'patrol' | 'fight' | 'raid' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
+  state: 'patrol' | 'fight' | 'raid' | 'sinking' | 'gone' = 'patrol';
+  /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
+  raidTarget: THREE.Vector3 | null = null;
   sunkCount = 0;
 
   private readonly battery: Broadside;
@@ -84,7 +88,7 @@ export class EnemyShip {
   }
 
   get alive(): boolean {
-    return this.state === 'patrol' || this.state === 'fight';
+    return this.state === 'patrol' || this.state === 'fight' || this.state === 'raid';
   }
 
   /** Colliders for the projectile sim: nothing while it is sinking or gone. */
@@ -141,14 +145,21 @@ export class EnemyShip {
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
     if (this.state === 'patrol' && hostile && range < ENEMY.engageRange) this.state = 'fight';
     else if (this.state === 'fight' && (!hostile || range > ENEMY.loseRange)) this.state = 'patrol';
+    // A raid goes ahead until the player comes close enough to fight instead.
+    if (this.state === 'patrol' && hostile && this.raidTarget) this.state = 'raid';
+    else if (this.state === 'raid' && (!hostile || !this.raidTarget)) this.state = 'patrol';
+    else if (this.state === 'raid' && range < ENEMY.engageRange) this.state = 'fight';
+    const raid = this.state === 'raid' ? this.raidTarget : null;
 
     // Where to head.
     const want = _want.set(0, 0, 0);
-    if (this.state === 'fight') {
-      // circle the player at standoff range, which keeps them on the beam
-      const rx = (pos.x - player.x) / (range || 1);
-      const rz = (pos.z - player.z) / (range || 1);
-      const k = THREE.MathUtils.clamp((range - ENEMY.standoff) / 40, -1, 1);
+    if (this.state === 'fight' || raid) {
+      // circle the player (or the stronghold) at standoff range, which keeps it on the beam
+      const focus = raid ?? player;
+      const fr = Math.hypot(focus.x - pos.x, focus.z - pos.z) || 1;
+      const rx = (pos.x - focus.x) / fr;
+      const rz = (pos.z - focus.z) / fr;
+      const k = THREE.MathUtils.clamp((fr - (raid ? ENEMY.raidStandoff : ENEMY.standoff)) / 40, -1, 1);
       want.set(-rz - rx * k, 0, rx - rz * k);
     } else {
       const a = (this.waypoint / 6) * Math.PI * 2;
@@ -162,22 +173,25 @@ export class EnemyShip {
       const dz = pos.z - island.center.z;
       const d = Math.hypot(dx, dz);
       const clear = d - island.radius;
-      if (clear < 70) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((70 - clear) / 70) * 3);
+      const keepOff = raid ? 38 : 70; // a raider has to come in close to shell the shore
+      if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 3);
     }
     want.normalize();
     const fwd = ship.body.forward(_fwd).setY(0).normalize();
     const turn = fwd.x * want.z - fwd.z * want.x;
     const ahead = fwd.dot(want);
     const steer = ahead < -0.2 ? Math.sign(turn || 1) : THREE.MathUtils.clamp(turn * 2.5, -1, 1);
-    const sailTarget = this.state === 'fight' ? 0.7 : 0.55;
+    const sailTarget = this.state === 'fight' ? 0.7 : raid ? 0.5 : 0.55;
     ship.control(dt, ship.sail < sailTarget - 0.03 ? 1 : ship.sail > sailTarget + 0.03 ? -1 : 0, steer);
     ship.syncVisuals(dt);
     ship.group.updateMatrixWorld();
 
     // Guns.
-    if (this.state === 'fight') {
-      this.battery.aimAt(player, dt);
-      if (!this.battery.outOfArc && !this.battery.outOfRange && range < BROADSIDE.maxRange && this.battery.ready) this.battery.tryFire();
+    if (this.state === 'fight' || raid) {
+      const mark = raid ?? player;
+      const reach = Math.hypot(mark.x - pos.x, mark.z - pos.z);
+      this.battery.aimAt(mark, dt);
+      if (!this.battery.outOfArc && !this.battery.outOfRange && reach < BROADSIDE.maxRange && this.battery.ready) this.battery.tryFire();
     }
     this.shots.length = 0;
     this.battery.update(dt, this.shots);

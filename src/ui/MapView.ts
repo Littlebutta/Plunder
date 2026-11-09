@@ -18,6 +18,8 @@ export interface MapState {
   /** Where the flagship has been ordered to sail, if anywhere. */
   course: THREE.Vector3 | null;
   playerColour: string;
+  /** Settlements to mark: a hut, tower or fort glyph by level; the home ones are ringed. */
+  strongholds?: { site: THREE.Vector3; level: number; home: boolean; side: 'player' | 'npc'; ruined: boolean }[];
 }
 
 export interface MapActions {
@@ -297,6 +299,40 @@ export class MapView {
       const ly = sy + island.radius * 1.2 * this.zoom + 14;
       c.strokeText(island.name, sx, ly);
       c.fillText(island.name, sx, ly);
+    }
+
+    // strongholds: a little house that grows battlements with its level
+    for (const s of state.strongholds ?? []) {
+      const [x, y] = this.toScreen(s.site.x, s.site.z);
+      const k = 5 + s.level * 1.6;
+      c.fillStyle = s.ruined ? '#6b6258' : s.side === 'player' ? state.playerColour : '#ffffff';
+      c.strokeStyle = s.side === 'npc' ? '#e23b3b' : '#2a1708';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      if (s.level < 2) {
+        c.moveTo(x - k, y + k * 0.7);
+        c.lineTo(x - k, y - k * 0.2);
+        c.lineTo(x, y - k);
+        c.lineTo(x + k, y - k * 0.2);
+        c.lineTo(x + k, y + k * 0.7);
+      } else {
+        c.moveTo(x - k, y + k * 0.7);
+        c.lineTo(x - k, y - k);
+        c.lineTo(x - k * 0.45, y - k);
+        c.lineTo(x - k * 0.45, y - k * 0.45);
+        c.lineTo(x + k * 0.45, y - k * 0.45);
+        c.lineTo(x + k * 0.45, y - k);
+        c.lineTo(x + k, y - k);
+        c.lineTo(x + k, y + k * 0.7);
+      }
+      c.closePath();
+      c.fill();
+      c.stroke();
+      if (s.home) {
+        c.beginPath();
+        c.arc(x, y, k + 6, 0, Math.PI * 2);
+        c.stroke();
+      }
     }
 
     // course

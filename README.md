@@ -52,6 +52,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
 | Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
+| U | Alongside an island: found an outpost on an unclaimed island, or upgrade your stronghold there (pays from the hold). |
 | Tab | Chart: a map of the whole world. Left click selects an island, right click orders your ship to sail there (touch the helm to cancel), drag pans, wheel zooms. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | M | Mute (also in Settings: the gear button top right, or the main menu) |
@@ -87,6 +88,25 @@ The map is a disc of sea 760 m in radius (`src/world/worldConfig.ts`). At its ri
 Islands are generated from a seed. The same map loads every time until you press **New map** in the main menu, which rolls a new seed and reloads.
 
 The **chart** (Tab, `src/ui/MapView.ts`) shows the whole world from above: islands with their names and owners' banners, ports, your ship, the enemy, and your ordered course. The game keeps running while it is open. Course-keeping and island avoidance are in `src/world/navigation.ts`.
+
+## Territory
+
+You start with a **hut on a home island** (the unsettled island nearest the start; `src/world/Strongholds.ts`). Lose it and the game is over. Sail alongside it and press **U** (or use the button in the chart's island panel) to upgrade it from the hold:
+
+| Level | Hull | Guns | Cost to reach it |
+| --- | --- | --- | --- |
+| Hut | 80 | 0 | (given) |
+| Stockade | 150 | 0 | 12 wood, 4 stone |
+| Watchtower | 230 | 1 | 14 wood, 12 stone, 4 salvage |
+| Fort | 340 | 3 | 12 wood, 20 stone, 8 salvage |
+
+**Outposts** can be founded on any unclaimed island for 10 wood and 2 stone, which is how you claim it. They climb the same ladder but are smaller: 72% of the size, 60% of the hull, and a fort-level outpost carries two guns. Gathering no longer claims an island.
+
+Strongholds with guns fire on hostile ships within 125 m. Shells that strike the walls (or land right under them) wear a stronghold down; friendly fire does nothing. One left alone for 12 s repairs itself. At zero it is **in ruins**, and if a hostile ship then stays within 110 m for 10 s it is taken: an outpost is burned and the island goes back to unclaimed, the home ends the game.
+
+The raiders have a **home of their own**: a watchtower on the port island furthest from yours. Ruin it and hold your ship close to take it, and you win. About four minutes into a voyage, and every few minutes after, the *Marauder* **raids**: it sails for your home and shells it from offshore until it is sunk or you come within 150 m, when it turns on you instead.
+
+Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
 ## Enemy ship
 

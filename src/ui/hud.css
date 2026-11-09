@@ -237,3 +237,41 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
   background: rgba(42, 23, 8, .8); border: 2px solid #ffb27a; color: #ffd9b8; font-weight: 800; font-size: 14px; white-space: nowrap;
 }
 .hud-edge[hidden] { display: none; }
+
+/* --- Territory: home chip, build prompt, end screen ------------------------- */
+.hud-home { position: absolute; left: 16px; top: 150px; min-width: 190px; padding: 8px 12px; }
+.hud-home .home-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+.hud-home .home-row { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; margin: 2px 0 5px; }
+.hud-home .home-row span { font-size: 12px; opacity: .8; }
+.hud-home .home-bar { height: 8px; border-radius: 5px; background: rgba(0, 0, 0, .45); overflow: hidden; }
+.hud-home .home-bar i { display: block; height: 100%; background: #7ed957; transition: width .25s; }
+.hud-home[data-state='hurt'] .home-bar i { background: #ffc04d; }
+.hud-home[data-state='danger'] { border-color: #e23b3b; }
+.hud-home[data-state='danger'] .home-bar i { background: #e23b3b; }
+.hud-home .home-warn { margin-top: 5px; color: #ffb3b3; font-weight: 800; font-size: 13px; }
+.hud-build { position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%); padding: 7px 14px; white-space: nowrap; font-size: 14px; }
+.hud-build[hidden] { display: none; }
+.hud-build[data-can='false'] { opacity: .8; }
+.in-menu .hud-home, .in-menu .hud-build { display: none; }
+.chart-hint { font-size: 12px; opacity: .75; margin-top: 4px; }
+.endgame {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  background: radial-gradient(ellipse at center, rgba(16, 22, 31, .55), rgba(16, 22, 31, .9));
+}
+.endgame[hidden] { display: none; }
+.endgame-card {
+  min-width: 340px; max-width: 460px; padding: 26px 30px; border-radius: 16px; text-align: center;
+  background: rgba(42, 23, 8, .92); border: 3px solid #e23b3b; color: #fff8e6;
+}
+.endgame[data-tone='victory'] .endgame-card { border-color: #ffd27a; }
+.endgame-title { font-family: 'Pirata One', 'Nunito', serif; font-size: 54px; line-height: 1; margin-bottom: 8px; color: #ffb3b3; }
+.endgame[data-tone='victory'] .endgame-title { color: #ffd27a; }
+.endgame-card p { margin: 0 0 18px; font-size: 16px; }
+.endgame-card button {
+  margin: 0 6px; padding: 9px 18px; border-radius: 10px; border: 2px solid #c0814a; background: #6e3b1b; color: #fff8e6;
+  font: 800 15px Nunito, sans-serif; cursor: pointer;
+}
+.endgame-card button:hover { background: #c0814a; color: #2a1708; }
+.hud-build kbd {
+  display: inline-block; padding: 1px 7px; margin-right: 4px; border-radius: 5px; background: #fff8e6; color: #2a1708; font: 800 13px Nunito, sans-serif;
+}

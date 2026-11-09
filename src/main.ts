@@ -25,6 +25,9 @@ import { GatherUi } from './ui/GatherUi';
 import { IslandMarkers } from './world/IslandMarkers';
 import { EnemyShip, ENEMY_ID } from './world/EnemyShip';
 import { TargetUi } from './ui/TargetUi';
+import { Territory } from './world/Strongholds';
+import { TerritoryUi } from './ui/TerritoryUi';
+import { ballisticVelocity } from './combat/ballistics';
 import { MapView } from './ui/MapView';
 import { WorldEdge } from './world/WorldEdge';
 import { edgeCurrent, steerToward } from './world/navigation';
@@ -243,6 +246,7 @@ const enemy = new EnemyShip(waves, wind, world.islands, {
     effects.splash(at, 2.2);
     audio.woodHit(at);
     audio.splash(at, 1.6);
+    endRaid();
   },
 }, NPC_COLOUR);
 scene.add(enemy.group);
@@ -275,7 +279,7 @@ function updateTargeting(playing: boolean): void {
       position: targetAt,
       health: targeted.hp / targeted.maxHp,
       distance: Math.hypot(targeted.position.x - ship.body.position.x, targeted.position.z - ship.body.position.z),
-      note: targeted.state === 'sinking' ? 'Sinking!' : targeted.state === 'fight' ? 'Engaging you' : 'On patrol',
+      note: targeted.state === 'sinking' ? 'Sinking!' : targeted.state === 'fight' ? 'Engaging you' : targeted.state === 'raid' ? 'Raiding your home' : 'On patrol',
     },
     camera,
   );
@@ -325,14 +329,88 @@ function followCourse(dt: number): boolean {
 
 const islandMarkers = new IslandMarkers(world.islands);
 scene.add(islandMarkers.group);
-gathering.onHaul = (island) => {
+gathering.onHaul = () => audio.woodHit(ship.body.position);
+
+// --- Territory: home island, strongholds, raids, winning and losing -------------
+const territory = new Territory(world.islands, {
+  fire: (from, vel, owner) => {
+    projectiles.spawn(from, vel, BROADSIDE.kind, owner);
+    muzzleDir.copy(vel).normalize();
+    effects.muzzle(from, muzzleDir, _zero, 1.5);
+    audio.play('cannon', { volume: 0.9, rate: 0.85, rateJitter: 0.06, position: from });
+  },
+  ruined: (s) => {
+    effects.splinters(s.collider.position, 40);
+    audio.woodHit(s.site);
+    if (s.side === 'player') weatherUi.announce(s.home ? 'Your home is in ruins!' : `${s.island.name} is in ruins!`, 'Drive the raiders off before they take it', 'danger');
+    else weatherUi.announce('Their walls are down!', 'Hold your ship close to take the island', 'good');
+  },
+  captured: (s, by) => {
+    if (by === 'npc' && s.home) {
+      if (mode !== 'over') endGame(false);
+    } else if (by === 'player' && s === territory.enemyHome) {
+      endGame(true);
+    } else if (by === 'player') weatherUi.announce(`${s.island.name} is yours`, 'Your colours fly over it', 'good');
+    else weatherUi.announce(`${s.island.name} is lost`, 'The raiders burned your outpost', 'danger');
+  },
+  changed: () => islandMarkers.refresh(),
+});
+scene.add(territory.group);
+islandMarkers.refresh();
+const territoryUi = new TerritoryUi(hudRoot, document.body, {
+  retry: () => location.reload(),
+  newMap: () => {
+    rollWorldSeed();
+    location.reload();
+  },
+  carryOn: () => {
+    territoryUi.hideEnd();
+    startPlay();
+  },
+});
+/** The island the flagship is alongside, close enough to build on. */
+let buildIsland: Island | null = null;
+function tryBuild(island: Island): void {
+  if (island !== buildIsland || !territory.build(island, hold)) return;
   audio.woodHit(ship.body.position);
-  // Working an island nobody holds makes it yours (forts and capture come with the territory update).
-  if (island.owner === 'none') {
-    island.owner = 'player';
-    islandMarkers.refresh();
+  const s = territory.at(island)!;
+  weatherUi.announce(s.levelName, s.home ? `Your home at ${island.name} grows stronger` : `${island.name} flies your colours`, 'good');
+}
+chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold);
+chart.onIslandAction = (island) => tryBuild(island);
+
+/** Raids: every so often the Marauder sails for the player's home and shells it. */
+const RAID = { first: 240, every: 200 };
+let raidIn = RAID.first;
+function endRaid(): void {
+  enemy.raidTarget = null;
+  raidIn = RAID.every;
+}
+function updateRaids(dt: number): void {
+  if (enemy.raidTarget) {
+    // called off once the home has been rebuilt behind them, or lost
+    if (territory.home.side !== 'player') endRaid();
+    return;
   }
-};
+  raidIn -= dt;
+  if (raidIn > 0 || !enemy.alive) return;
+  enemy.raidTarget = territory.home.site;
+  weatherUi.announce('Raiders!', `The Marauder is making for your home at ${territory.home.island.name}`, 'danger');
+}
+
+function endGame(won: boolean): void {
+  mode = 'over';
+  enemy.raidTarget = null;
+  raidIn = RAID.every;
+  chart.close();
+  settings.showGear(false);
+  hudRoot.classList.add('in-menu');
+  gun.preview.visible = false;
+  broadside.ribbon.visible = false;
+  marker.visible = false;
+  if (won) territoryUi.showVictory(territory.enemyHome!);
+  else territoryUi.showDefeat(territory.home);
+}
 
 /** Push the player's settings (colour, fire mode) into the game. */
 function applySettings(): void {
@@ -340,6 +418,7 @@ function applySettings(): void {
   ship.setColour(s.colour);
   broadside.fireMode = s.fireMode;
   islandMarkers.setPlayerColour(s.colour);
+  territory.setPlayerColour(s.colour);
   yard.colour = s.colour;
   hud.setFireMode(s.fireMode);
 }
@@ -395,7 +474,7 @@ function updateGathering(dt: number): void {
 }
 
 // --- Main menu ------------------------------------------------------------
-let mode: 'menu' | 'play' | 'yard' = 'menu';
+let mode: 'menu' | 'play' | 'yard' | 'over' = 'menu';
 let voyageStarted = false;
 const menu = new MainMenu(document.body, {
   play: () => startPlay(),
@@ -511,6 +590,7 @@ Object.assign(window, {
     projectiles,
     targets,
     enemy,
+    territory,
     chart,
     get course() {
       return course;
@@ -539,9 +619,17 @@ projectiles.onImpact = (e: ImpactEvent) => {
     audio.splash(e.position, size);
     return;
   }
+  const by = territory.sideOf(e.owner, RAFT_ID, ENEMY_ID);
   if (e.type === 'land') {
     effects.splinters(e.position, e.kind === 1 ? 8 : 4);
     audio.woodHit(e.position);
+    territory.landed(e.position, e.kind, by);
+    return;
+  }
+  if (territory.owns(e.colliderId)) {
+    effects.splinters(e.position, e.kind === 1 ? 14 : 7);
+    audio.woodHit(e.position);
+    territory.hit(e.colliderId, e.kind, by);
     return;
   }
   // weather: sea creatures and cursed ships
@@ -553,7 +641,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
   if (e.colliderId === ENEMY_ID) {
     effects.splinters(e.position, e.kind === 1 ? 14 : 7);
     audio.woodHit(e.position);
-    if (enemy.hit(e.kind)) targets.score += 10;
+    if (by !== 'npc' && enemy.hit(e.kind) && e.owner === RAFT_ID) targets.score += 10;
     return;
   }
   if (e.colliderId >= TARGET_ID_BASE) {
@@ -586,18 +674,6 @@ function fireBarrage(n: number): void {
     const vel = ballisticVelocity(from, to, 70 + Math.random() * 15);
     queuedShots.push({ delay: Math.random() * 3, pos: from, vel });
   }
-}
-
-/** Low-arc launch velocity from a to b at muzzle speed v (drag ignored). */
-function ballisticVelocity(a: THREE.Vector3, b: THREE.Vector3, v: number): THREE.Vector3 {
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  const dy = b.y - a.y;
-  const d = Math.hypot(dx, dz);
-  const g = 9.81;
-  const disc = v ** 4 - g * (g * d * d + 2 * dy * v * v);
-  const elev = disc < 0 ? Math.PI / 4 : Math.atan((v * v - Math.sqrt(disc)) / (g * d));
-  return new THREE.Vector3((dx / d) * Math.cos(elev) * v, Math.sin(elev) * v, (dz / d) * Math.cos(elev) * v);
 }
 
 // Mouse aim: where the ray from the camera through the cursor meets the sea.
@@ -668,6 +744,8 @@ function updateAimPoint(dt: number): void {
   aimLevel.y = 0;
 }
 
+const _playerSight = { position: ship.body.position, velocity: ship.body.velocity, alive: true };
+const _enemySight = { position: enemy.position, velocity: enemy.ship.body.velocity, alive: true };
 const muzzlePos = new THREE.Vector3();
 const muzzleDir = new THREE.Vector3();
 const shotVel = new THREE.Vector3();
@@ -692,7 +770,7 @@ function frame(): void {
     else if (mode === 'yard') {
       yard.close();
       openMenu();
-    } else if (voyageStarted) startPlay();
+    } else if (mode === 'menu' && voyageStarted) startPlay();
   }
   if (playing) {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
@@ -774,14 +852,25 @@ function frame(): void {
         others: enemy.alive ? [{ position: enemy.position, heading: compass(enemy.ship.body.forward(stern)), colour: NPC_COLOUR, name: enemy.name, hostile: true }] : [],
         course,
         playerColour: settings.settings.colour,
+        strongholds: territory.strongholds,
       });
     }
   }
   if (playing) updateGathering(dt);
+  // territory
+  buildIsland = playing ? territory.islandInReach(ship.body.position) : null;
+  if (playing && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
+  if (playing) updateRaids(dt);
+  _playerSight.alive = playing;
+  _playerSight.position = ship.body.position;
+  _playerSight.velocity = ship.body.velocity;
+  _enemySight.alive = enemy.alive;
+  territory.update(dt, _playerSight, _enemySight, playing);
+  territoryUi.update(territory, buildIsland, hold);
   islandMarkers.update(dt, wind.angle);
 
   targets.update(dt, waves.currentTime);
-  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...enemy.colliders(), ...weather.colliders()]);
+  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...enemy.colliders(), ...territory.colliders(), ...weather.colliders()]);
   projectiles.update(dt);
   effects.update(dt);
 

@@ -20,6 +20,8 @@ export interface ImpactEvent {
   position: THREE.Vector3;
   kind: number;
   colliderId: number;
+  /** Collider id of whoever fired it (-1 or lower: nobody in particular). */
+  owner: number;
 }
 
 export interface Collider {
@@ -172,6 +174,7 @@ export class ProjectileSystem {
           position: new THREE.Vector3(res.events[o + 1], res.events[o + 2], res.events[o + 3]),
           kind: res.events[o + 4],
           colliderId: res.events[o + 5],
+          owner: res.events[o + 6],
         });
       }
     }
