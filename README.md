@@ -91,7 +91,9 @@ The game opens on a title menu: options on the left, the raft sailing by itself 
 
 Recorded sounds live in `public/sounds/` (`cannon-fire.mp3`, `sail-full.mp3`). Splashes, wood hits, the ocean bed and the wind bed are synthesized in `src/audio/AudioManager.ts` until recordings exist for them. To add a recording, drop the file in `public/sounds/` and add it to `SAMPLES` in that file.
 
-Volumes (master, sound effects, sea and wind, music) and mute are set in the Settings window (`src/ui/Settings.ts`) and remembered between sessions. Each has its own bus in `AudioManager`; the music bus is ready but nothing plays on it yet.
+Volumes (master, sound effects, sea and wind, music) and mute are set in the Settings window (`src/ui/Settings.ts`) and remembered between sessions. Each has its own bus in `AudioManager`.
+
+Music lives in `public/music/` (`.m4a`). The menu plays *Sailor's Log*; at sea *Sailing the calm seas* and *Sailor's Log* alternate; *Sailing into the Fog* is kept for fog weather. Tracks are listed in `MUSIC` in `AudioManager.ts` and chosen with `audio.setPlaylist([...])`, which crossfades.
 
 The sea never shows inside a hull: each vessel carries an invisible lid (`src/render/waterMask.ts`) drawn after the boat and before the ocean.
 

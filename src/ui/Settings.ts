@@ -40,7 +40,7 @@ const BUSES: { id: AudioBus; label: string; note?: string }[] = [
   { id: 'master', label: 'Master volume' },
   { id: 'effects', label: 'Sound effects', note: 'guns, splashes, hits' },
   { id: 'ambience', label: 'Sea and wind' },
-  { id: 'music', label: 'Music', note: 'no music in the game yet' },
+  { id: 'music', label: 'Music' },
 ];
 
 /**
