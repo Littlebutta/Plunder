@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:33Z",
+  "updated": "2026-11-09T23:45:36Z",
   "categories": [
     {
       "key": "feature",
@@ -719,17 +719,19 @@
       "id": "F-28",
       "cat": "feature",
       "title": "Defender ships that guard territory, ordered to defend/patrol from the minimap",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "low",
       "milestone": "M-7",
       "tags": [
         "territory",
         "ai"
       ],
-      "notes": "Open question: a perk, an upgrade, or something built at a port? Undecided (Devin: \"idk yet\").",
-      "links": [],
+      "notes": "Open question: a perk, an upgrade, or something built at a port? Undecided (Devin: \"idk yet\").\n\n2026-11-09 (Claude): PR #15: escort sloops",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/15"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T23:45:36Z",
       "by": "Claude"
     },
     {
