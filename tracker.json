@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:01Z",
+  "updated": "2026-11-09T21:58:22Z",
   "categories": [
     {
       "key": "feature",
@@ -994,6 +994,22 @@
       ],
       "created": "2026-11-09T21:20:31Z",
       "updated": "2026-11-09T21:20:31Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-36",
+      "cat": "feature",
+      "title": "Settings window: sound, ambience and music volume, mute",
+      "status": "idea",
+      "tags": [],
+      "notes": "Built in PR #8. Menu button and in-game gear. Music bus ready, no music yet.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/8"
+      ],
+      "created": "2026-11-09T21:58:22Z",
+      "priority": "medium",
+      "milestone": "M-8",
+      "updated": "2026-11-09T21:58:22Z",
       "by": "Claude"
     }
   ],
