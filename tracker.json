@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:51Z",
+  "updated": "2026-11-09T22:30:53Z",
   "categories": [
     {
       "key": "feature",
@@ -1112,14 +1112,16 @@
       "id": "F-41",
       "cat": "feature",
       "title": "Higher ship fidelity in the same toon style",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "Planned for the next update (shipyard v2).",
-      "links": [],
+      "notes": "Planned for the next update (shipyard v2).\n\n2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T21:58:37Z",
       "priority": "medium",
       "milestone": "M-4",
-      "updated": "2026-11-09T21:58:37Z",
+      "updated": "2026-11-09T22:30:53Z",
       "by": "Claude"
     },
     {
