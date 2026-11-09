@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:37Z",
+  "updated": "2026-11-09T21:58:39Z",
   "categories": [
     {
       "key": "feature",
@@ -1112,6 +1112,20 @@
       "priority": "medium",
       "milestone": "M-4",
       "updated": "2026-11-09T21:58:37Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-42",
+      "cat": "feature",
+      "title": "Enemy ship: shootable, click to target, red off-screen direction indicator",
+      "status": "idea",
+      "tags": [],
+      "notes": "Planned as the third update of this batch.",
+      "links": [],
+      "created": "2026-11-09T21:58:39Z",
+      "priority": "high",
+      "milestone": "M-5",
+      "updated": "2026-11-09T21:58:39Z",
       "by": "Claude"
     }
   ],
