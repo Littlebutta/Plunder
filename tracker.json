@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:55Z",
+  "updated": "2026-11-09T21:58:58Z",
   "categories": [
     {
       "key": "feature",
@@ -1018,7 +1018,7 @@
       "id": "F-37",
       "cat": "feature",
       "title": "Right click fires the swivel, Space fires the broadside",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Built in PR #8.",
       "links": [
@@ -1027,7 +1027,7 @@
       "created": "2026-11-09T21:58:24Z",
       "priority": "medium",
       "milestone": "M-5",
-      "updated": "2026-11-09T21:58:24Z",
+      "updated": "2026-11-09T21:58:58Z",
       "by": "Claude"
     },
     {
