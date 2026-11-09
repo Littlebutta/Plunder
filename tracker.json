@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:14Z",
+  "updated": "2026-11-09T21:20:17Z",
   "categories": [
     {
       "key": "feature",
@@ -652,10 +652,10 @@
       "tags": [
         "economy"
       ],
-      "notes": "Resource type and amount depend on island type and size.",
+      "notes": "Resource type and amount depend on island type and size.\n\n2026-11-09 (Claude): PR #6: islands can have a port (pier); gathering there needs the ship in range of the pier. Player-built ports still to do.",
       "links": [],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T21:20:17Z",
       "by": "Claude"
     },
     {
