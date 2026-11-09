@@ -10,6 +10,11 @@ export class Input {
   private dy = 0;
   private wheel = 0;
   dragging = false;
+  /** Pointer position in normalized device coords (-1..1), for aiming. */
+  readonly pointer = { x: 0, y: -0.2, inside: false };
+  private downAt = 0;
+  private dragDist = 0;
+  private clicked = false;
   /** Seconds since the user last orbited the camera by hand. */
   idleOrbit = Infinity;
 
@@ -24,18 +29,29 @@ export class Input {
 
     target.addEventListener('pointerdown', (e) => {
       this.dragging = true;
+      this.downAt = performance.now();
+      this.dragDist = 0;
       target.setPointerCapture(e.pointerId);
     });
     target.addEventListener('pointerup', (e) => {
       this.dragging = false;
       target.releasePointerCapture(e.pointerId);
+      // A short press that barely moved is a click (fire), not an orbit drag.
+      if (this.dragDist < 6 && performance.now() - this.downAt < 600 && e.button === 0) this.clicked = true;
     });
     target.addEventListener('pointermove', (e) => {
+      const r = target.getBoundingClientRect();
+      this.pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      this.pointer.y = -(((e.clientY - r.top) / r.height) * 2 - 1);
+      this.pointer.inside = true;
       if (!this.dragging) return;
+      this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (this.dragDist < 6) return; // ignore jitter during a click
       this.dx += e.movementX;
       this.dy += e.movementY;
       this.idleOrbit = 0;
     });
+    target.addEventListener('pointerleave', () => (this.pointer.inside = false));
     target.addEventListener(
       'wheel',
       (e) => {
@@ -64,6 +80,11 @@ export class Input {
     return this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
   }
 
+  /** Fire request this frame: a click on the sea or Space. */
+  get fire(): boolean {
+    return this.clicked || this.wasPressed('Space');
+  }
+
   get steer(): number {
     return this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
   }
@@ -77,6 +98,7 @@ export class Input {
   /** Call at the end of each frame. */
   endFrame(dt: number): void {
     this.pressed.clear();
+    this.clicked = false;
     if (!this.dragging) this.idleOrbit += dt;
   }
 
