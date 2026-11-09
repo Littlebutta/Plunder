@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:11Z",
+  "updated": "2026-11-09T21:20:14Z",
   "categories": [
     {
       "key": "feature",
@@ -751,10 +751,10 @@
       "tags": [
         "network"
       ],
-      "notes": "",
+      "notes": "2026-11-09 (Claude): Devin 2026-11-09: use Steam friend invites and overlay if possible. Plan: steamworks.js in Electron; needs a Steamworks app ID.",
       "links": [],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T21:20:14Z",
       "by": "Claude"
     },
     {
