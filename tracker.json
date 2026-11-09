@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:38:07Z",
+  "updated": "2026-11-09T22:47:45Z",
   "categories": [
     {
       "key": "feature",
@@ -1206,14 +1206,16 @@
       "id": "F-47",
       "cat": "feature",
       "title": "Generated map with a world's-edge waterfall",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Merged in PR #14",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/14"
+      ],
       "created": "2026-11-09T22:15:52Z",
       "priority": "high",
       "milestone": "M-6",
-      "updated": "2026-11-09T22:15:52Z",
+      "updated": "2026-11-09T22:47:45Z",
       "by": "Claude"
     },
     {
