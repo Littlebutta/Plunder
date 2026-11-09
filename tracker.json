@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:13Z",
+  "updated": "2026-11-09T20:49:15Z",
   "categories": [
     {
       "key": "feature",
@@ -917,6 +917,20 @@
       "priority": "medium",
       "milestone": "M-6",
       "updated": "2026-11-09T20:49:13Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-33",
+      "cat": "feature",
+      "title": "Ferns on islands",
+      "status": "idea",
+      "tags": [],
+      "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-09T20:49:15Z",
+      "priority": "low",
+      "milestone": "M-6",
+      "updated": "2026-11-09T20:49:15Z",
       "by": "Claude"
     }
   ],
