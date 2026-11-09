@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:30:53Z",
+  "updated": "2026-11-09T22:30:55Z",
   "categories": [
     {
       "key": "feature",
@@ -1157,14 +1157,16 @@
       "id": "F-44",
       "cat": "feature",
       "title": "Broadside fire mode: sequential or all at once (with a little random spread in timing)",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T22:15:45Z",
       "priority": "medium",
       "milestone": "M-5",
-      "updated": "2026-11-09T22:15:45Z",
+      "updated": "2026-11-09T22:30:55Z",
       "by": "Claude"
     },
     {
