@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
-import { addOutline, toonMaterial } from '../render/toon';
+import { addOutline, sailTint, setToonColour, toonMaterial } from '../render/toon';
 import { createWaterMask } from '../render/waterMask';
 import { HullSpec } from '../physics/FloatingBody';
 import { DriveSpec, Vessel } from '../ship/Vessel';
@@ -35,10 +35,10 @@ export const RAFT_HULL: HullSpec = {
  * and the wind adds a boost on top when it is behind you.
  */
 export const RAFT_DRIVE: DriveSpec = {
-  /** N at full sail with no help from the wind (~8 knots top speed). */
-  baseThrust: 950,
+  /** N at full sail with no help from the wind (~9.5 knots top speed). */
+  baseThrust: 1350,
   /** Extra N at full sail running dead downwind in a strength-1 wind. */
-  windBoost: 1100,
+  windBoost: 1500,
   /** How much a headwind slows you (0 = not at all, 1 = cancels the base drive). */
   headwindPenalty: 0.15,
   reverseThrust: 450, // N when paddling backwards
@@ -57,7 +57,7 @@ export const RAFT_DRIVE: DriveSpec = {
  */
 export class Raft extends Vessel {
   /** Bow mount point for a deck gun, in raft space. */
-  readonly bowMount = new THREE.Vector3(0, LOG_R + 0.12, -1.45);
+  readonly swivelMount = new THREE.Vector3(0, LOG_R + 0.12, -1.45);
   /** Where the test broadside battery sits (C). */
   readonly gunMounts = [
     new THREE.Vector3(1.12, 0.3, -0.55),
@@ -74,6 +74,13 @@ export class Raft extends Vessel {
   private readonly flag: THREE.Mesh;
   private readonly tiller: THREE.Group;
   private time = 0;
+  private readonly sailMat = toonMaterial(PALETTE.sail, { side: THREE.DoubleSide });
+  private readonly flagMat = toonMaterial(PALETTE.flag, { side: THREE.DoubleSide });
+
+  setColour(colour: THREE.ColorRepresentation): void {
+    setToonColour(this.sailMat, sailTint(colour));
+    setToonColour(this.flagMat, colour);
+  }
 
   constructor(waves: WaveField, wind: Wind) {
     super(RAFT_HULL, RAFT_DRIVE, waves, wind);
@@ -149,14 +156,14 @@ export class Raft extends Vessel {
     }
     sailGeo.translate(0, -sailH / 2, 0);
     sailGeo.computeVertexNormals();
-    this.sailMesh = new THREE.Mesh(sailGeo, toonMaterial(PALETTE.sail, { side: THREE.DoubleSide }));
+    this.sailMesh = new THREE.Mesh(sailGeo, this.sailMat);
     this.sailMesh.castShadow = true;
     this.sailPivot.add(this.sailMesh);
 
     // Pennant on top of the mast
     const flagGeo = new THREE.PlaneGeometry(0.7, 0.3, 6, 1);
     flagGeo.translate(0.35, 0, 0);
-    this.flag = new THREE.Mesh(flagGeo, toonMaterial(PALETTE.flag, { side: THREE.DoubleSide }));
+    this.flag = new THREE.Mesh(flagGeo, this.flagMat);
     this.flag.position.set(0, LOG_R + mastH + 0.05, -0.25);
     this.group.add(this.flag);
 

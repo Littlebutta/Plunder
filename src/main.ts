@@ -22,6 +22,10 @@ import { AudioManager } from './audio/AudioManager';
 import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
+import { IslandMarkers } from './world/IslandMarkers';
+import { EnemyShip, ENEMY_ID } from './world/EnemyShip';
+import { TargetUi } from './ui/TargetUi';
+import { NPC_COLOUR } from './ui/Settings';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
@@ -81,8 +85,12 @@ scene.add(ship.group);
 // Swivel gun on the bow
 const RAFT_ID = 0;
 const gun = new SwivelGun(waves);
-gun.mount.position.copy(ship.bowMount);
-ship.group.add(gun.mount);
+function mountSwivel(): void {
+  gun.mount.position.copy(ship.swivelMount);
+  gun.mount.rotation.y = ship.swivelFacing; // a stern gun faces aft
+  ship.group.add(gun.mount);
+}
+mountSwivel();
 scene.add(gun.preview);
 
 // Broadside battery: the raft carries a test battery (C to fit / remove);
@@ -107,6 +115,9 @@ scene.add(streaks.mesh);
 const audio = new AudioManager();
 const settings = new SettingsPanel(document.body, audio);
 settings.onClose = () => canvas.focus();
+settings.onChange = () => applySettings();
+ship.setColour(settings.settings.colour);
+broadside.fireMode = settings.settings.fireMode;
 const onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
 ship.onSailFilled = onSailFilled;
 
@@ -137,9 +148,10 @@ function setShip(next: Vessel): void {
   ship.body.placeOnWater(old.body.position.x, old.body.position.z, heading);
   ship.onSailFilled = onSailFilled;
   scene.add(ship.group);
-  gun.mount.position.copy(ship.bowMount);
-  ship.group.add(gun.mount);
+  mountSwivel();
+  ship.setColour(settings.settings.colour);
   broadside = new Broadside(ship.group, ship.gunMounts, waves);
+  broadside.fireMode = settings.settings.fireMode;
   // a designed ship shows the cannons it was built with; the raft's test battery stays off until C
   broadside.setVisible(ship instanceof DesignedShip && ship.gunMounts.length > 0);
   scene.add(broadside.ribbon);
@@ -214,7 +226,77 @@ const shipState = (): ShipState => ({ position: ship.body.position, velocity: sh
 const hold = new Hold();
 const gathering = new Gathering(world.islands, hold);
 const gatherUi = new GatherUi(hudRoot);
-gathering.onHaul = () => audio.woodHit(ship.body.position);
+// --- Enemy ship + targeting ---------------------------------------------------
+const enemy = new EnemyShip(waves, wind, world.islands, {
+  fire: (from, dir) => {
+    shotVel.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed);
+    projectiles.spawn(from, shotVel, BROADSIDE.kind, ENEMY_ID);
+    effects.muzzle(from, dir, enemy.ship.body.velocity, 1.5);
+    audio.play('cannon', { volume: 0.9, rate: 0.95, rateJitter: 0.06, position: from });
+  },
+  sunk: (at) => {
+    effects.splinters(at, 40);
+    effects.splash(at, 2.2);
+    audio.woodHit(at);
+    audio.splash(at, 1.6);
+  },
+}, NPC_COLOUR);
+scene.add(enemy.group);
+const targetUi = new TargetUi(hudRoot);
+/** The ship the player has marked (click it; click it again or press T to let go). */
+let targeted: EnemyShip | null = null;
+const targetAt = new THREE.Vector3();
+const screenPt = { x: 0, y: 0, onScreen: false, behind: false };
+
+function updateTargeting(playing: boolean): void {
+  targetAt.copy(enemy.position).setY(enemy.position.y + 2.5);
+  if (playing && input.clicked && enemy.alive) {
+    // a click near the ship on screen marks it: generous, so it works at range and in a swell
+    TargetUi.project(targetAt, camera, screenPt);
+    const px = (input.pointer.x * 0.5 + 0.5) * window.innerWidth;
+    const py = (-input.pointer.y * 0.5 + 0.5) * window.innerHeight;
+    const dist = enemy.position.distanceTo(camera.position);
+    const reach = THREE.MathUtils.clamp(1900 / Math.max(dist, 10), 30, 110);
+    if (!screenPt.behind && Math.hypot(px - screenPt.x, py - screenPt.y) < reach) targeted = targeted ? null : enemy;
+  }
+  if (playing && input.wasPressed('KeyT')) targeted = targeted ? null : enemy.state !== 'gone' ? enemy : null;
+  if (targeted && targeted.state === 'gone') targeted = null;
+  if (!playing || !targeted) {
+    targetUi.update(null, camera);
+    return;
+  }
+  targetUi.update(
+    {
+      name: targeted.name,
+      position: targetAt,
+      health: targeted.hp / targeted.maxHp,
+      distance: Math.hypot(targeted.position.x - ship.body.position.x, targeted.position.z - ship.body.position.z),
+      note: targeted.state === 'sinking' ? 'Sinking!' : targeted.state === 'fight' ? 'Engaging you' : 'On patrol',
+    },
+    camera,
+  );
+}
+
+const islandMarkers = new IslandMarkers(world.islands);
+scene.add(islandMarkers.group);
+gathering.onHaul = (island) => {
+  audio.woodHit(ship.body.position);
+  // Working an island nobody holds makes it yours (forts and capture come with the territory update).
+  if (island.owner === 'none') {
+    island.owner = 'player';
+    islandMarkers.refresh();
+  }
+};
+
+/** Push the player's settings (colour, fire mode) into the game. */
+function applySettings(): void {
+  const s = settings.settings;
+  ship.setColour(s.colour);
+  broadside.fireMode = s.fireMode;
+  islandMarkers.setPlayerColour(s.colour);
+  yard.colour = s.colour;
+  hud.setFireMode(s.fireMode);
+}
 // Marker that floats over the island (or its port) you can gather from.
 const marker = new THREE.Group();
 const markerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -282,7 +364,7 @@ const menu = new MainMenu(document.body, {
 
 const yard = new Shipyard(document.body, {
   launch: (design) => {
-    setShip(new DesignedShip(design, waves, wind));
+    setShip(new DesignedShip(design, waves, wind, settings.settings.colour));
     yard.close();
     startPlay();
   },
@@ -385,6 +467,7 @@ Object.assign(window, {
     world,
     projectiles,
     targets,
+    enemy,
     audio,
     barrage,
     weather,
@@ -418,6 +501,12 @@ projectiles.onImpact = (e: ImpactEvent) => {
   if (weather.owns(e.colliderId)) {
     const at = weather.hit(e.colliderId, e.kind);
     if (at) audio.woodHit(at);
+    return;
+  }
+  if (e.colliderId === ENEMY_ID) {
+    effects.splinters(e.position, e.kind === 1 ? 14 : 7);
+    audio.woodHit(e.position);
+    if (enemy.hit(e.kind)) targets.score += 10;
     return;
   }
   if (e.colliderId >= TARGET_ID_BASE) {
@@ -560,6 +649,7 @@ function frame(): void {
   if (playing) {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
     if (input.wasPressed('KeyH')) hud.toggleHelp();
+    if (input.wasPressed('KeyV')) settings.toggleFireMode();
     if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
     if (input.wasPressed('KeyM')) settings.toggleMute();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
@@ -571,6 +661,7 @@ function frame(): void {
   sim.advance(dt, (h) => {
     waves.update(h);
     ship.physicsStep(h);
+    enemy.physicsStep(h);
   });
   ship.syncVisuals(dt);
 
@@ -616,10 +707,12 @@ function frame(): void {
     queuedShots.splice(i, 1);
   }
 
+  enemy.update(dt, ship.body.position, playing);
   if (playing) updateGathering(dt);
+  islandMarkers.update(dt, wind.angle);
 
   targets.update(dt, waves.currentTime);
-  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...weather.colliders()]);
+  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...enemy.colliders(), ...weather.colliders()]);
   projectiles.update(dt);
   effects.update(dt);
 
@@ -630,6 +723,7 @@ function frame(): void {
 
   ship.body.forward(fwd);
   follow.update(dt, ship.body.position);
+  updateTargeting(playing);
 
   // weather + day-night: lights, fog, sky and sea colours, events
   weather.update(dt, shipState(), camera, playing);
@@ -664,6 +758,7 @@ function frame(): void {
   input.endFrame();
   requestAnimationFrame(frame);
 }
+applySettings();
 openMenu();
 follow.yaw = 2.3;
 follow.pitch = 0.2;

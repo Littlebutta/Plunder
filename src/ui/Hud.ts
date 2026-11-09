@@ -14,6 +14,7 @@ export class Hud {
   private readonly scoreEl: HTMLElement;
   private readonly shotsEl: HTMLElement;
   private readonly threadEl: HTMLElement;
+  private readonly fireModeEl: HTMLElement;
   private fpsAcc = 0;
   private fpsFrames = 0;
 
@@ -24,7 +25,8 @@ export class Hud {
         <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost; hold S at zero to back-paddle)</div>
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
         <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire broadside</div>
-        <div><kbd>C</kbd> fit / stow broadside cannons (turn the ship to bring them to bear)</div>
+        <div><kbd>C</kbd> fit / stow broadside cannons (turn the ship to bring them to bear) · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
+        <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go): a red arrow points to it when it is off screen</div>
         <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
         <div><kbd>Left drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>B</kbd> barrage test · <kbd>M</kbd> mute · <kbd>G</kbd> tuning · <kbd>P</kbd> probes · <kbd>H</kbd> hide help</div>
@@ -39,7 +41,7 @@ export class Hud {
         <div class="stat" data-bsbox hidden><div class="reload"><i data-bs></i></div><span>broadside</span></div>
         <div class="stat"><b data-fps>–</b><span>fps</span></div>
       </div>
-      <div class="hud-panel hud-score"><b data-score>0</b> barrels · <span data-shots>0</span> shells in flight<span data-thread></span></div>`;
+      <div class="hud-panel hud-score"><b data-score>0</b> points · <span data-shots>0</span> shells in flight<span data-thread></span></div>`;
     const q = (sel: string) => root.querySelector(sel) as HTMLElement;
     this.speedEl = q('[data-speed]');
     this.sailFill = q('[data-sail]');
@@ -55,6 +57,11 @@ export class Hud {
     this.scoreEl = q('[data-score]');
     this.shotsEl = q('[data-shots]');
     this.threadEl = q('[data-thread]');
+    this.fireModeEl = q('[data-firemode]');
+  }
+
+  setFireMode(mode: 'ripple' | 'volley'): void {
+    this.fireModeEl.textContent = mode === 'volley' ? 'all at once' : 'in sequence';
   }
 
   toggleHelp(): void {

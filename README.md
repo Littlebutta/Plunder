@@ -51,6 +51,8 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Left mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
+| Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
+| V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | M | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
 | P | Show buoyancy probes (red = underwater) |
@@ -77,11 +79,20 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 Each island holds resources that depend on its type and size (wood, stone, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
 
+## Enemy ship
+
+A white-sailed NPC sloop, the *Marauder* (`src/world/EnemyShip.ts`), patrols a circle around the middle of the map. It is built from a shipyard design and sails on the same physics as the player. Come within 150 m and it closes to about 60 m, keeps you on its beam and trades broadsides (its shots scatter a little); its hits take points off your hull. It has 100 hull points (a swivel shot takes 7, a cannon shell 16), sinks when they are gone, and a fresh one sails in 25 s later. Numbers are in `ENEMY`.
+
 ## Shipyard
 
-Open it from the main menu. On the **top view** drag to draw the hull's outline (one side, it is mirrored); on the **side view** drag to draw the keel line under the water. Switch tools to place masts (up to three) and pairs of cannons on snap points, set length, beam, keel depth and freeboard with the sliders, or start from a preset (Dinghy, Sloop, Brig, Barge). The design is lofted into 3D live on the right, with its weight, draft, speed, handling, hold and cost. **Launch** swaps your vessel for the design where you are; the cannons you placed become the broadside. The last design is remembered.
+Open it from the main menu. On the **top view** drag to draw the hull's outline (one side, it is mirrored); on the **side view** drag to draw the keel line under the water. Set length, beam, keel depth and freeboard with the sliders, or start from a preset (Dinghy, Sloop, Brig, Barge, Galleon).
 
-A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, mast and cannon slots. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Building is free for now; costs are shown for balancing.
+- **Masts** (up to three): click a ring to step it through square sail, triangle (lateen) sail, none. A square sail takes the wind's boost best with the wind astern; a triangle takes it best with the wind on the beam or a little ahead and less dead downwind. A **jib** adds boost on a close reach. The stats show the rig's boost astern, on the beam and close-hauled (`sailBoost`, `jibBoost`, `rigBoost`).
+- **Cannons**: click anywhere along either edge of the top view (starboard is the upper edge) to place a gun, click a gun to remove it. "Both sides" places mirrored pairs. Guns go on the open deck or on up to three gun decks below it, firing through ports in the hull side; a deck is only offered where its ports clear the waterline, so more decks need more freeboard. A gun whose muzzle is under water when the salvo fires stays silent.
+- **Swivel**: stands at the bow or the stern.
+ The design is lofted into 3D live on the right, with its weight, draft, speed, handling, hold and cost. **Launch** swaps your vessel for the design where you are; the cannons you placed become the broadside. The last design is remembered.
+
+A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, masts with their sail type, a jib flag, individually placed cannons (`{t, side, level}`) and the swivel's position. Older saved designs are upgraded when loaded. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Building is free for now; costs are shown for balancing.
 
 ## Weather and day-night
 
@@ -107,6 +118,8 @@ The game opens on a title menu: options on the left, the raft sailing by itself 
 ## Sound
 
 Recorded sounds live in `public/sounds/` (`cannon-fire.mp3`, `sail-full.mp3`). Splashes, wood hits, the ocean bed and the wind bed are synthesized in `src/audio/AudioManager.ts` until recordings exist for them. To add a recording, drop the file in `public/sounds/` and add it to `SAMPLES` in that file.
+
+Settings also holds your **colour** (sails, pennant and the banners on islands you hold; white is for NPCs) and the broadside fire mode. Islands with a port start NPC-held; gathering at an unheld island makes it yours for now, until forts and capture arrive.
 
 Volumes (master, sound effects, sea and wind, music) and mute are set in the Settings window (`src/ui/Settings.ts`) and remembered between sessions. Each has its own bus in `AudioManager`.
 
