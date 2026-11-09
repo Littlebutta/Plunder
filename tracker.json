@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:35Z",
+  "updated": "2026-11-09T21:58:37Z",
   "categories": [
     {
       "key": "feature",
@@ -1098,6 +1098,20 @@
       "priority": "high",
       "milestone": "M-5",
       "updated": "2026-11-09T21:58:35Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-41",
+      "cat": "feature",
+      "title": "Higher ship fidelity in the same toon style",
+      "status": "idea",
+      "tags": [],
+      "notes": "Planned for the next update (shipyard v2).",
+      "links": [],
+      "created": "2026-11-09T21:58:37Z",
+      "priority": "medium",
+      "milestone": "M-4",
+      "updated": "2026-11-09T21:58:37Z",
       "by": "Claude"
     }
   ],
