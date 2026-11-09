@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:42Z",
+  "updated": "2026-11-09T23:45:44Z",
   "categories": [
     {
       "key": "feature",
@@ -1405,6 +1405,19 @@
       "created": "2026-11-09T23:45:42Z",
       "priority": "medium",
       "updated": "2026-11-09T23:45:42Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-7",
+      "cat": "bug",
+      "title": "Hole in the aft deck / stern of designed ships",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Stern fan was missing its top triangle. Fixed in PR #15.",
+      "links": [],
+      "created": "2026-11-09T23:45:44Z",
+      "priority": "medium",
+      "updated": "2026-11-09T23:45:44Z",
       "by": "Claude"
     }
   ],
