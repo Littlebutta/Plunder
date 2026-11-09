@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:41Z",
+  "updated": "2026-11-09T21:58:43Z",
   "categories": [
     {
       "key": "feature",
@@ -513,13 +513,14 @@
       "tags": [
         "combat"
       ],
-      "notes": "Once a ship has cannons, barrages show an outlined ribbon. Small side-to-side aim, but mostly driven by elevation and the ship's own angle. Swivel guns keep their dotted line.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.\n\n2026-11-09 (Claude): PR #5: preview is now a 3D ribbon along the arc ending in a floating reticle (Devin: not a texture on the waves).",
+      "notes": "Once a ship has cannons, barrages show an outlined ribbon. Small side-to-side aim, but mostly driven by elevation and the ship's own angle. Swivel guns keep their dotted line.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.\n\n2026-11-09 (Claude): PR #5: preview is now a 3D ribbon along the arc ending in a floating reticle (Devin: not a texture on the waves).\n\n2026-11-09 (Claude): PR #8: reticle removed; aim held in world space with dead zone and easing.",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/2",
-        "https://github.com/Littlebutta/Plunder/pull/5"
+        "https://github.com/Littlebutta/Plunder/pull/5",
+        "https://github.com/Littlebutta/Plunder/pull/8"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T21:20:20Z",
+      "updated": "2026-11-09T21:58:43Z",
       "by": "Claude"
     },
     {
