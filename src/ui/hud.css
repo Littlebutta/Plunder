@@ -189,3 +189,24 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .yard-left { overflow-y: auto; padding-right: 4px; }
 .yard-opts button { padding: 5px 10px; font-size: 13px; }
 .yard-tip { min-height: 34px; }
+
+/* --- Target marker --- */
+.target-brackets, .target-arrow { position: absolute; left: 0; top: 0; pointer-events: none; }
+.target-brackets[hidden], .target-arrow[hidden], .target-panel[hidden] { display: none; }
+.target-brackets i { position: absolute; width: 28%; height: 28%; border: 3px solid #e23b3b; filter: drop-shadow(0 0 2px rgba(58, 13, 13, .9)); }
+.target-brackets i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.target-brackets i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.target-brackets i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.target-brackets i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.target-arrow { width: 40px; height: 40px; }
+.target-arrow svg { display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,.3)); }
+.target-arrow span {
+  position: absolute; left: 50%; top: 42px; transform: translateX(-50%); white-space: nowrap;
+  font: 800 12px 'Nunito', sans-serif; color: #ffd9d9; text-shadow: 0 1px 2px #3a0d0d;
+}
+.target-panel { top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: 240px; border-color: #e23b3b; padding: 8px 12px; }
+.target-name { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+.target-name b { font-family: 'Pirata One', serif; font-size: 20px; font-weight: 400; }
+.target-bar { height: 9px; border-radius: 5px; background: rgba(255,255,255,.16); overflow: hidden; margin-top: 5px; }
+.target-bar i { display: block; height: 100%; background: #e23b3b; border-radius: 5px; }
+.target-note { font-size: 12px; opacity: .85; margin-top: 4px; }
