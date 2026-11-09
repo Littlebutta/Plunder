@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:15:15Z",
+  "updated": "2026-11-09T20:15:18Z",
   "categories": [
     {
       "key": "feature",
@@ -469,16 +469,18 @@
       "id": "F-14",
       "cat": "feature",
       "title": "Wave rework: more dynamic, not one unidirectional pattern",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "high",
       "tags": [
         "ocean",
         "visuals"
       ],
-      "notes": "Better wave generation, not just a simple unidirectional wave in the same pattern.",
-      "links": [],
+      "notes": "Better wave generation, not just a simple unidirectional wave in the same pattern.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:15:18Z",
       "by": "Claude"
     },
     {
