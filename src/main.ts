@@ -22,6 +22,7 @@ import { AudioManager } from './audio/AudioManager';
 import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
+import { IslandMarkers } from './world/IslandMarkers';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
@@ -81,8 +82,12 @@ scene.add(ship.group);
 // Swivel gun on the bow
 const RAFT_ID = 0;
 const gun = new SwivelGun(waves);
-gun.mount.position.copy(ship.bowMount);
-ship.group.add(gun.mount);
+function mountSwivel(): void {
+  gun.mount.position.copy(ship.swivelMount);
+  gun.mount.rotation.y = ship.swivelFacing; // a stern gun faces aft
+  ship.group.add(gun.mount);
+}
+mountSwivel();
 scene.add(gun.preview);
 
 // Broadside battery: the raft carries a test battery (C to fit / remove);
@@ -107,6 +112,9 @@ scene.add(streaks.mesh);
 const audio = new AudioManager();
 const settings = new SettingsPanel(document.body, audio);
 settings.onClose = () => canvas.focus();
+settings.onChange = () => applySettings();
+ship.setColour(settings.settings.colour);
+broadside.fireMode = settings.settings.fireMode;
 const onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
 ship.onSailFilled = onSailFilled;
 
@@ -137,9 +145,10 @@ function setShip(next: Vessel): void {
   ship.body.placeOnWater(old.body.position.x, old.body.position.z, heading);
   ship.onSailFilled = onSailFilled;
   scene.add(ship.group);
-  gun.mount.position.copy(ship.bowMount);
-  ship.group.add(gun.mount);
+  mountSwivel();
+  ship.setColour(settings.settings.colour);
   broadside = new Broadside(ship.group, ship.gunMounts, waves);
+  broadside.fireMode = settings.settings.fireMode;
   // a designed ship shows the cannons it was built with; the raft's test battery stays off until C
   broadside.setVisible(ship instanceof DesignedShip && ship.gunMounts.length > 0);
   scene.add(broadside.ribbon);
@@ -214,7 +223,26 @@ const shipState = (): ShipState => ({ position: ship.body.position, velocity: sh
 const hold = new Hold();
 const gathering = new Gathering(world.islands, hold);
 const gatherUi = new GatherUi(hudRoot);
-gathering.onHaul = () => audio.woodHit(ship.body.position);
+const islandMarkers = new IslandMarkers(world.islands);
+scene.add(islandMarkers.group);
+gathering.onHaul = (island) => {
+  audio.woodHit(ship.body.position);
+  // Working an island nobody holds makes it yours (forts and capture come with the territory update).
+  if (island.owner === 'none') {
+    island.owner = 'player';
+    islandMarkers.refresh();
+  }
+};
+
+/** Push the player's settings (colour, fire mode) into the game. */
+function applySettings(): void {
+  const s = settings.settings;
+  ship.setColour(s.colour);
+  broadside.fireMode = s.fireMode;
+  islandMarkers.setPlayerColour(s.colour);
+  yard.colour = s.colour;
+  hud.setFireMode(s.fireMode);
+}
 // Marker that floats over the island (or its port) you can gather from.
 const marker = new THREE.Group();
 const markerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -282,7 +310,7 @@ const menu = new MainMenu(document.body, {
 
 const yard = new Shipyard(document.body, {
   launch: (design) => {
-    setShip(new DesignedShip(design, waves, wind));
+    setShip(new DesignedShip(design, waves, wind, settings.settings.colour));
     yard.close();
     startPlay();
   },
@@ -553,6 +581,7 @@ function frame(): void {
   if (playing) {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
     if (input.wasPressed('KeyH')) hud.toggleHelp();
+    if (input.wasPressed('KeyV')) settings.toggleFireMode();
     if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
     if (input.wasPressed('KeyM')) settings.toggleMute();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
@@ -610,6 +639,7 @@ function frame(): void {
   }
 
   if (playing) updateGathering(dt);
+  islandMarkers.update(dt, wind.angle);
 
   targets.update(dt, waves.currentTime);
   projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders(), ...weather.colliders()]);
@@ -656,6 +686,7 @@ function frame(): void {
   input.endFrame();
   requestAnimationFrame(frame);
 }
+applySettings();
 openMenu();
 follow.yaw = 2.3;
 follow.pitch = 0.2;
