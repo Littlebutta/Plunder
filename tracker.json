@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:16:05Z",
+  "updated": "2026-11-09T22:16:07Z",
   "categories": [
     {
       "key": "feature",
@@ -1274,6 +1274,25 @@
       "priority": "medium",
       "milestone": "M-6",
       "updated": "2026-11-09T22:16:05Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-52",
+      "cat": "feature",
+      "title": "Event: sea creatures with glowing eyes that stalk ships and strike with a tentacle, levels I-III",
+      "status": "in-progress",
+      "tags": [
+        "weather",
+        "event"
+      ],
+      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/10"
+      ],
+      "created": "2026-11-09T22:16:07Z",
+      "priority": "medium",
+      "milestone": "M-6",
+      "updated": "2026-11-09T22:16:07Z",
       "by": "Claude"
     }
   ],
