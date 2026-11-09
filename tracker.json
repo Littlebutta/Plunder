@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:17:43Z",
+  "updated": "2026-11-09T22:30:46Z",
   "categories": [
     {
       "key": "feature",
@@ -1064,14 +1064,16 @@
       "id": "F-38",
       "cat": "feature",
       "title": "Player colour for sails and island ownership markers (NPC = white)",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "Planned for the next update (shipyard v2).",
-      "links": [],
+      "notes": "Planned for the next update (shipyard v2).\n\n2026-11-09 (Claude): Built in PR #12.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/12"
+      ],
       "created": "2026-11-09T21:58:30Z",
       "priority": "medium",
       "milestone": "M-7",
-      "updated": "2026-11-09T21:58:30Z",
+      "updated": "2026-11-09T22:30:46Z",
       "by": "Claude"
     },
     {
