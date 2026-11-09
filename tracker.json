@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:28Z",
+  "updated": "2026-11-09T21:58:30Z",
   "categories": [
     {
       "key": "feature",
@@ -1056,6 +1056,20 @@
       "created": "2026-11-09T21:58:28Z",
       "priority": "medium",
       "updated": "2026-11-09T21:58:28Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-38",
+      "cat": "feature",
+      "title": "Player colour for sails and island ownership markers (NPC = white)",
+      "status": "idea",
+      "tags": [],
+      "notes": "Planned for the next update (shipyard v2).",
+      "links": [],
+      "created": "2026-11-09T21:58:30Z",
+      "priority": "medium",
+      "milestone": "M-7",
+      "updated": "2026-11-09T21:58:30Z",
       "by": "Claude"
     }
   ],
