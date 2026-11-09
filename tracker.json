@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:58:39Z",
+  "updated": "2026-11-09T21:58:41Z",
   "categories": [
     {
       "key": "feature",
@@ -475,13 +475,14 @@
         "ocean",
         "visuals"
       ],
-      "notes": "Better wave generation, not just a simple unidirectional wave in the same pattern.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.\n\n2026-11-09 (Claude): Second pass in PR #4 after Devin still saw the same pattern: short-crested waves, wandering crests, swell trains fanned apart.",
+      "notes": "Better wave generation, not just a simple unidirectional wave in the same pattern.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.\n\n2026-11-09 (Claude): Second pass in PR #4 after Devin still saw the same pattern: short-crested waves, wandering crests, swell trains fanned apart.\n\n2026-11-09 (Claude): PR #8: swell from every quarter, slow per-wave breathing, more crest wander (Devin: still one direction, same cadence).",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/2",
-        "https://github.com/Littlebutta/Plunder/pull/4"
+        "https://github.com/Littlebutta/Plunder/pull/4",
+        "https://github.com/Littlebutta/Plunder/pull/8"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:49:18Z",
+      "updated": "2026-11-09T21:58:41Z",
       "by": "Claude"
     },
     {
