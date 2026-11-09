@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:11Z",
+  "updated": "2026-11-09T20:49:13Z",
   "categories": [
     {
       "key": "feature",
@@ -903,6 +903,20 @@
       "created": "2026-11-09T20:49:11Z",
       "priority": "medium",
       "updated": "2026-11-09T20:49:11Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-32",
+      "cat": "feature",
+      "title": "Island shores: shallows, lapping foam, calmer waves at the beach",
+      "status": "idea",
+      "tags": [],
+      "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-09T20:49:13Z",
+      "priority": "medium",
+      "milestone": "M-6",
+      "updated": "2026-11-09T20:49:13Z",
       "by": "Claude"
     }
   ],
