@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:16:12Z",
+  "updated": "2026-11-09T22:16:19Z",
   "categories": [
     {
       "key": "feature",
@@ -1330,6 +1330,24 @@
       "priority": "medium",
       "milestone": "M-6",
       "updated": "2026-11-09T22:16:12Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-55",
+      "cat": "feature",
+      "title": "Day-night cycle (sun, moon, stars, moonlit nights)",
+      "status": "in-progress",
+      "tags": [
+        "weather"
+      ],
+      "notes": "Built in PR #10 (src/weather/DayNight.ts).",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/10"
+      ],
+      "created": "2026-11-09T22:16:19Z",
+      "priority": "medium",
+      "milestone": "M-6",
+      "updated": "2026-11-09T22:16:19Z",
       "by": "Claude"
     }
   ],
