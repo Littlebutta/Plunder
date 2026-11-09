@@ -23,6 +23,9 @@ import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
 import { MainMenu } from './ui/MainMenu';
+import { Shipyard } from './ui/Shipyard';
+import { DesignedShip } from './ship/DesignedShip';
+import type { Vessel } from './ship/Vessel';
 import type { Island } from './world/Islands';
 
 // --- Renderer ---------------------------------------------------------------
@@ -61,28 +64,20 @@ const sky = new Sky(sunDir);
 scene.add(sky.group, ocean.mesh, world.group);
 
 const wind = new Wind();
-const raft = new Raft(waves, wind);
-raft.body.placeOnWater(0, 0, 0);
-scene.add(raft.group);
+let ship: Vessel = new Raft(waves, wind);
+ship.body.placeOnWater(0, 0, 0);
+scene.add(ship.group);
 
 // Swivel gun on the bow
 const RAFT_ID = 0;
 const gun = new SwivelGun(waves);
-gun.mount.position.copy(raft.bowMount);
-raft.group.add(gun.mount);
+gun.mount.position.copy(ship.bowMount);
+ship.group.add(gun.mount);
 scene.add(gun.preview);
 
-// Broadside battery (press C to fit / remove): two light cannons per side.
-const broadside = new Broadside(
-  raft.group,
-  [
-    new THREE.Vector3(1.12, 0.3, -0.55),
-    new THREE.Vector3(1.12, 0.3, 0.55),
-    new THREE.Vector3(-1.12, 0.3, -0.55),
-    new THREE.Vector3(-1.12, 0.3, 0.55),
-  ],
-  waves,
-);
+// Broadside battery: the raft carries a test battery (C to fit / remove);
+// a shipyard design carries the cannons it was drawn with.
+let broadside = new Broadside(ship.group, ship.gunMounts, waves);
 broadside.setVisible(false);
 scene.add(broadside.ribbon);
 const broadsideShots: BroadsideShot[] = [];
@@ -100,7 +95,8 @@ const streaks = new WindStreaks(wind);
 scene.add(streaks.mesh);
 
 const audio = new AudioManager();
-raft.onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
+const onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
+ship.onSailFilled = onSailFilled;
 
 // Debug: buoyancy probe markers (P)
 const probeMarkers = new THREE.Group();
@@ -108,12 +104,42 @@ probeMarkers.visible = false;
 const probeGeo = new THREE.SphereGeometry(0.08, 8, 6);
 const wetMat = new THREE.MeshBasicMaterial({ color: 0xff3355, depthTest: false });
 const dryMat = new THREE.MeshBasicMaterial({ color: 0xffee55, depthTest: false });
-for (let i = 0; i < raft.body.probeWorld.length; i++) {
-  const m = new THREE.Mesh(probeGeo, dryMat);
-  m.renderOrder = 10;
-  probeMarkers.add(m);
+function rebuildProbeMarkers(): void {
+  probeMarkers.clear();
+  for (let i = 0; i < ship.body.probeWorld.length; i++) {
+    const m = new THREE.Mesh(probeGeo, dryMat);
+    m.renderOrder = 10;
+    probeMarkers.add(m);
+  }
 }
+rebuildProbeMarkers();
 scene.add(probeMarkers);
+
+/** Swap the player's vessel (starter raft <-> a shipyard design), keeping place and heading. */
+function setShip(next: Vessel): void {
+  const old = ship;
+  const heading = Math.atan2(-old.body.forward(fwd).x, -fwd.z);
+  scene.remove(old.group, broadside.ribbon);
+  old.onSailFilled = null;
+  ship = next;
+  ship.body.placeOnWater(old.body.position.x, old.body.position.z, heading);
+  ship.onSailFilled = onSailFilled;
+  scene.add(ship.group);
+  gun.mount.position.copy(ship.bowMount);
+  ship.group.add(gun.mount);
+  broadside = new Broadside(ship.group, ship.gunMounts, waves);
+  // a designed ship shows the cannons it was built with; the raft's test battery stays off until C
+  broadside.setVisible(ship instanceof DesignedShip && ship.gunMounts.length > 0);
+  scene.add(broadside.ribbon);
+  hold.capacity = ship.holdCapacity;
+  follow.setDistance(Math.max(14, ship.length * 1.9));
+  const reach = Math.max(12, ship.length);
+  sc.left = sc.bottom = -reach;
+  sc.right = sc.top = reach;
+  sc.updateProjectionMatrix();
+  rebuildProbeMarkers();
+  ship.syncVisuals(0);
+}
 
 const sim = new Simulation();
 
@@ -127,7 +153,7 @@ const hud = new Hud(hudRoot);
 const hold = new Hold();
 const gathering = new Gathering(world.islands, hold);
 const gatherUi = new GatherUi(hudRoot);
-gathering.onHaul = () => audio.woodHit(raft.body.position);
+gathering.onHaul = () => audio.woodHit(ship.body.position);
 // Marker that floats over the island (or its port) you can gather from.
 const marker = new THREE.Group();
 const markerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -155,8 +181,8 @@ function islandUnderPointer(): Island | null {
 }
 
 function updateGathering(dt: number): void {
-  const ship = raft.body.position;
-  gathering.update(dt, ship);
+  const at = ship.body.position;
+  gathering.update(dt, at);
   if (input.wasPressed('KeyE')) gathering.toggle();
   if (input.clicked && gathering.inRange && !gathering.selected && islandUnderPointer() === gathering.inRange) gathering.select(gathering.inRange);
   gatherUi.update(gathering);
@@ -169,7 +195,7 @@ function updateGathering(dt: number): void {
     marker.position.set(target.port.x, target.port.y + 7 + bob, target.port.z);
   } else {
     // over the stretch of shore nearest the ship
-    const a = Math.atan2(ship.z - target.center.z, ship.x - target.center.x);
+    const a = Math.atan2(at.z - target.center.z, at.x - target.center.x);
     const r = target.shoreAt(a) * 0.85;
     const lx = Math.cos(a) * r;
     const lz = Math.sin(a) * r;
@@ -180,14 +206,37 @@ function updateGathering(dt: number): void {
 }
 
 // --- Main menu ------------------------------------------------------------
-let mode: 'menu' | 'play' = 'menu';
+let mode: 'menu' | 'play' | 'yard' = 'menu';
 let voyageStarted = false;
 const menu = new MainMenu(document.body, {
   play: () => startPlay(),
+  shipyard: () => {
+    mode = 'yard';
+    menu.hide();
+    yard.open();
+  },
   toggleSound: () => {
     audio.setMuted(!audio.muted);
     return !audio.muted;
   },
+});
+
+const yard = new Shipyard(document.body, {
+  launch: (design) => {
+    setShip(new DesignedShip(design, waves, wind));
+    yard.close();
+    startPlay();
+  },
+  useRaft: () => {
+    if (!(ship instanceof Raft)) setShip(new Raft(waves, wind));
+    yard.close();
+    startPlay();
+  },
+  back: () => {
+    yard.close();
+    openMenu();
+  },
+  stock: () => hold.stock,
 });
 
 /** In the menu the scene is shifted right, clear of the options column. */
@@ -200,7 +249,7 @@ function applyViewOffset(): void {
 
 function startPlay(): void {
   mode = 'play';
-  if (!voyageStarted) raft.sail = 0;
+  if (!voyageStarted) ship.sail = 0;
   voyageStarted = true;
   menu.hide();
   hudRoot.classList.remove('in-menu');
@@ -222,16 +271,16 @@ function openMenu(): void {
 
 /** Menu backdrop: the raft sails a lazy circle around the start on its own. */
 function autopilot(dt: number): void {
-  const p = raft.body.position;
-  raft.body.forward(fwd);
+  const p = ship.body.position;
+  ship.body.forward(fwd);
   const r = Math.hypot(p.x, p.z) || 1;
   const k = THREE.MathUtils.clamp((r - 45) / 30, -1, 1);
   const dx = -p.z / r - (p.x / r) * k;
   const dz = p.x / r - (p.z / r) * k;
   const turn = fwd.x * dz - fwd.z * dx;
-  raft.control(dt, raft.sail < 0.75 ? 1 : 0, THREE.MathUtils.clamp(turn * 2, -1, 1));
+  ship.control(dt, ship.sail < 0.75 ? 1 : 0, THREE.MathUtils.clamp(turn * 2, -1, 1));
 }
-// Barrage stress test: shells arc in from a ring of unseen ships and land around the raft.
+// Barrage stress test: shells arc in from a ring of unseen ships and land around the ship.
 const barrage = {
   size: 400,
   fire: () => fireBarrage(barrage.size),
@@ -246,7 +295,38 @@ window.addEventListener('resize', () => {
 });
 
 // Expose a handle for console tinkering / automated checks.
-Object.assign(window, { plunder: { aimPoint: () => aimPoint, gathering, hold, startPlay, openMenu, scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
+Object.assign(window, {
+  plunder: {
+    aimPoint: () => aimPoint,
+    gathering,
+    hold,
+    startPlay,
+    openMenu,
+    setShip,
+    scene,
+    camera,
+    waves,
+    ocean,
+    follow,
+    sim,
+    wind,
+    gun,
+    world,
+    projectiles,
+    targets,
+    audio,
+    barrage,
+    get raft() {
+      return ship;
+    },
+    get ship() {
+      return ship;
+    },
+    get broadside() {
+      return broadside;
+    },
+  },
+});
 
 // --- Combat wiring ----------------------------------------------------------
 projectiles.onImpact = (e: ImpactEvent) => {
@@ -276,7 +356,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
 
 const queuedShots: { delay: number; pos: THREE.Vector3; vel: THREE.Vector3 }[] = [];
 function fireBarrage(n: number): void {
-  const centre = raft.body.position;
+  const centre = ship.body.position;
   const batteries = 8;
   for (let i = 0; i < n; i++) {
     const b = i % batteries;
@@ -348,11 +428,11 @@ function updateAimPoint(dt: number): void {
   } else {
     // looking at/above the horizon: aim at max range along the view
     aimFlat.set(direction.x, 0, direction.z).normalize();
-    aimRaw.copy(raft.body.position).addScaledVector(aimFlat, AIM_MAX_RANGE);
+    aimRaw.copy(ship.body.position).addScaledVector(aimFlat, AIM_MAX_RANGE);
   }
   // keep the point within gun range of the raft
-  aimFlat.subVectors(aimRaw, raft.body.position).setY(0);
-  if (aimFlat.length() > AIM_MAX_RANGE) aimRaw.copy(raft.body.position).addScaledVector(aimFlat.normalize(), AIM_MAX_RANGE);
+  aimFlat.subVectors(aimRaw, ship.body.position).setY(0);
+  if (aimFlat.length() > AIM_MAX_RANGE) aimRaw.copy(ship.body.position).addScaledVector(aimFlat.normalize(), AIM_MAX_RANGE);
 
   if (!aimStarted) aimPoint.copy(aimRaw);
   else aimPoint.lerp(aimRaw, 1 - Math.exp(-dt / AIM_SMOOTHING));
@@ -379,7 +459,10 @@ function frame(): void {
   const playing = mode === 'play';
   if (input.wasPressed('Escape')) {
     if (playing) openMenu();
-    else if (voyageStarted) startPlay();
+    else if (mode === 'yard') {
+      yard.close();
+      openMenu();
+    } else if (voyageStarted) startPlay();
   }
   if (playing) {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
@@ -390,13 +473,13 @@ function frame(): void {
   }
 
   wind.update(dt);
-  if (playing) raft.control(dt, input.throttle, input.steer);
+  if (playing) ship.control(dt, input.throttle, input.steer);
   else autopilot(dt);
   sim.advance(dt, (h) => {
     waves.update(h);
-    raft.physicsStep(h);
+    ship.physicsStep(h);
   });
-  raft.syncVisuals(dt);
+  ship.syncVisuals(dt);
 
   // --- Gun ---
   if (playing) {
@@ -408,7 +491,7 @@ function frame(): void {
     gun.muzzle(muzzlePos, muzzleDir);
     shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed);
     projectiles.spawn(muzzlePos, shotVel, SWIVEL.kind, RAFT_ID);
-    effects.muzzle(muzzlePos, muzzleDir, raft.body.velocity, 0.8);
+    effects.muzzle(muzzlePos, muzzleDir, ship.body.velocity, 0.8);
     audio.play('cannon', { volume: 0.55, rate: 1.4, rateJitter: 0.05, position: muzzlePos });
   }
   // --- Broadside ---
@@ -422,10 +505,10 @@ function frame(): void {
   for (const shot of broadsideShots) {
     shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed);
     projectiles.spawn(shot.position, shotVel, BROADSIDE.kind, RAFT_ID);
-    effects.muzzle(shot.position, shot.direction, raft.body.velocity, 1.5);
+    effects.muzzle(shot.position, shot.direction, ship.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 1, rateJitter: 0.06, position: shot.position });
     // recoil shoves the raft the other way
-    raft.body.velocity.addScaledVector(shot.direction, -0.25);
+    ship.body.velocity.addScaledVector(shot.direction, -0.25);
   }
 
   for (let i = queuedShots.length - 1; i >= 0; i--) {
@@ -440,40 +523,40 @@ function frame(): void {
   if (playing) updateGathering(dt);
 
   targets.update(dt, waves.currentTime);
-  projectiles.setColliders([{ id: RAFT_ID, position: raft.body.position, radius: 1.7 }, ...targets.colliders()]);
+  projectiles.setColliders([{ id: RAFT_ID, position: ship.body.position, radius: Math.max(1.7, ship.length * 0.36) }, ...targets.colliders()]);
   projectiles.update(dt);
   effects.update(dt);
 
   // --- Wake + wind FX ---
-  stern.set(0, 0, 1.9).applyQuaternion(raft.body.quaternion).add(raft.body.position);
-  starboard.set(1, 0, 0).applyQuaternion(raft.body.quaternion).setY(0).normalize();
-  wake.update(dt, stern, starboard, raft.body.forwardSpeed);
+  stern.set(0, 0, ship.length / 2 + 0.1).applyQuaternion(ship.body.quaternion).add(ship.body.position);
+  starboard.set(1, 0, 0).applyQuaternion(ship.body.quaternion).setY(0).normalize();
+  wake.update(dt, stern, starboard, ship.body.forwardSpeed);
 
-  raft.body.forward(fwd);
-  follow.update(dt, raft.body.position);
+  ship.body.forward(fwd);
+  follow.update(dt, ship.body.position);
 
   ocean.update(follow.focusPoint);
   sky.update(dt, camera.position);
 
-  // Shadow camera follows the raft.
-  sun.position.copy(raft.body.position).addScaledVector(sunDir, 40);
-  sun.target.position.copy(raft.body.position);
+  // Shadow camera follows the ship.
+  sun.position.copy(ship.body.position).addScaledVector(sunDir, 40);
+  sun.target.position.copy(ship.body.position);
 
   if (probeMarkers.visible) {
     probeMarkers.children.forEach((m, i) => {
-      m.position.copy(raft.body.probeWorld[i]);
-      (m as THREE.Mesh).material = raft.body.probeDepth[i] > 0 ? wetMat : dryMat;
+      m.position.copy(ship.body.probeWorld[i]);
+      (m as THREE.Mesh).material = ship.body.probeDepth[i] > 0 ? wetMat : dryMat;
     });
   }
 
   // Compass heading: 0 = north (-Z), clockwise positive.
-  hud.update(rawDt, raft.body.forwardSpeed, raft.sail, Math.atan2(fwd.x, -fwd.z));
-  hud.updateSailing(Math.atan2(wind.direction.x, -wind.direction.z), raft.windBoost, raft.sail);
+  hud.update(rawDt, ship.body.forwardSpeed, ship.sail, Math.atan2(fwd.x, -fwd.z));
+  hud.updateSailing(Math.atan2(wind.direction.x, -wind.direction.z), ship.windBoost, ship.sail);
   hud.updateCombat(gun.reloadProgress, broadside.visible ? broadside.reloadProgress : -1, targets.score, projectiles.stats.active, projectiles.stats.threaded, projectiles.stats.workerMs);
 
   streaks.update(dt, camera, follow.focusPoint);
   audio.updateListener(camera);
-  audio.updateAmbience(wind.strength, raft.sail, Math.abs(raft.body.forwardSpeed));
+  audio.updateAmbience(wind.strength, ship.sail, Math.abs(ship.body.forwardSpeed));
 
   renderer.render(scene, camera);
   input.endFrame();

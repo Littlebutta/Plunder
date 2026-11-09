@@ -1,5 +1,6 @@
 export interface MenuActions {
   play(): void;
+  shipyard(): void;
   toggleSound(): boolean; // returns true if sound is now on
 }
 
@@ -20,7 +21,7 @@ export class MainMenu {
         <div class="menu-title">Plunder</div>
         <div class="menu-sub">Build a ship. Take the islands.</div>
         <button data-act="play">Set sail</button>
-        <button data-act="shipyard" disabled>Shipyard <small>coming next</small></button>
+        <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
         <button data-act="multi" disabled>Multiplayer <small>with Steam friends, later</small></button>
         <button data-act="sound">Sound: on</button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
@@ -34,6 +35,9 @@ export class MainMenu {
       switch (btn.dataset.act) {
         case 'play':
           actions.play();
+          break;
+        case 'shipyard':
+          actions.shipyard();
           break;
         case 'sound':
           btn.textContent = `Sound: ${actions.toggleSound() ? 'on' : 'off'}`;

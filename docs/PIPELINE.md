@@ -67,7 +67,7 @@ Done so far: ocean + raft (Step 1); swivel gun, worker projectiles, wind, wake, 
 
 **Next, in order**
 
-1. **Shipyard:** 2D draw canvas → lofted hull preview → HullSpec → test sail.
+1. **Shipyard:** first version done (draw outline + keel, loft, masts and cannon slots, stats, launch). Next: charge resources, per-part upgrades, freehand sheer line, saving several designs.
 2. **Snap points + components:** masts and cannon types (weight, arc, reload) placed on the drawn hull; weight affects draft and stability. The broadside battery and ribbon from Step 3 plug into these mounts.
 3. **Island collision + resources:** hulls ground on the coastline (`Island.coastAt`), shells hit terrain, resource pickups per island type, wrecks as salvage sites.
 4. **Round loop + title menu:** title screen, expedition round, shipyard phase, next round.

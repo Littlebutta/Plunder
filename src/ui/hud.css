@@ -100,3 +100,39 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .menu button small { display: block; font: 600 12px 'Nunito', sans-serif; opacity: .85; }
 .menu-foot { margin-top: auto; font-size: 13px; opacity: .7; }
 #hud.in-menu { display: none; }
+
+/* --- Shipyard --- */
+.yard {
+  position: fixed; inset: 0; display: grid; grid-template-columns: minmax(420px, 46%) 1fr; gap: 18px; padding: 18px;
+  background: #23130a; color: #fff8e6; font-family: 'Nunito', system-ui, sans-serif; overflow: auto;
+}
+.yard-left, .yard-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.yard-head { display: flex; align-items: baseline; gap: 16px; }
+.yard-title { font-family: 'Pirata One', serif; font-size: 44px; line-height: 1; }
+.yard-name {
+  flex: 1; min-width: 0; font: 800 18px 'Nunito', sans-serif; color: #fff8e6; background: rgba(255,255,255,.08);
+  border: 2px solid #6e3b1b; border-radius: 8px; padding: 6px 10px;
+}
+.yard-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
+.yard button {
+  font: 800 14px 'Nunito', sans-serif; color: #fff8e6; cursor: pointer; background: rgba(192,129,74,.22);
+  border: 2px solid #c0814a; border-radius: 8px; padding: 7px 12px;
+}
+.yard button:hover, .yard button.on, .yard button.primary { background: #c0814a; color: #2a1708; }
+.yard-tip { flex-basis: 100%; font-size: 13px; opacity: .85; min-height: 18px; }
+.yard-board { position: relative; }
+.yard-board span { position: absolute; left: 10px; top: 6px; font: 800 12px 'Nunito', sans-serif; letter-spacing: 1px; text-transform: uppercase; opacity: .85; pointer-events: none; }
+.yard-board canvas { display: block; width: 100%; border: 2px solid #c0814a; border-radius: 10px; cursor: crosshair; touch-action: none; }
+.yard-sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; font-size: 13px; }
+.yard-sliders label { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.yard-sliders input { grid-column: 1 / -1; width: 100%; accent-color: #c0814a; }
+.yard-right canvas { flex: 1; min-height: 220px; width: 100%; border: 2px solid #c0814a; border-radius: 10px; cursor: grab; touch-action: none; }
+.yard-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; font-size: 14px; }
+.yard-stats > div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(192,129,74,.3); padding: 3px 0; }
+.yard-stats span { opacity: .8; }
+.yard-stats .cost, .yard-stats .note { grid-column: 1 / -1; }
+.yard-stats .note { border: 0; font-size: 12px; opacity: .7; }
+.yard-stats .short { color: #ffb27a; }
+.yard-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.yard-actions .primary { font-size: 17px; padding: 10px 18px; }
+@media (max-width: 900px) { .yard { grid-template-columns: 1fr; } }
