@@ -25,7 +25,8 @@ export class Hud {
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
         <div><kbd>Mouse</kbd> aim · <kbd>Space</kbd> fire swivel gun</div>
         <div><kbd>C</kbd> fit broadside cannons · <kbd>F</kbd> fire broadside (turn the ship to aim)</div>
-        <div><kbd>Drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom</div>
+        <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
+        <div><kbd>Drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>B</kbd> barrage test · <kbd>M</kbd> mute · <kbd>G</kbd> tuning · <kbd>P</kbd> probes · <kbd>H</kbd> hide help</div>
       </div>
       <div class="hud-panel hud-stats">
