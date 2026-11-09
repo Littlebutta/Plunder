@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:31Z",
+  "updated": "2026-11-09T21:20:34Z",
   "categories": [
     {
       "key": "feature",
@@ -892,14 +892,14 @@
       "title": "Gun aiming is jittery and hard to use",
       "status": "unresolved",
       "tags": [],
-      "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest. Cause: aim point hopped between wave crests and shots inherited the raft's bobbing.",
+      "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest. Cause: aim point hopped between wave crests and shots inherited the raft's bobbing.\n\n2026-11-09 (Claude): Devin did not mention jitter again after PR #4; left open until confirmed.",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/4"
       ],
       "created": "2026-11-09T20:49:08Z",
       "priority": "high",
       "milestone": "M-2",
-      "updated": "2026-11-09T20:49:33Z",
+      "updated": "2026-11-09T21:20:34Z",
       "by": "Claude"
     },
     {
