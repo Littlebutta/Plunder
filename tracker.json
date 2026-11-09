@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:33Z",
+  "updated": "2026-11-09T20:49:35Z",
   "categories": [
     {
       "key": "feature",
@@ -914,14 +914,16 @@
       "id": "F-32",
       "cat": "feature",
       "title": "Island shores: shallows, lapping foam, calmer waves at the beach",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/4"
+      ],
       "created": "2026-11-09T20:49:13Z",
       "priority": "medium",
       "milestone": "M-6",
-      "updated": "2026-11-09T20:49:13Z",
+      "updated": "2026-11-09T20:49:35Z",
       "by": "Claude"
     },
     {
