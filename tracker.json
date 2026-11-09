@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:17:36Z",
+  "updated": "2026-11-09T22:17:38Z",
   "categories": [
     {
       "key": "feature",
@@ -1299,19 +1299,19 @@
       "id": "F-53",
       "cat": "feature",
       "title": "Event: armageddon, red sky and sea, cursed fleet rises to attack, levels I-III",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [
         "weather",
         "event"
       ],
-      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.",
+      "notes": "Built in PR #10 (src/weather). Events roll on a timer until the round loop exists; weather.nextRound() is the hook.\n\n2026-11-09 (Claude): Merged in PR #10 (2026-11-09).",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/10"
       ],
       "created": "2026-11-09T22:16:10Z",
       "priority": "medium",
       "milestone": "M-6",
-      "updated": "2026-11-09T22:16:10Z",
+      "updated": "2026-11-09T22:17:38Z",
       "by": "Claude"
     },
     {
