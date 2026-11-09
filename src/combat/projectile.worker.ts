@@ -11,6 +11,7 @@ const sim = new ProjectileSim();
 
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const msg = e.data;
+  if (msg.shore) sim.setShore(msg.shore);
   if (msg.sea) sim.setSeaState(msg.sea);
   if (msg.colliders) sim.setColliders(msg.colliders);
   if (msg.spawns && msg.spawns.length) sim.spawn(msg.spawns);

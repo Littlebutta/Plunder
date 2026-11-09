@@ -7,7 +7,7 @@ import { GRAVITY, KINDS } from './ProjectileSim';
 const PREVIEW_DOTS = 48;
 
 export const SWIVEL = {
-  muzzleSpeed: 48, // m/s
+  muzzleSpeed: 38, // m/s: slow enough for a readable, lobbed arc
   reload: 1.1, // s
   traverseRate: 3.2, // rad/s
   elevateRate: 2.2, // rad/s
@@ -20,8 +20,11 @@ export const SWIVEL = {
 /**
  * A small bronze swivel gun on a post at the bow: the raft's bare-minimum
  * defence. It traverses toward an aim point on the water, works out the
- * ballistic elevation itself (low arc), and shows a dotted trajectory with an
- * impact ring. That preview is the seed of the broadside ribbon later.
+ * ballistic elevation itself (low arc, air drag included, so the shot lands
+ * on the aim point), and shows a dotted trajectory with an impact ring.
+ *
+ * Arcade rule: shots do not inherit the raft's own motion. A raft bobbing on
+ * the swell would otherwise throw every shot (and the preview) around.
  */
 export class SwivelGun {
   readonly mount = new THREE.Group();
@@ -135,17 +138,11 @@ export class SwivelGun {
     const dz = target.z - muzzle.z;
     const dy = target.y - muzzle.y;
     const d = Math.hypot(dx, dz);
-    const v = SWIVEL.muzzleSpeed * 0.97; // a hair of drag compensation
-    const v2 = v * v;
-    const disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * dy * v2);
-    let elev: number;
-    if (disc < 0 || d < 1e-3) {
-      elev = Math.PI / 4;
-      this.outOfRange = disc < 0;
-    } else {
-      elev = Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d));
-      this.outOfRange = false;
-    }
+    // the ball leaves the muzzle, a barrel length ahead of the pivot
+    const reach = Math.max(0.5, d + this.muzzleLocal.z);
+    let elev = d < 1e-3 ? null : solveElevation(reach, dy, SWIVEL.muzzleSpeed, KINDS[SWIVEL.kind].drag);
+    this.outOfRange = elev === null && d >= 1e-3;
+    elev ??= Math.PI / 4;
     const dirWorld = _d.set((dx / (d || 1)) * Math.cos(elev), Math.sin(elev), (dz / (d || 1)) * Math.cos(elev));
     const inv = _q.copy(this.mount.getWorldQuaternion(_q2)).invert();
     const local = dirWorld.applyQuaternion(inv);
@@ -153,7 +150,7 @@ export class SwivelGun {
     this.targetPitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(local.y, -1, 1)), SWIVEL.minPitch, SWIVEL.maxPitch);
   }
 
-  update(dt: number, carrierVelocity: THREE.Vector3): void {
+  update(dt: number): void {
     this.cooldown -= dt;
     const step = (cur: number, target: number, rate: number) => cur + THREE.MathUtils.clamp(target - cur, -rate * dt, rate * dt);
     this.yaw = step(this.yaw, this.targetYaw, SWIVEL.traverseRate);
@@ -163,7 +160,7 @@ export class SwivelGun {
     this.recoil = Math.max(0, this.recoil - dt * 2.5);
     this.barrel.position.z = Math.sin(Math.min(this.recoil, 1) * Math.PI) * 0.12;
 
-    this.updatePreview(carrierVelocity);
+    this.updatePreview();
   }
 
   /** Muzzle position and barrel direction in world space. */
@@ -187,11 +184,11 @@ export class SwivelGun {
   }
 
   /** Simulate the shot on the CPU (same integrator as the worker) for the dotted arc. */
-  private updatePreview(carrierVelocity: THREE.Vector3): void {
+  private updatePreview(): void {
     const pos = _pp;
     const dir = _pd;
     this.muzzle(pos, dir);
-    const vel = _pv.copy(dir).multiplyScalar(SWIVEL.muzzleSpeed).add(carrierVelocity);
+    const vel = _pv.copy(dir).multiplyScalar(SWIVEL.muzzleSpeed);
     const drag = KINDS[SWIVEL.kind].drag;
     const h = 1 / 60;
     let n = 0;
@@ -203,7 +200,7 @@ export class SwivelGun {
       vel.z -= vel.z * drag * speed * h;
       pos.addScaledVector(vel, h);
       // Only sample the sea once the shot is low enough to touch it.
-      if (pos.y < 6) {
+      if (pos.y < 4 && (i & 1) === 0) {
         const water = this.waves.heightAt(pos.x, pos.z);
         if (pos.y <= water) {
           pos.y = water;
@@ -229,6 +226,44 @@ export class SwivelGun {
     const mat = this.ring.material as THREE.MeshBasicMaterial;
     mat.color.set(this.ready ? 0xffffff : 0xffb27a);
   }
+}
+
+/**
+ * Low-arc launch elevation that lands a shot `d` metres away and `dy` metres
+ * up, with quadratic air drag. Starts from the drag-free answer and corrects
+ * it by flying the shot a few times. Null if the target is out of range.
+ */
+export function solveElevation(d: number, dy: number, v: number, drag: number): number | null {
+  const v2 = v * v;
+  let aimDy = dy;
+  let elev = 0;
+  for (let it = 0; it < 4; it++) {
+    const disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * aimDy * v2);
+    if (disc < 0) return null;
+    elev = Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d));
+    if (it === 3) break;
+    // fly it (same integrator as the projectile sim) and see how high it is at range d
+    const h = 1 / 60;
+    let x = 0;
+    let y = 0;
+    let px = 0;
+    let py = 0;
+    let vx = v * Math.cos(elev);
+    let vy = v * Math.sin(elev);
+    for (let i = 0; i < 900 && x < d; i++) {
+      const speed = Math.hypot(vx, vy);
+      vx -= vx * drag * speed * h;
+      vy -= (vy * drag * speed + GRAVITY) * h;
+      px = x;
+      py = y;
+      x += vx * h;
+      y += vy * h;
+    }
+    if (x < d) return null;
+    const yAtD = py + ((y - py) * (d - px)) / (x - px || 1);
+    aimDy += dy - yAtD;
+  }
+  return elev;
 }
 
 const _m = new THREE.Vector3();

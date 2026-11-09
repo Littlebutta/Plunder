@@ -3,6 +3,7 @@ import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
 import { WaveField } from '../ocean/waves';
 import { GRAVITY, KINDS } from './ProjectileSim';
+import { solveElevation } from './SwivelGun';
 
 export const BROADSIDE = {
   muzzleSpeed: 46, // m/s
@@ -14,11 +15,6 @@ export const BROADSIDE = {
   elevateRate: 0.9, // rad/s
   traverseRate: 0.7, // rad/s
   rippleDelay: 0.09, // s between guns in a ripple
-  /**
-   * How much of the ship's roll the gun crews correct for (0..1). Below 1 the
-   * swell still nudges the range, so timing a shot with the waves matters.
-   */
-  stabilise: 0.8,
   kind: 1, // ProjectileSim KINDS index (cannon shell)
 };
 
@@ -47,9 +43,11 @@ export interface BroadsideShot {
  * side-to-side adjustment.
  *
  * The firing preview is an outlined white ribbon draped on the water from the
- * ship to the impact zone. It is built from the real muzzle positions and
- * barrel directions, so as the ship rolls on the swell the ribbon stretches
- * and shortens: you time the shot with the waves.
+ * ship to the impact zone.
+ *
+ * Arcade rule: the gun crews fully correct for the ship's roll and pitch, and
+ * shots do not inherit the ship's own motion. The ribbon therefore only moves
+ * when you turn the ship or move the aim point, never because of the swell.
  */
 export class Broadside {
   readonly guns: Gun[] = [];
@@ -175,15 +173,15 @@ export class Broadside {
     const bearing = Math.atan2(-local.z, s * local.x);
     this.outOfArc = Math.abs(bearing) > BROADSIDE.traverse + 0.02 || s * local.x < 0;
     this.targetTraverse = THREE.MathUtils.clamp(bearing, -BROADSIDE.traverse, BROADSIDE.traverse);
-    const range = Math.hypot(local.x, local.z);
-    const v2 = (BROADSIDE.muzzleSpeed * 0.96) ** 2;
-    const sin2 = (GRAVITY * range) / v2;
-    const elev = sin2 >= 1 ? BROADSIDE.maxElevation : 0.5 * Math.asin(sin2);
+    const origin = this.ship.getWorldPosition(_p);
+    const range = Math.max(4, Math.hypot(target.x - origin.x, target.z - origin.z) - 1.2);
+    // guns sit a little above the water; aim for mean sea level
+    const elev = solveElevation(range, -0.9, BROADSIDE.muzzleSpeed, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
     this.targetElevation = THREE.MathUtils.clamp(elev, BROADSIDE.minElevation, BROADSIDE.maxElevation);
   }
 
   /** Returns shots to spawn this frame (ripple fire is spread over a few frames). */
-  update(dt: number, carrierVelocity: THREE.Vector3, out: BroadsideShot[]): void {
+  update(dt: number, out: BroadsideShot[]): void {
     this.cooldown['1'] -= dt;
     this.cooldown['-1'] -= dt;
     const step = (cur: number, target: number, rate: number) => cur + THREE.MathUtils.clamp(target - cur, -rate * dt, rate * dt);
@@ -193,13 +191,13 @@ export class Broadside {
     // Roll toward the active side: how far the ship's beam axis tips up or down.
     const outward = _x.set(this.side, 0, 0).transformDirection(this.ship.matrixWorld);
     const roll = Math.asin(THREE.MathUtils.clamp(outward.y, -1, 1));
-    const corrected = THREE.MathUtils.clamp(this.elevation - roll * BROADSIDE.stabilise, -0.35, BROADSIDE.maxElevation + 0.35);
+    const corrected = THREE.MathUtils.clamp(this.elevation - roll, -0.35, BROADSIDE.maxElevation + 0.35);
 
     for (const g of this.guns) {
       const active = g.side === this.side;
       // yaw toward the bow is +traverse for starboard guns and -traverse for port guns
       g.yawPivot.rotation.y = THREE.MathUtils.damp(g.yawPivot.rotation.y, active ? this.traverse * g.side : 0, 8, dt);
-      g.pitchPivot.rotation.x = THREE.MathUtils.damp(g.pitchPivot.rotation.x, active ? corrected : 0.05, 14, dt);
+      g.pitchPivot.rotation.x = active ? corrected : THREE.MathUtils.damp(g.pitchPivot.rotation.x, 0.05, 14, dt);
       g.recoil = Math.max(0, g.recoil - dt * 1.8);
       g.barrel.position.z = Math.sin(Math.min(g.recoil, 1) * Math.PI) * 0.22;
     }
@@ -215,7 +213,7 @@ export class Broadside {
       this.queue.splice(i, 1);
     }
 
-    if (this.visible) this.updateRibbon(dt, carrierVelocity);
+    if (this.visible) this.updateRibbon(dt);
   }
 
   /** Fire the active side as a ripple, bow to stern. Returns false if still reloading. */
@@ -230,15 +228,29 @@ export class Broadside {
   private muzzle(g: Gun, pos: THREE.Vector3, dir: THREE.Vector3): void {
     g.barrel.updateWorldMatrix(true, false);
     pos.set(0, 0, -0.95).applyMatrix4(g.barrel.matrixWorld);
-    dir.set(0, 0, -1).transformDirection(g.barrel.matrixWorld);
+    this.fireDirection(dir);
+  }
+
+  /**
+   * Stabilised firing direction of the active side: the ship's heading plus
+   * the small traverse, at the set elevation above the true horizon.
+   */
+  private fireDirection(out: THREE.Vector3): THREE.Vector3 {
+    const m = this.ship.matrixWorld;
+    const beam = _x.set(this.side, 0, 0).transformDirection(m).setY(0).normalize();
+    const bow = _c.set(0, 0, -1).transformDirection(m).setY(0).normalize();
+    out.copy(beam).multiplyScalar(Math.cos(this.traverse)).addScaledVector(bow, Math.sin(this.traverse)).normalize();
+    out.multiplyScalar(Math.cos(this.elevation));
+    out.y = Math.sin(this.elevation);
+    return out;
   }
 
   /** Simulated ground track of one gun's shot; returns the number of points written. */
-  private track(g: Gun, carrierVelocity: THREE.Vector3, out: THREE.Vector3[]): number {
+  private track(g: Gun, out: THREE.Vector3[]): number {
     const pos = _p;
     const dir = _d;
     this.muzzle(g, pos, dir);
-    const vel = _v.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed).add(carrierVelocity);
+    const vel = _v.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed);
     const drag = KINDS[BROADSIDE.kind].drag;
     const h = 1 / 40;
     let n = 0;
@@ -250,16 +262,17 @@ export class Broadside {
       vel.z -= vel.z * drag * speed * h;
       pos.addScaledVector(vel, h);
       out[n++].copy(pos);
-      if (i % 4 === 3 && pos.y < 5 && pos.y <= this.waves.heightAt(pos.x, pos.z)) break;
+      // end at mean sea level, not the passing wave, so the ribbon holds still
+      if (pos.y <= 0) break;
     }
     return n;
   }
 
-  private updateRibbon(dt: number, carrierVelocity: THREE.Vector3): void {
+  private updateRibbon(dt: number): void {
     const side = this.guns.filter((g) => g.side === this.side).sort((a, b) => a.root.position.z - b.root.position.z);
     if (side.length === 0) return;
-    const na = this.track(side[0], carrierVelocity, this.trackA);
-    const nb = this.track(side[side.length - 1], carrierVelocity, this.trackB);
+    const na = this.track(side[0], this.trackA);
+    const nb = this.track(side[side.length - 1], this.trackB);
 
     // Widen the ribbon a little beyond the outer guns (shot scatter).
     const pad = side.length > 1 ? 0.9 : 1.4;

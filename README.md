@@ -61,12 +61,13 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 
 ## Guns
 
-- **Swivel gun:** free aim with the mouse, dotted trajectory.
-- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. The outlined ribbon on the water shows where the side will land, built from the real barrel angles, so the swell still nudges it.
+- **Swivel gun:** free aim with the mouse, dotted trajectory. The ring lands on the water under the cursor.
+- **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. The outlined ribbon on the water shows where the side will land. The crews correct for the ship's roll, so the ribbon only moves when you turn the ship or move the aim point.
+- Shots do not inherit the ship's own motion, and shells that hit an island stop there.
 
 ## Islands
 
-Generated from a seed: peaks (some with craters or snow caps), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands.
+Generated from a seed: peaks (some with craters or snow caps), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
 
 ## Sound
 
@@ -80,7 +81,8 @@ In the browser console, `plunder` exposes the scene, waves, raft and camera for 
 src/
   main.ts                    bootstrap + game loop
   ocean/waves.ts             Gerstner WaveField: shared GPU uniforms + CPU sampler
-  ocean/oceanMaterial.ts     toon ocean shader (bands, foam, glints, fresnel, fog)
+  ocean/shore.ts             terrain height map: calm shallows, shoreline, shells hitting land
+  ocean/oceanMaterial.ts     toon ocean shader (bands, foam, shoreline, fresnel, fog)
   ocean/Ocean.ts             camera-following variable-density ocean grid
   physics/FloatingBody.ts    buoyancy probes, body-space drag, rigid-body integration
   physics/Simulation.ts      fixed 120 Hz step (waves + bodies in lockstep)

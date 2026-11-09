@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import ProjectileWorker from './projectile.worker.ts?worker&inline';
 import {
   EVENT_HIT,
+  EVENT_LAND,
   EVENT_STRIDE,
   GRAVITY,
   KINDS,
@@ -15,7 +16,7 @@ import { WaveField } from '../ocean/waves';
 import { toonMaterial } from '../render/toon';
 
 export interface ImpactEvent {
-  type: 'splash' | 'hit';
+  type: 'splash' | 'hit' | 'land';
   position: THREE.Vector3;
   kind: number;
   colliderId: number;
@@ -54,6 +55,7 @@ export class ProjectileSystem {
   private pendingSpawns: number[] = [];
   private pendingDt = 0;
   private seaDirty = true;
+  private shoreDirty = true;
   private colliders: Collider[] = [];
 
   private snapshot: Float32Array = new Float32Array(0);
@@ -80,6 +82,7 @@ export class ProjectileSystem {
         this.busy = false;
         this.fallback = new ProjectileSim();
         this.seaDirty = true;
+        this.shoreDirty = true;
       };
       this.stats.threaded = true;
     } catch (err) {
@@ -113,7 +116,9 @@ export class ProjectileSystem {
         spawns: this.pendingSpawns.length ? Float32Array.from(this.pendingSpawns) : undefined,
         colliders: this.packColliders(),
         sea: this.seaDirty ? this.waves.serialize() : undefined,
+        shore: this.shoreDirty && this.waves.shore ? { size: this.waves.shore.size, extent: this.waves.shore.extent, heights: this.waves.shore.heights } : undefined,
       };
+      this.shoreDirty = false;
       this.pendingSpawns.length = 0;
       this.pendingDt = 0;
       this.seaDirty = false;
@@ -126,6 +131,7 @@ export class ProjectileSystem {
         this.worker.postMessage(req, transfer);
       } else if (this.fallback) {
         const sim = this.fallback;
+        if (req.shore) sim.setShore(req.shore);
         if (req.sea) sim.setSeaState(req.sea);
         if (req.colliders) sim.setColliders(req.colliders);
         if (req.spawns) sim.spawn(req.spawns);
@@ -162,7 +168,7 @@ export class ProjectileSystem {
         const o = i * EVENT_STRIDE;
         const type = res.events[o];
         this.onImpact({
-          type: type === EVENT_HIT ? 'hit' : 'splash',
+          type: type === EVENT_HIT ? 'hit' : type === EVENT_LAND ? 'land' : 'splash',
           position: new THREE.Vector3(res.events[o + 1], res.events[o + 2], res.events[o + 3]),
           kind: res.events[o + 4],
           colliderId: res.events[o + 5],

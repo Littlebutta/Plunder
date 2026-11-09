@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WaveField } from './waves';
 import { createOceanMaterial } from './oceanMaterial';
+import { ShoreField } from './shore';
 
 /** Fraction of linear spacing in the grid mapping; lower = denser centre. */
 const LINEAR = 0.04;
@@ -22,9 +23,10 @@ export class Ocean {
   constructor(
     readonly waves: WaveField,
     sunDir: THREE.Vector3,
+    shore: ShoreField | null = null,
     { radius = 2400, segments = 512 } = {},
   ) {
-    this.material = createOceanMaterial(waves, sunDir);
+    this.material = createOceanMaterial(waves, sunDir, shore);
     const geometry = Ocean.buildGrid(radius, segments);
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.frustumCulled = false; // vertices move in the shader

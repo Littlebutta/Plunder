@@ -9,7 +9,7 @@ export const PALETTE = {
   oceanMid: 0x1670b8,
   oceanCrest: 0x35b6dc,
   foam: 0xf4fbff,
-  glint: 0xffe9a6,
+  shoreWater: 0x4fd0cf,
 
   wood: 0x9a5a2c,
   woodDark: 0x6e3b1b,
