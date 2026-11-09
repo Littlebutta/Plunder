@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:30Z",
+  "updated": "2026-11-09T20:49:33Z",
   "categories": [
     {
       "key": "feature",
@@ -886,11 +886,13 @@
       "status": "unresolved",
       "tags": [],
       "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest. Cause: aim point hopped between wave crests and shots inherited the raft's bobbing.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/4"
+      ],
       "created": "2026-11-09T20:49:08Z",
       "priority": "high",
       "milestone": "M-2",
-      "updated": "2026-11-09T20:49:08Z",
+      "updated": "2026-11-09T20:49:33Z",
       "by": "Claude"
     },
     {
