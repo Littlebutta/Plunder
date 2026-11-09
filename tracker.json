@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:31Z",
+  "updated": "2026-11-09T23:45:33Z",
   "categories": [
     {
       "key": "feature",
@@ -669,16 +669,18 @@
       "id": "F-25",
       "cat": "feature",
       "title": "Capture, destroy or fortify islands (NPC bases or enemy players)",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-7",
       "tags": [
         "territory"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): PR #15: ruin a stronghold and hold close to capture",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/15"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T23:45:33Z",
       "by": "Claude"
     },
     {
