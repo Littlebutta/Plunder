@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:52Z",
+  "updated": "2026-11-09T22:15:54Z",
   "categories": [
     {
       "key": "feature",
@@ -1198,6 +1198,20 @@
       "priority": "high",
       "milestone": "M-6",
       "updated": "2026-11-09T22:15:52Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-48",
+      "cat": "feature",
+      "title": "Map view with RTS-style fleet orders",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:54Z",
+      "priority": "high",
+      "milestone": "M-7",
+      "updated": "2026-11-09T22:15:54Z",
       "by": "Claude"
     }
   ],
