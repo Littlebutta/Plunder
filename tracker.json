@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:47Z",
+  "updated": "2026-11-09T22:15:49Z",
   "categories": [
     {
       "key": "feature",
@@ -1171,6 +1171,19 @@
       "priority": "high",
       "milestone": "M-5",
       "updated": "2026-11-09T22:15:47Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-46",
+      "cat": "feature",
+      "title": "Faster ships",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:49Z",
+      "priority": "medium",
+      "updated": "2026-11-09T22:15:49Z",
       "by": "Claude"
     }
   ],
