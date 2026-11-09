@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
-import { FloatingBody, HullSpec } from '../physics/FloatingBody';
+import { HullSpec } from '../physics/FloatingBody';
+import { DriveSpec, Vessel } from '../ship/Vessel';
 import { WaveField } from '../ocean/waves';
 import { Wind } from '../world/Wind';
 
@@ -32,7 +33,7 @@ export const RAFT_HULL: HullSpec = {
  * Arcade sailing: the sail always drives the raft (so you can go anywhere),
  * and the wind adds a boost on top when it is behind you.
  */
-export const RAFT_DRIVE = {
+export const RAFT_DRIVE: DriveSpec = {
   /** N at full sail with no help from the wind (~8 knots top speed). */
   baseThrust: 950,
   /** Extra N at full sail running dead downwind in a strength-1 wind. */
@@ -46,43 +47,36 @@ export const RAFT_DRIVE = {
   maxTrim: THREE.MathUtils.degToRad(75),
 };
 
-/** Wind speed in m/s at strength 1. */
-export const WIND_SPEED = 9;
+
+
 
 /**
  * The player's starting craft: a lashed-log raft with a single square sail.
  * Visual group is driven by a `FloatingBody` for physics.
  */
-export class Raft {
-  readonly group = new THREE.Group();
-  readonly body: FloatingBody;
-
-  /** 0 = furled, 1 = full sail. Negative = paddling backwards. */
-  sail = 0;
-  rudder = 0;
-  /** Yard angle in radians (0 = square across the raft); swings to the wind on its own. */
-  trim = 0;
-  /** 0..1, how much the wind is boosting you right now (for HUD/audio/FX). */
-  windBoost = 0;
-  /** Called once each time the sail fills: full sail AND a good wind. */
-  onSailFilled: (() => void) | null = null;
+export class Raft extends Vessel {
   /** Bow mount point for a deck gun, in raft space. */
   readonly bowMount = new THREE.Vector3(0, LOG_R + 0.12, -1.45);
+  /** Where the test broadside battery sits (C). */
+  readonly gunMounts = [
+    new THREE.Vector3(1.12, 0.3, -0.55),
+    new THREE.Vector3(1.12, 0.3, 0.55),
+    new THREE.Vector3(-1.12, 0.3, -0.55),
+    new THREE.Vector3(-1.12, 0.3, 0.55),
+  ];
+  readonly length = LENGTH;
+  readonly holdCapacity = 40;
+  readonly displayName = 'Log raft';
 
   private readonly sailMesh: THREE.Mesh;
   private readonly sailPivot = new THREE.Group();
   private readonly flag: THREE.Mesh;
   private readonly tiller: THREE.Group;
   private time = 0;
-  private filled = false;
-  private readonly apparentLocal = new THREE.Vector3();
 
-  constructor(
-    waves: WaveField,
-    private readonly wind: Wind,
-  ) {
+  constructor(waves: WaveField, wind: Wind) {
+    super(RAFT_HULL, RAFT_DRIVE, waves, wind);
     this.group.name = 'raft';
-    this.body = new FloatingBody(RAFT_HULL, waves);
 
     const wood = toonMaterial(PALETTE.wood);
     const woodDark = toonMaterial(PALETTE.woodDark);
@@ -192,64 +186,6 @@ export class Raft {
     return mesh;
   }
 
-  /**
-   * Per-frame: read player input into sail / rudder state.
-   * throttle -1..1 (S/W) raises/lowers the sail, steer -1..1 (A/D).
-   */
-  control(dt: number, throttleInput: number, steerInput: number): void {
-    this.sail = THREE.MathUtils.clamp(this.sail + throttleInput * RAFT_DRIVE.sailRate * dt, -0.4, 1);
-    this.rudder = THREE.MathUtils.damp(this.rudder, steerInput, 6, dt);
-    // Purely visual: the yard swings to catch the wind.
-    this.trim = THREE.MathUtils.damp(this.trim, this.bestTrim(), 2.5, dt);
-
-    const wasFilled = this.filled;
-    this.filled = this.sail > 0.97 && this.windBoost > 0.6;
-    if (this.filled && !wasFilled) this.onSailFilled?.();
-    if (this.sail < 0.9 || this.windBoost < 0.4) this.filled = false;
-  }
-
-  /** Apparent wind (wind minus own velocity) in raft space, m/s. */
-  private updateApparentWind(): THREE.Vector3 {
-    const w = _aw.copy(this.wind.direction).multiplyScalar(this.wind.strength * WIND_SPEED).sub(this.body.velocity);
-    w.y = 0;
-    return this.apparentLocal.copy(w).applyQuaternion(_qi.copy(this.body.quaternion).invert());
-  }
-
-  /** Yard angle that squares the sail to the apparent wind (for looks). */
-  private bestTrim(): number {
-    const a = this.updateApparentWind();
-    if (a.lengthSq() < 0.01) return 0;
-    // sail normal (-sin t, -cos t) should point along the apparent wind
-    let t = Math.atan2(-a.x, -a.z);
-    // wind from ahead: can't fill, so just let the yard swing square-ish
-    if (Math.abs(t) > Math.PI / 2) t = 0;
-    return THREE.MathUtils.clamp(t, -RAFT_DRIVE.maxTrim, RAFT_DRIVE.maxTrim);
-  }
-
-  /** Fixed-step: turn sail / rudder into forces and integrate. */
-  physicsStep(h: number): void {
-    const b = this.body;
-    if (this.sail >= 0) {
-      // How much the wind is behind us: 1 dead downwind, ~0.25 on the beam, 0 into it.
-      const fwd = b.forward(_fw).setY(0).normalize();
-      const along = fwd.dot(this.wind.direction);
-      const behind = THREE.MathUtils.clamp((along + 0.3) / 1.3, 0, 1);
-      this.windBoost = behind * Math.min(this.wind.strength, 1.2);
-      const headwind = Math.max(0, -along) * this.wind.strength * RAFT_DRIVE.headwindPenalty;
-      b.thrust = this.sail * (RAFT_DRIVE.baseThrust * (1 - headwind) + RAFT_DRIVE.windBoost * this.windBoost);
-      b.sideForce = 0;
-    } else {
-      b.thrust = (this.sail / 0.4) * RAFT_DRIVE.reverseThrust;
-      b.sideForce = 0;
-      this.windBoost = 0;
-    }
-    const speed = b.forwardSpeed;
-    const gain = 1 + RAFT_DRIVE.steerSpeedGain * Math.abs(speed);
-    // Steering reverses when moving backwards, like a real rudder.
-    b.yawTorque = -this.rudder * RAFT_DRIVE.steerTorque * gain * (speed < -0.2 ? -1 : 1);
-    b.step(h);
-  }
-
   /** Per-frame: copy physics state to the visuals and animate rigging. */
   syncVisuals(dt: number): void {
     this.time += dt;
@@ -271,6 +207,3 @@ export class Raft {
   }
 }
 
-const _aw = new THREE.Vector3();
-const _fw = new THREE.Vector3();
-const _qi = new THREE.Quaternion();

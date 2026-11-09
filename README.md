@@ -45,7 +45,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Space | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
 | E / click island | Gather from the island in range (a marker floats over it). E again to stop. |
 | Esc | Main menu / resume |
-| C | Fit / remove a test broadside battery (two cannons per side) |
+| C | Fit / remove the broadside battery (the raft gets a test battery; a designed ship uses its own cannons) |
 | F | Fire the broadside on the side you're aiming at (outlined ribbon) |
 | Mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
@@ -76,6 +76,12 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 Each island holds resources that depend on its type and size (wood, stone, food, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
 
+## Shipyard
+
+Open it from the main menu. On the **top view** drag to draw the hull's outline (one side, it is mirrored); on the **side view** drag to draw the keel line under the water. Switch tools to place masts (up to three) and pairs of cannons on snap points, set length, beam, keel depth and freeboard with the sliders, or start from a preset (Dinghy, Sloop, Brig, Barge). The design is lofted into 3D live on the right, with its weight, draft, speed, handling, hold and cost. **Launch** swaps your vessel for the design where you are; the cannons you placed become the broadside. The last design is remembered.
+
+A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, mast and cannon slots. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Building is free for now; costs are shown for balancing.
+
 ## Main menu
 
 The game opens on a title menu: options on the left, the raft sailing by itself on the right. Drag to look around. Esc in play returns to it.
@@ -97,7 +103,11 @@ src/
   ocean/Ocean.ts             camera-following variable-density ocean grid
   physics/FloatingBody.ts    buoyancy probes, body-space drag, rigid-body integration
   physics/Simulation.ts      fixed 120 Hz step (waves + bodies in lockstep)
-  raft/Raft.ts               raft model, HullSpec, arcade sail drive + wind boost
+  raft/Raft.ts               starter raft model + its HullSpec
+  ship/Vessel.ts             base for anything you sail: arcade sail drive + wind boost
+  ship/HullDesign.ts         shipyard design data, presets, stats, design -> physics
+  ship/ShipVisual.ts         lofts a design into a ship model with mount points
+  ship/DesignedShip.ts       a Vessel built from a design
   combat/ProjectileSim.ts    projectile integrator, water + collider hits (pure, no DOM)
   combat/projectile.worker.ts  runs ProjectileSim on a worker thread
   combat/ProjectileSystem.ts main-thread side: batching, instanced rendering, impact events

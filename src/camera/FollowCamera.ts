@@ -17,7 +17,7 @@ export class FollowCamera {
   distance = 14;
 
   minDistance = 5;
-  maxDistance = 60;
+  maxDistance = 90;
   private readonly focus = new THREE.Vector3();
   private readonly smoothPos = new THREE.Vector3();
   private initialised = false;
@@ -28,6 +28,11 @@ export class FollowCamera {
     private readonly input: Input,
     private readonly waves: WaveField,
   ) {}
+
+  /** Zoom to a given distance (used when the player's ship changes size). */
+  setDistance(d: number): void {
+    this.targetDistance = THREE.MathUtils.clamp(d, this.minDistance, this.maxDistance);
+  }
 
   /** Point the camera keeps centred on (smoothed ship position). */
   get focusPoint(): THREE.Vector3 {
