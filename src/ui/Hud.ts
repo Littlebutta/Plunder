@@ -23,10 +23,10 @@ export class Hud {
       <div class="hud-panel hud-help">
         <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost; hold S at zero to back-paddle)</div>
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
-        <div><kbd>Mouse</kbd> aim · <kbd>Space</kbd> fire swivel gun</div>
-        <div><kbd>C</kbd> fit broadside cannons · <kbd>F</kbd> fire broadside (turn the ship to aim)</div>
+        <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire broadside</div>
+        <div><kbd>C</kbd> fit / stow broadside cannons (turn the ship to bring them to bear)</div>
         <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
-        <div><kbd>Drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
+        <div><kbd>Left drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>B</kbd> barrage test · <kbd>M</kbd> mute · <kbd>G</kbd> tuning · <kbd>P</kbd> probes · <kbd>H</kbd> hide help</div>
       </div>
       <div class="hud-panel hud-stats">

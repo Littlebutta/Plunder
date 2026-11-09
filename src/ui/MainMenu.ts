@@ -1,7 +1,7 @@
 export interface MenuActions {
   play(): void;
   shipyard(): void;
-  toggleSound(): boolean; // returns true if sound is now on
+  settings(): void;
 }
 
 /**
@@ -23,7 +23,7 @@ export class MainMenu {
         <button data-act="play">Set sail</button>
         <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
         <button data-act="multi" disabled>Multiplayer <small>with Steam friends, later</small></button>
-        <button data-act="sound">Sound: on</button>
+        <button data-act="settings">Settings <small>sound and music volume</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
         <div class="menu-foot">Drag to look around</div>
       </div>`;
@@ -39,8 +39,8 @@ export class MainMenu {
         case 'shipyard':
           actions.shipyard();
           break;
-        case 'sound':
-          btn.textContent = `Sound: ${actions.toggleSound() ? 'on' : 'off'}`;
+        case 'settings':
+          actions.settings();
           break;
         case 'quit':
           window.close();

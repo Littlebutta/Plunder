@@ -23,6 +23,7 @@ import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
 import { MainMenu } from './ui/MainMenu';
+import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
 import { DesignedShip } from './ship/DesignedShip';
 import type { Vessel } from './ship/Vessel';
@@ -95,6 +96,8 @@ const streaks = new WindStreaks(wind);
 scene.add(streaks.mesh);
 
 const audio = new AudioManager();
+const settings = new SettingsPanel(document.body, audio);
+settings.onClose = () => canvas.focus();
 const onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
 ship.onSailFilled = onSailFilled;
 
@@ -212,13 +215,11 @@ const menu = new MainMenu(document.body, {
   play: () => startPlay(),
   shipyard: () => {
     mode = 'yard';
+    settings.showGear(false);
     menu.hide();
     yard.open();
   },
-  toggleSound: () => {
-    audio.setMuted(!audio.muted);
-    return !audio.muted;
-  },
+  settings: () => settings.open(),
 });
 
 const yard = new Shipyard(document.body, {
@@ -253,6 +254,7 @@ function startPlay(): void {
   voyageStarted = true;
   menu.hide();
   hudRoot.classList.remove('in-menu');
+  settings.showGear(true);
   gun.preview.visible = true;
   broadside.ribbon.visible = broadside.visible;
   applyViewOffset();
@@ -263,6 +265,7 @@ function openMenu(): void {
   mode = 'menu';
   menu.show(voyageStarted);
   hudRoot.classList.add('in-menu');
+  settings.showGear(false);
   gun.preview.visible = false;
   broadside.ribbon.visible = false;
   marker.visible = false;
@@ -393,6 +396,8 @@ const raycaster = new THREE.Raycaster();
 const aimPoint = new THREE.Vector3();
 const aimRaw = new THREE.Vector3();
 const aimFlat = new THREE.Vector3();
+/** Cursor on the flat mean sea level (steadier than `aimPoint`; used by the broadside). */
+const aimLevel = new THREE.Vector3();
 let aimStarted = false;
 const AIM_MAX_RANGE = 260;
 const AIM_BAND = 5; // waves stay within +/- this many metres
@@ -438,6 +443,16 @@ function updateAimPoint(dt: number): void {
   else aimPoint.lerp(aimRaw, 1 - Math.exp(-dt / AIM_SMOOTHING));
   aimStarted = true;
   aimPoint.y = waves.heightAt(aimPoint.x, aimPoint.z);
+
+  // The broadside takes only a general direction from the cursor: where the
+  // ray meets the flat mean sea level, which no passing wave can move.
+  if (direction.y < -1e-3) {
+    raycaster.ray.at(Math.min(-origin.y / direction.y, AIM_MAX_RANGE * 3), aimLevel);
+  } else {
+    aimFlat.set(direction.x, 0, direction.z).normalize();
+    aimLevel.copy(ship.body.position).addScaledVector(aimFlat, AIM_MAX_RANGE);
+  }
+  aimLevel.y = 0;
 }
 
 const muzzlePos = new THREE.Vector3();
@@ -458,7 +473,8 @@ function frame(): void {
 
   const playing = mode === 'play';
   if (input.wasPressed('Escape')) {
-    if (playing) openMenu();
+    if (settings.visible) settings.close();
+    else if (playing) openMenu();
     else if (mode === 'yard') {
       yard.close();
       openMenu();
@@ -468,7 +484,7 @@ function frame(): void {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
     if (input.wasPressed('KeyH')) hud.toggleHelp();
     if (input.wasPressed('KeyP')) probeMarkers.visible = !probeMarkers.visible;
-    if (input.wasPressed('KeyM')) audio.setMuted(!audio.muted);
+    if (input.wasPressed('KeyM')) settings.toggleMute();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
   }
 
@@ -487,7 +503,10 @@ function frame(): void {
     gun.aimAt(aimPoint);
   }
   gun.update(dt);
-  if (playing && input.fire && gun.tryFire()) {
+  // Right mouse fires the swivel. Space fires the main guns: the broadside when
+  // one is run out, otherwise the swivel.
+  const batteryOut = broadside.visible && broadside.guns.length > 0;
+  if (playing && (input.fireSwivel || (input.fire && !batteryOut)) && gun.tryFire()) {
     gun.muzzle(muzzlePos, muzzleDir);
     shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed);
     projectiles.spawn(muzzlePos, shotVel, SWIVEL.kind, RAFT_ID);
@@ -497,8 +516,8 @@ function frame(): void {
   // --- Broadside ---
   if (playing && input.wasPressed('KeyC')) broadside.setVisible(!broadside.visible);
   if (playing && broadside.visible) {
-    broadside.aimAt(aimPoint);
-    if (input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
+    broadside.aimAt(aimLevel, dt);
+    if (input.fire || input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
   }
   broadsideShots.length = 0;
   broadside.update(dt, broadsideShots);

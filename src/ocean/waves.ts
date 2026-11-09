@@ -8,11 +8,13 @@
  *
  * To keep the sea from looking like one repeating pattern:
  * - waves come from three systems (a long swell, a cross swell, wind chop),
- *   each with its own direction, length and phase;
+ *   with trains running in every compass quarter so the sea crosses itself;
  * - every wave's height is modulated by two slow envelopes: "wave groups"
  *   that travel at half the wave's speed (sets of bigger waves roll through),
  *   and a second one running along the crest, which chops the long parallel
  *   lines into short humps;
+ * - every wave also swells and fades on its own slow clock (tens of seconds),
+ *   so which direction dominates keeps changing and the rhythm never settles;
  * - every wave's phase is warped by a slow drifting field, so crests bend
  *   and wander instead of marching in straight rows;
  * - near land the whole sea is scaled down by the shore map (see shore.ts).
@@ -41,6 +43,11 @@ const WARP_A = 1.2;
 const WARP_B = -0.9;
 const COS_WA = Math.cos(WARP_A);
 const SIN_WA = Math.sin(WARP_A);
+/** Each wave's height breathes by +/- this fraction on its own slow clock. */
+const BREATH = 0.35;
+/** Breathing rate (rad/s): base + per-radian-of-phase spread, so periods run from about 20 to 70 s. */
+const BREATH_RATE = 0.09;
+const BREATH_SPREAD = 0.036;
 const COS_WB = Math.cos(WARP_B);
 const SIN_WB = Math.sin(WARP_B);
 
@@ -58,25 +65,26 @@ export interface WaveParams {
 }
 
 export const DEFAULT_WAVES: WaveParams[] = [
-  // long swell: three trains fanned well apart so they cross instead of stacking
-  { direction: 15, wavelength: 72, steepness: 0.14, phase: 0.0, grouping: 0.55 },
-  { direction: 64, wavelength: 47, steepness: 0.12, phase: 2.1, grouping: 0.55 },
-  { direction: -41, wavelength: 36, steepness: 0.11, phase: 4.3, grouping: 0.5 },
-  // cross swell
-  { direction: 122, wavelength: 27, steepness: 0.08, phase: 1.3, grouping: 0.45 },
-  { direction: -98, wavelength: 19, steepness: 0.065, phase: 5.2, grouping: 0.4 },
-  // wind chop
-  { direction: 38, wavelength: 12, steepness: 0.07, phase: 0.7, grouping: 0.35 },
-  { direction: -17, wavelength: 9, steepness: 0.06, phase: 3.6, grouping: 0.35 },
-  { direction: 171, wavelength: 7, steepness: 0.05, phase: 2.8, grouping: 0.3 },
-  { direction: 88, wavelength: 5.5, steepness: 0.04, phase: 4.9, grouping: 0.25 },
-  { direction: -66, wavelength: 4, steepness: 0.035, phase: 1.9, grouping: 0.2 },
+  // long swell: three trains from different quarters, so they cross instead of marching together
+  { direction: 20, wavelength: 72, steepness: 0.115, phase: 0.0, grouping: 0.55 },
+  { direction: 118, wavelength: 51, steepness: 0.1, phase: 2.1, grouping: 0.55 },
+  { direction: -74, wavelength: 38, steepness: 0.095, phase: 4.3, grouping: 0.5 },
+  // cross swell, running against the main trains
+  { direction: -163, wavelength: 29, steepness: 0.085, phase: 1.3, grouping: 0.5 },
+  { direction: 67, wavelength: 21, steepness: 0.07, phase: 5.2, grouping: 0.45 },
+  // wind chop from all round
+  { direction: -28, wavelength: 13, steepness: 0.07, phase: 0.7, grouping: 0.4 },
+  { direction: 152, wavelength: 9.5, steepness: 0.06, phase: 3.6, grouping: 0.4 },
+  { direction: -115, wavelength: 7, steepness: 0.05, phase: 2.8, grouping: 0.35 },
+  { direction: 88, wavelength: 5.5, steepness: 0.04, phase: 4.9, grouping: 0.3 },
+  { direction: -5, wavelength: 4, steepness: 0.035, phase: 1.9, grouping: 0.25 },
 ];
 
 export interface SeaState {
   waves: WaveParams[];
   intensity: number;
   warp: number;
+  amplitudeScale: number;
 }
 
 export interface WaveSample {
@@ -95,7 +103,13 @@ export class WaveField {
   /** Global time-scale. */
   speed = 1;
   /** How far crests bend and wander (radians of phase). 0 = straight rows. */
-  warp = 0.9;
+  warp = 1.15;
+  /**
+   * Wave height multiplier for weather (1 = normal sea, about 1.6 = storm).
+   * After changing it call `syncUniforms()`, `ocean.refreshAmplitude()` and
+   * `projectiles.markSeaDirty()`.
+   */
+  amplitudeScale = 1;
   /** Terrain map; the sea is scaled down in shallow water. Null = open ocean everywhere. */
   shore: ShoreField | null = null;
 
@@ -106,7 +120,7 @@ export class WaveField {
     // x = phase speed c, y = steepness (Q), z = phase, w = grouping depth
     uWaveB: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector4()) },
     uWaveCount: { value: 0 },
-    uWarp: { value: 0.9 },
+    uWarp: { value: 1.15 },
   };
 
   private time = 0;
@@ -135,13 +149,14 @@ export class WaveField {
 
   /** Plain-data snapshot of the sea state, cheap to post to a worker. */
   serialize(): SeaState {
-    return { waves: this.waves.map((w) => ({ ...w })), intensity: this.intensity, warp: this.warp };
+    return { waves: this.waves.map((w) => ({ ...w })), intensity: this.intensity, warp: this.warp, amplitudeScale: this.amplitudeScale };
   }
 
   applySeaState(state: SeaState): void {
     this.waves = state.waves.map((w) => ({ ...w }));
     this.intensity = state.intensity;
     this.warp = state.warp;
+    this.amplitudeScale = state.amplitudeScale ?? 1;
     this.syncUniforms();
   }
 
@@ -161,7 +176,7 @@ export class WaveField {
       const rad = THREE.MathUtils.degToRad(w.direction);
       const k = (2 * Math.PI) / Math.max(0.5, w.wavelength);
       const c = Math.sqrt(GRAVITY / k);
-      const q = w.steepness * this.intensity;
+      const q = w.steepness * this.intensity * this.amplitudeScale;
       a.set(Math.cos(rad), Math.sin(rad), k, q / k);
       b.set(c, q, w.phase ?? 0, THREE.MathUtils.clamp(w.grouping ?? 0, 0, 0.95));
     }
@@ -190,6 +205,8 @@ export class WaveField {
       const e2 = Math.sin((k / CREST_LENGTH) * ((dx * COS_CREST - dz * SIN_CREST) * x + (dx * SIN_CREST + dz * COS_CREST) * z - c * 0.35 * t) + ph * 2.9);
       env = (1 - g + g * 0.85 * (1 + e1)) * (1 + g * 0.7 * e2);
     }
+    // slow breathing on the wave's own clock
+    env *= 1 + BREATH * Math.sin(t * (BREATH_RATE + BREATH_SPREAD * ph) + ph * 4.7);
     ev.env = env;
 
     const kq = k / WARP_LENGTH;
@@ -333,6 +350,7 @@ export const GERSTNER_GLSL = /* glsl */ `
       float e2 = sin(k / ${CREST_LENGTH.toFixed(1)} * (dot(rot(d, ${COS_CREST.toFixed(6)}, ${SIN_CREST.toFixed(6)}), p) - c * 0.35 * uTime) + ph * 2.9);
       env = (1.0 - g + g * 0.85 * (1.0 + e1)) * (1.0 + g * 0.7 * e2);
     }
+    env *= 1.0 + ${BREATH.toFixed(3)} * sin(uTime * (${BREATH_RATE.toFixed(4)} + ${BREATH_SPREAD.toFixed(4)} * ph) + ph * 4.7);
     float kq = k / ${WARP_LENGTH.toFixed(1)};
     vec2 ra = rot(d, ${COS_WA.toFixed(6)}, ${SIN_WA.toFixed(6)});
     vec2 rb = rot(d, ${COS_WB.toFixed(6)}, ${SIN_WB.toFixed(6)});

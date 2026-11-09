@@ -37,7 +37,7 @@ export class GatherUi {
     const near = g.inRange;
     // Rebuild only when something visible changed.
     const key = [
-      RESOURCE_IDS.map((id) => hold.stock[id]).join(','),
+      hold.capacity + ':' + RESOURCE_IDS.map((id) => hold.stock[id]).join(','),
       sel ? sel.name + RESOURCE_IDS.map((id) => sel.stock[id]).join(',') + g.status : '',
       near?.name ?? '',
     ].join('|');

@@ -25,10 +25,21 @@ export interface PlayOptions {
  * Browsers only allow audio after a user gesture, so `unlock()` is wired to
  * the first key/pointer press.
  */
+export type AudioBus = 'master' | 'effects' | 'ambience' | 'music';
+const MASTER_GAIN = 0.9;
+
 export class AudioManager {
   muted = false;
+  /** 0..1 volume per bus, set from the settings panel. */
+  readonly volumes: Record<AudioBus, number> = { master: 1, effects: 1, ambience: 1, music: 1 };
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** Guns, splashes, hits. */
+  private effects: GainNode | null = null;
+  /** Sea and wind beds. */
+  private ambience: GainNode | null = null;
+  /** Music (nothing plays here yet; the bus is ready for when there is some). */
+  music: GainNode | null = null;
   private readonly buffers = new Map<SampleName, AudioBuffer>();
   private noise: AudioBuffer | null = null;
   private oceanGain: GainNode | null = null;
@@ -57,21 +68,48 @@ export class AudioManager {
     const ctx = new Ctx();
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.9;
+    this.master.gain.value = this.muted ? 0 : MASTER_GAIN * this.volumes.master;
     // Gentle limiter so a barrage doesn't clip.
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14;
     comp.ratio.value = 8;
     this.master.connect(comp).connect(ctx.destination);
+    const bus = (v: number) => {
+      const g = ctx.createGain();
+      g.gain.value = v;
+      g.connect(this.master!);
+      return g;
+    };
+    this.effects = bus(this.volumes.effects);
+    this.ambience = bus(this.volumes.ambience);
+    this.music = bus(this.volumes.music);
 
-    this.noise = this.makeNoise(ctx, 2);
+    this.noise = this.makeNoise(ctx, 6);
     this.startBeds(ctx);
+    this.applyVolumes();
     for (const [name, url] of Object.entries(SAMPLES) as [SampleName, string][]) void this.load(name, url);
   }
 
   setMuted(m: boolean): void {
     this.muted = m;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
+    this.applyVolumes();
+  }
+
+  /** Set one bus's volume (0..1). */
+  setVolume(bus: AudioBus, v: number): void {
+    this.volumes[bus] = Math.min(1, Math.max(0, v));
+    this.applyVolumes();
+  }
+
+  private applyVolumes(): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    // sliders feel even when the gain follows the square of the setting
+    const sq = (v: number) => v * v;
+    this.master.gain.setTargetAtTime(this.muted ? 0 : MASTER_GAIN * sq(this.volumes.master), t, 0.05);
+    this.effects?.gain.setTargetAtTime(sq(this.volumes.effects), t, 0.05);
+    this.ambience?.gain.setTargetAtTime(sq(this.volumes.ambience), t, 0.05);
+    this.music?.gain.setTargetAtTime(sq(this.volumes.music), t, 0.05);
   }
 
   private async load(name: SampleName, url: string): Promise<void> {
@@ -112,15 +150,15 @@ export class AudioManager {
   updateAmbience(windStrength: number, sail: number, speed: number): void {
     if (!this.ctx || !this.windGain || !this.windFilter || !this.oceanGain) return;
     const t = this.ctx.currentTime;
-    this.windGain.gain.setTargetAtTime(0.025 + windStrength * (0.04 + Math.max(sail, 0) * 0.06), t, 0.4);
-    this.windFilter.frequency.setTargetAtTime(500 + windStrength * 900, t, 0.4);
-    this.oceanGain.gain.setTargetAtTime(0.12 + Math.min(speed, 6) * 0.025, t, 0.5);
+    this.windGain.gain.setTargetAtTime(0.008 + windStrength * (0.014 + Math.max(sail, 0) * 0.022), t, 0.4);
+    this.windFilter.frequency.setTargetAtTime(260 + windStrength * 320, t, 0.4);
+    this.oceanGain.gain.setTargetAtTime(0.2 + Math.min(speed, 6) * 0.03, t, 0.5);
   }
 
   play(name: SampleName, opts: PlayOptions = {}): void {
     const ctx = this.ctx;
     const buf = this.buffers.get(name);
-    if (!ctx || !buf || !this.master || !this.allow(name, 10)) return;
+    if (!ctx || !buf || !this.effects || !this.allow(name, 10)) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const jitter = opts.rateJitter ?? 0;
@@ -187,7 +225,7 @@ export class AudioManager {
   private route(node: AudioNode, position?: THREE.Vector3): void {
     const ctx = this.ctx!;
     if (!position) {
-      node.connect(this.master!);
+      node.connect(this.effects!);
       return;
     }
     const pan = ctx.createPanner();
@@ -199,7 +237,7 @@ export class AudioManager {
     pan.positionX.value = position.x;
     pan.positionY.value = position.y;
     pan.positionZ.value = position.z;
-    node.connect(pan).connect(this.master!);
+    node.connect(pan).connect(this.effects!);
   }
 
   /** Voice limiter: at most `max` starts of `key` per 150 ms. */
@@ -223,33 +261,40 @@ export class AudioManager {
   }
 
   private startBeds(ctx: AudioContext): void {
-    const loop = (filterType: BiquadFilterType, freq: number) => {
+    // A looping noise source through a chain of filters into the ambience bus.
+    const loop = (filters: BiquadFilterNode[], rate: number) => {
       const src = ctx.createBufferSource();
       src.buffer = this.noise;
       src.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = filterType;
-      f.frequency.value = freq;
+      src.playbackRate.value = rate;
       const g = ctx.createGain();
       g.gain.value = 0;
-      src.connect(f).connect(g).connect(this.master!);
-      src.start();
-      return { f, g };
+      let node: AudioNode = src;
+      for (const f of filters) node = node.connect(f);
+      node.connect(g).connect(this.ambience!);
+      src.start(0, Math.random() * 3);
+      return g;
     };
-    // Ocean: low rumble with a slow swell LFO.
-    const ocean = loop('lowpass', 420);
+    const filter = (type: BiquadFilterType, freq: number, q = 0.7) => {
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      return f;
+    };
+    // Ocean: a deep rumble with a slow swell. Two low-pass stages in a row cut
+    // the hiss a single filter lets through; the noise is also played slow,
+    // which shifts what is left further down.
+    this.oceanGain = loop([filter('lowpass', 230), filter('lowpass', 300)], 0.5);
     const lfo = ctx.createOscillator();
     lfo.frequency.value = 0.12;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.05;
-    lfo.connect(lfoGain).connect(ocean.g.gain);
+    lfoGain.gain.value = 0.07;
+    lfo.connect(lfoGain).connect(this.oceanGain.gain);
     lfo.start();
-    this.oceanGain = ocean.g;
-    // Wind: band-passed hiss.
-    const wind = loop('bandpass', 800);
-    wind.f.Q.value = 0.6;
-    this.windGain = wind.g;
-    this.windFilter = wind.f;
+    // Wind: a soft low whoosh, not a hiss.
+    this.windFilter = filter('bandpass', 400, 1.1);
+    this.windGain = loop([this.windFilter, filter('lowpass', 900)], 0.8);
   }
 }
 

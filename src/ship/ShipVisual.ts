@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
+import { createWaterMask } from '../render/waterMask';
 import { CANNON_MIN_HALF_BEAM, deckAt, halfBeamAt, HullDesign, keelAt, mastSize, sheerAt, STATIONS, zAt } from './HullDesign';
 
 export interface ShipVisual {
@@ -105,6 +106,26 @@ export function buildShipVisual(d: HullDesign): ShipVisual {
   const deck = new THREE.Mesh(deckGeo, woodLight);
   deck.receiveShadow = true;
   group.add(deck);
+
+  // --- Lid at rail height that keeps the sea from showing inside the hull ------
+  const lidPos: number[] = [];
+  const lidIdx: number[] = [];
+  for (let i = 0; i <= LOFT; i++) {
+    const t = i / LOFT;
+    const hb = Math.max(0.02, halfBeamAt(d, t) * 0.99);
+    const y = sheerAt(d, t) - 0.02;
+    lidPos.push(-hb, y, zAt(d, t), hb, y, zAt(d, t));
+    if (i < LOFT) {
+      const a = i * 2;
+      // wound to face up whichever way z runs along the hull
+      if (zAt(d, 1) > zAt(d, 0)) lidIdx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      else lidIdx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const lidGeo = new THREE.BufferGeometry();
+  lidGeo.setAttribute('position', new THREE.Float32BufferAttribute(lidPos, 3));
+  lidGeo.setIndex(lidIdx);
+  group.add(createWaterMask(lidGeo));
 
   // --- Rails: a dark strake along the top of each side ---------------------------
   for (const side of [-1, 1]) {
