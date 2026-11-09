@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:15:35Z",
+  "updated": "2026-11-09T20:18:46Z",
   "categories": [
     {
       "key": "feature",
@@ -758,12 +758,12 @@
       "tags": [
         "tools"
       ],
-      "notes": "tracker/index.html edits tracker.json on the tracker-data branch; Claude reads it with tracker/cli.mjs.",
+      "notes": "tracker/index.html edits tracker.json on the tracker-data branch; Claude reads it with tracker/cli.mjs.\n\n2026-11-09 (Claude): Merged in PR #3.",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/3"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:15:35Z",
+      "updated": "2026-11-09T20:18:46Z",
       "by": "Claude"
     },
     {
