@@ -1,4 +1,5 @@
 import type { SeaState } from '../ocean/waves';
+import type { ShoreData } from '../ocean/shore';
 import type { StepResult } from './ProjectileSim';
 
 export interface WorkerRequest {
@@ -13,6 +14,8 @@ export interface WorkerRequest {
   colliders?: Float32Array;
   /** Sent only when the sea state changes. */
   sea?: SeaState;
+  /** Terrain height map; sent once. */
+  shore?: ShoreData;
 }
 
 export interface WorkerResponse extends StepResult {

@@ -48,10 +48,11 @@ scene.add(sun, sun.target);
 scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3));
 
 // --- World ----------------------------------------------------------------
-const waves = new WaveField();
-const ocean = new Ocean(waves, sunDir);
-const sky = new Sky(sunDir);
 const world = createIslands();
+const waves = new WaveField();
+waves.shore = world.shore; // calm shallows around the islands
+const ocean = new Ocean(waves, sunDir, world.shore);
+const sky = new Sky(sunDir);
 scene.add(sky.group, ocean.mesh, world.group);
 
 const wind = new Wind();
@@ -129,7 +130,7 @@ window.addEventListener('resize', () => {
 });
 
 // Expose a handle for console tinkering / automated checks.
-Object.assign(window, { plunder: { scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
+Object.assign(window, { plunder: { aimPoint: () => aimPoint, scene, camera, waves, raft, ocean, follow, sim, wind, gun, broadside, world, projectiles, targets, audio, barrage } });
 
 // --- Combat wiring ----------------------------------------------------------
 projectiles.onImpact = (e: ImpactEvent) => {
@@ -137,6 +138,11 @@ projectiles.onImpact = (e: ImpactEvent) => {
   if (e.type === 'splash') {
     effects.splash(e.position, size);
     audio.splash(e.position, size);
+    return;
+  }
+  if (e.type === 'land') {
+    effects.splinters(e.position, e.kind === 1 ? 8 : 4);
+    audio.woodHit(e.position);
     return;
   }
   if (e.colliderId >= TARGET_ID_BASE) {
@@ -182,27 +188,60 @@ function ballisticVelocity(a: THREE.Vector3, b: THREE.Vector3, v: number): THREE
   return new THREE.Vector3((dx / d) * Math.cos(elev) * v, Math.sin(elev) * v, (dz / d) * Math.cos(elev) * v);
 }
 
-// Mouse aim: ray from the camera through the cursor onto the (moving) sea.
+// Mouse aim: where the ray from the camera through the cursor meets the sea.
+// The ray is marched across the band of heights the waves can reach and the
+// crossing is refined by bisection, so the point is the water you actually
+// see under the cursor and does not hop between crests. A short smoothing
+// filter takes out what little frame-to-frame noise is left.
 const raycaster = new THREE.Raycaster();
 const aimPoint = new THREE.Vector3();
-function updateAimPoint(): void {
+const aimRaw = new THREE.Vector3();
+const aimFlat = new THREE.Vector3();
+let aimStarted = false;
+const AIM_MAX_RANGE = 260;
+const AIM_BAND = 5; // waves stay within +/- this many metres
+const AIM_SMOOTHING = 0.06; // seconds
+
+function updateAimPoint(dt: number): void {
   raycaster.setFromCamera(new THREE.Vector2(input.pointer.x, input.pointer.y), camera);
-  const ray = raycaster.ray;
-  let planeY = waves.heightAt(raft.body.position.x, raft.body.position.z);
-  const maxRange = 260;
-  for (let i = 0; i < 3; i++) {
-    const t = ray.direction.y < -1e-3 ? (planeY - ray.origin.y) / ray.direction.y : Infinity;
-    if (!isFinite(t) || t < 0 || t > maxRange * 2) {
-      // looking at/above the horizon: aim at max range along the view
-      const flat = new THREE.Vector3(ray.direction.x, 0, ray.direction.z).normalize();
-      aimPoint.copy(raft.body.position).addScaledVector(flat, maxRange);
-      aimPoint.y = waves.heightAt(aimPoint.x, aimPoint.z);
-      return;
+  const { origin, direction } = raycaster.ray;
+  const gap = (t: number) => origin.y + direction.y * t - waves.heightAt(origin.x + direction.x * t, origin.z + direction.z * t);
+  let hit = -1;
+  if (direction.y < -1e-3) {
+    const t0 = Math.max(0, (AIM_BAND - origin.y) / direction.y);
+    const t1 = Math.min((-AIM_BAND - origin.y) / direction.y, AIM_MAX_RANGE * 2);
+    const steps = 48;
+    let lo = t0;
+    if (gap(t0) <= 0) hit = t0;
+    for (let i = 1; i <= steps && hit < 0; i++) {
+      let hi = t0 + ((t1 - t0) * i) / steps;
+      if (gap(hi) > 0) {
+        lo = hi;
+        continue;
+      }
+      for (let k = 0; k < 7; k++) {
+        const mid = (lo + hi) / 2;
+        if (gap(mid) > 0) lo = mid;
+        else hi = mid;
+      }
+      hit = hi;
     }
-    ray.at(t, aimPoint);
-    planeY = waves.heightAt(aimPoint.x, aimPoint.z);
   }
-  aimPoint.y = planeY;
+  if (hit >= 0) {
+    raycaster.ray.at(hit, aimRaw);
+  } else {
+    // looking at/above the horizon: aim at max range along the view
+    aimFlat.set(direction.x, 0, direction.z).normalize();
+    aimRaw.copy(raft.body.position).addScaledVector(aimFlat, AIM_MAX_RANGE);
+  }
+  // keep the point within gun range of the raft
+  aimFlat.subVectors(aimRaw, raft.body.position).setY(0);
+  if (aimFlat.length() > AIM_MAX_RANGE) aimRaw.copy(raft.body.position).addScaledVector(aimFlat.normalize(), AIM_MAX_RANGE);
+
+  if (!aimStarted) aimPoint.copy(aimRaw);
+  else aimPoint.lerp(aimRaw, 1 - Math.exp(-dt / AIM_SMOOTHING));
+  aimStarted = true;
+  aimPoint.y = waves.heightAt(aimPoint.x, aimPoint.z);
 }
 
 const muzzlePos = new THREE.Vector3();
@@ -236,12 +275,12 @@ function frame(): void {
   raft.syncVisuals(dt);
 
   // --- Gun ---
-  updateAimPoint();
+  updateAimPoint(dt);
   gun.aimAt(aimPoint);
-  gun.update(dt, raft.body.velocity);
+  gun.update(dt);
   if (input.fire && gun.tryFire()) {
     gun.muzzle(muzzlePos, muzzleDir);
-    shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed).add(raft.body.velocity);
+    shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed);
     projectiles.spawn(muzzlePos, shotVel, SWIVEL.kind, RAFT_ID);
     effects.muzzle(muzzlePos, muzzleDir, raft.body.velocity, 0.8);
     audio.play('cannon', { volume: 0.55, rate: 1.4, rateJitter: 0.05, position: muzzlePos });
@@ -253,9 +292,9 @@ function frame(): void {
     if (input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
   }
   broadsideShots.length = 0;
-  broadside.update(dt, raft.body.velocity, broadsideShots);
+  broadside.update(dt, broadsideShots);
   for (const shot of broadsideShots) {
-    shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed).add(raft.body.velocity);
+    shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed);
     projectiles.spawn(shot.position, shotVel, BROADSIDE.kind, RAFT_ID);
     effects.muzzle(shot.position, shot.direction, raft.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 1, rateJitter: 0.06, position: shot.position });

@@ -21,6 +21,7 @@ export function createDebugPanel(waves: WaveField, ocean: Ocean, wind: Wind, onS
 
   const sea = gui.addFolder('Sea state');
   sea.add(waves, 'intensity', 0, 2, 0.01).name('roughness').onChange(sync);
+  sea.add(waves, 'warp', 0, 2, 0.01).name('crest wander').onChange(sync);
   sea.add(waves, 'speed', 0, 3, 0.01).name('time scale');
   sea.add(ocean.material.uniforms.uFoamAmount, 'value', 0, 1.5, 0.01).name('foam');
 
@@ -50,7 +51,6 @@ export function createDebugPanel(waves: WaveField, ocean: Ocean, wind: Wind, onS
   combat.add(SWIVEL, 'reload', 0.05, 5, 0.05).name('swivel reload s');
   combat.add(BROADSIDE, 'muzzleSpeed', 20, 120, 1).name('broadside muzzle m/s');
   combat.add(BROADSIDE, 'reload', 0.2, 8, 0.1).name('broadside reload s');
-  combat.add(BROADSIDE, 'stabilise', 0, 1, 0.01).name('roll stabilise');
   combat.add(barrage, 'size', 10, 4000, 10).name('barrage shells');
   combat.add(barrage, 'fire').name('fire barrage (B)');
 

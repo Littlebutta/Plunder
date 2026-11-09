@@ -7,6 +7,7 @@
  * cost almost nothing to step and can be handed back as a transferable buffer.
  */
 import { WaveField, SeaState } from '../ocean/waves';
+import { ShoreField, ShoreData } from '../ocean/shore';
 
 export const GRAVITY = 9.81;
 export const SIM_DT = 1 / 120;
@@ -24,6 +25,8 @@ export const COLLIDER_STRIDE = 5;
 export const EVENT_STRIDE = 6;
 export const EVENT_SPLASH = 1;
 export const EVENT_HIT = 2;
+/** Shell hit the ground (an island). */
+export const EVENT_LAND = 3;
 
 export interface ProjectileKind {
   /** Quadratic air-drag coefficient (1/m). */
@@ -57,6 +60,11 @@ export class ProjectileSim {
   private colliderCount = 0;
   private events: number[] = [];
   private accumulator = 0;
+
+  /** Terrain map: calms the sea near land and lets shells hit islands. */
+  setShore(data: ShoreData): void {
+    this.waves.shore = ShoreField.from(data);
+  }
 
   setSeaState(sea: SeaState): void {
     this.waves.applySeaState(sea);
@@ -179,6 +187,17 @@ export class ProjectileSim {
             dead = true;
             break;
           }
+        }
+      }
+
+      // Land impact (islands). Only the shell's end point is tested; at 120 Hz
+      // that is at most ~0.6 m of travel, far finer than the terrain.
+      const shore = this.waves.shore;
+      if (!dead && shore) {
+        const ground = shore.heightAt(nx, nz);
+        if (ground > -0.3 && ny <= ground) {
+          this.events.push(EVENT_LAND, nx, ground, nz, st[o + 7], -1);
+          dead = true;
         }
       }
 

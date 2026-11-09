@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GERSTNER_GLSL, WaveField } from './waves';
 import { PALETTE } from '../render/palette';
+import { ShoreField, SHORE_TEX_MIN, SHORE_TEX_RANGE } from './shore';
 
 /**
  * Stylized toon ocean.
@@ -8,9 +9,16 @@ import { PALETTE } from '../render/palette';
  * Vertex: Gerstner displacement (shared with CPU physics), faded out at the
  * horizon so distant tessellation doesn't alias.
  * Fragment: hard-banded colour ramp by wave height + lighting, crest foam,
- * hand-drawn-looking foam streaks, quantized sun glints, fresnel and fog.
+ * hand-drawn-looking foam streaks, fresnel and fog. Near land (from the shore
+ * map) the water turns shallow turquoise and foam lines lap at the beach.
  */
-export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): THREE.ShaderMaterial {
+export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, shore: ShoreField | null): THREE.ShaderMaterial {
+  // Terrain height map as an 8-bit texture; a single deep texel if there is no land.
+  const size = shore?.size ?? 1;
+  const shoreTex = new THREE.DataTexture(shore ? shore.toBytes() : new Uint8Array([0]), size, size, THREE.RedFormat, THREE.UnsignedByteType);
+  shoreTex.magFilter = shoreTex.minFilter = THREE.LinearFilter;
+  shoreTex.wrapS = shoreTex.wrapT = THREE.ClampToEdgeWrapping;
+  shoreTex.needsUpdate = true;
   return new THREE.ShaderMaterial({
     uniforms: {
       ...waves.uniforms,
@@ -22,7 +30,9 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
       uMid: { value: new THREE.Color(PALETTE.oceanMid) },
       uShallow: { value: new THREE.Color(PALETTE.oceanCrest) },
       uFoam: { value: new THREE.Color(PALETTE.foam) },
-      uGlint: { value: new THREE.Color(PALETTE.glint) },
+      uShoreWater: { value: new THREE.Color(PALETTE.shoreWater) },
+      uShoreMap: { value: shoreTex },
+      uShoreExtent: { value: shore?.extent ?? 1 },
       uHorizon: { value: new THREE.Color(PALETTE.horizon) },
       uFogRange: { value: new THREE.Vector2(250, 1400) },
       uFoamAmount: { value: 1 },
@@ -43,9 +53,11 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
         vec4 world = modelMatrix * vec4(position, 1.0);
         float dist = distance(world.xz, uCenter);
         float fade = 1.0 - smoothstep(uFade.x, uFade.y, dist);
+        // calm the sea in shallow water so waves lap at beaches instead of cutting through them
+        float scale = fade * shoreScale(terrainHeight(world.xz));
         vec3 n;
         float env;
-        vec3 d = gerstner(world.xz, fade, n, env);
+        vec3 d = gerstner(world.xz, scale, n, env);
         vEnv = env;
         world.xyz += d;
         vWorldPos = world.xyz;
@@ -64,7 +76,9 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
       uniform vec3 uMid;
       uniform vec3 uShallow;
       uniform vec3 uFoam;
-      uniform vec3 uGlint;
+      uniform vec3 uShoreWater;
+      uniform sampler2D uShoreMap;
+      uniform float uShoreExtent;
       uniform vec3 uHorizon;
       uniform vec2 uFogRange;
       uniform float uFoamAmount;
@@ -146,12 +160,17 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3): TH
         foam *= 1.0 - smoothstep(180.0, 450.0, dist);
         col = mix(col, uFoam, foam);
 
-        // Sun glints: quantized specular, broken up by noise.
-        vec3 H = normalize(L + V);
-        float spec = pow(max(dot(N, H), 0.0), 300.0);
-        float sparkle = noise(vGrid * 9.0 + vec2(uTime * 1.3, -uTime * 0.9));
-        float glint = aastep(0.25, spec) * aastep(0.74, sparkle);
-        col = mix(col, uGlint, glint * 0.9);
+        // Shoreline, from the terrain map: depth > 0 is water over sand.
+        float depth = -(texture2D(uShoreMap, vWorldPos.xz / uShoreExtent + 0.5).r * ${SHORE_TEX_RANGE.toFixed(1)} + ${SHORE_TEX_MIN.toFixed(1)});
+        float shallow = 1.0 - smoothstep(0.3, 6.5, depth);
+        col = mix(col, uShoreWater * light, shallow * 0.8);
+        // foam lines that follow the depth contours and creep up the beach
+        float sn = fbm(vWorldPos.xz * 0.16 + vec2(uTime * 0.04, -uTime * 0.03));
+        float lap = fract(depth * 0.55 + sn * 1.6 + uTime * 0.16);
+        float lapLine = aastep(0.8, lap) * (1.0 - smoothstep(0.5, 3.6, depth)) * aastep(0.35, sn + shallow * 0.35);
+        // solid foam where the water meets the sand, with a ragged edge
+        float swash = 1.0 - aastep(0.22 + sn * 0.5 + 0.12 * sin(uTime * 0.9 + sn * 9.0), depth);
+        col = mix(col, uFoam, max(lapLine * 0.85, swash));
 
         // Fresnel toward the sky at grazing angles.
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);

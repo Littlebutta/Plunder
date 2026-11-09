@@ -4,7 +4,8 @@ import { addOutline, toonMaterial } from '../render/toon';
 import { mulberry32 } from '../util/random';
 import { Noise2D } from '../util/noise';
 import { buildWreck } from './Wreck';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { ShoreField } from '../ocean/shore';
 
 /**
  * Procedural islands. Each island is a single heightfield mesh on a polar
@@ -22,11 +23,15 @@ export interface Island {
   radius: number;
   /** Coastline radius in a given world direction (for collisions). */
   coastAt(angle: number): number;
+  /** Terrain height at a point in the island's own space (negative = under water). */
+  heightAt(x: number, z: number): number;
 }
 
 export interface IslandWorld {
   group: THREE.Group;
   islands: Island[];
+  /** Terrain height map of every island, for shorelines, calm shallows and shell impacts. */
+  shore: ShoreField;
 }
 
 /** Order islands are dealt in; cycled if more are requested. Nearest-first. */
@@ -57,8 +62,13 @@ export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWo
       break;
     }
   }
-  return { group, islands };
+  const shore = new ShoreField();
+  for (const island of islands) shore.stamp(island.center.x, island.center.z, island.radius * 2, island.heightAt);
+  return { group, islands, shore };
 }
+
+/** The terrain mesh reaches this many radii out, sloping away under water. */
+const SKIRT = 1.45;
 
 function radiusFor(type: IslandType, rand: () => number): number {
   switch (type) {
@@ -84,6 +94,7 @@ const COLORS = {
   rockDark: new THREE.Color(0x8a5d55),
   cliff: new THREE.Color(0xc29a7a),
   snow: new THREE.Color(0xf5f1e8),
+  seabed: new THREE.Color(0x2f86b4),
 };
 
 function buildIsland(type: IslandType, radius: number, rand: () => number): Island {
@@ -163,22 +174,23 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
         h = beach * 0.5 - 0.6;
         break;
     }
-    // Sink everything past the coast so the skirt hides under water.
-    if (t > 1) h -= (t - 1) * 12;
+    // Past the coast the sand keeps sloping away as a shallow shelf, then drops off.
+    if (t > 1) h -= (t - 1) * 9 + (t - 1) * (t - 1) * 30;
     return h;
   };
 
   // --- Polar heightfield mesh ---------------------------------------------
   const rings = 36;
   const segs = 72;
-  const outer = radius * 1.45;
   const pos: number[] = [];
   const idx: number[] = [];
   pos.push(0, height(0, 0), 0);
   for (let ri = 1; ri <= rings; ri++) {
-    const rr = Math.pow(ri / rings, 1.15) * outer;
+    const ring = Math.pow(ri / rings, 1.15) * SKIRT;
     for (let si = 0; si < segs; si++) {
       const a = (si / segs) * Math.PI * 2 + (ri % 2) * (Math.PI / segs);
+      // rings follow the coastline, so the shelf is the same width all the way round
+      const rr = ring * coastAt(a);
       const x = Math.cos(a) * rr;
       const z = Math.sin(a) * rr;
       pos.push(x, height(x, z), z);
@@ -217,7 +229,8 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     const slope = 1 - nrm.getY(i);
     const n = noise.fbm(x * 0.12, z * 0.12, 2) - 0.5;
     const sandLine = 1.3 + n * 1.2;
-    if (y < 0.15) c.copy(COLORS.wetSand);
+    if (y < -0.6) c.copy(COLORS.wetSand).lerp(COLORS.seabed, Math.min(1, (-0.6 - y) / 3.5));
+    else if (y < 0.5 + n * 0.3) c.copy(COLORS.wetSand);
     else if (y < sandLine) c.copy(COLORS.sand);
     else if (type === 'cay' || type === 'stacks') c.copy(COLORS.sand);
     else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : COLORS.rock);
@@ -252,6 +265,8 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     i++;
   }
 
+  addFerns(g, type, radius, coastAt, height, rand);
+
   const boulders = type === 'cay' ? 2 : 5 + Math.floor(rand() * 5);
   for (let i = 0; i < boulders; i++) {
     const a = rand() * Math.PI * 2;
@@ -284,7 +299,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     if ((o as THREE.Mesh).isMesh) o.receiveShadow = true;
   });
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt };
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height };
 }
 
 /** Un-share vertices so each triangle gets its own normal: faceted cel shading. */
@@ -442,9 +457,8 @@ function palmFrondVariants(): THREE.BufferGeometry[] {
  * with paired leaflets that are long in the middle and short at the ends,
  * each angled down and back like a real coconut palm.
  */
-function buildFrondGeometry(rand: () => number, length: number, droop: number): THREE.BufferGeometry {
+function buildFrondGeometry(rand: () => number, length: number, droop: number, segs = 16): THREE.BufferGeometry {
   const positions: number[] = [];
-  const segs = 16;
   const spine: THREE.Vector3[] = [];
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
@@ -468,13 +482,15 @@ function buildFrondGeometry(rand: () => number, length: number, droop: number): 
   }
 
   // Leaflets: two per spine point, both sides.
+  // (denser fronds keep the same leaflet size; sparser ones get fatter leaflets)
+  const fat = 16 / segs;
   for (let i = 1; i < segs; i++) {
     const t = i / segs;
     const base = spine[i];
     const next = spine[Math.min(i + 1, segs)];
     const tangent = new THREE.Vector3().subVectors(next, base).normalize();
     const leafLen = Math.sin(Math.PI * Math.min(1, t * 1.15)) * 1.25 + 0.25;
-    const leafW = 0.11 + 0.06 * Math.sin(Math.PI * t);
+    const leafW = (0.11 + 0.06 * Math.sin(Math.PI * t)) * fat;
     for (const side of [-1, 1]) {
       const jitter = (rand() - 0.5) * 0.15;
       // leaflet points sideways, swept toward the tip, hanging down
@@ -492,6 +508,97 @@ function buildFrondGeometry(rand: () => number, length: number, droop: number): 
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   g.computeVertexNormals();
   return g;
+}
+
+/**
+ * Ferns: low rosettes of arching fronds scattered over the grass (and a few
+ * in the sand under the palms) to break up the big flat colour areas. One
+ * instanced mesh per island, so hundreds of them cost a single draw call.
+ */
+function addFerns(
+  g: THREE.Group,
+  type: IslandType,
+  radius: number,
+  coastAt: (a: number) => number,
+  height: (x: number, z: number) => number,
+  rand: () => number,
+): void {
+  const sandy = type === 'cay' || type === 'stacks';
+  const want = sandy ? 6 + Math.floor(rand() * 5) : Math.min(90, Math.round((radius * radius) / 32));
+  const spots: { x: number; y: number; z: number }[] = [];
+  for (let tries = 0; spots.length < want && tries < want * 12; tries++) {
+    const a = rand() * Math.PI * 2;
+    const r = coastAt(a) * Math.sqrt(rand()) * 0.92;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const y = height(x, z);
+    if (y < (sandy ? 1.0 : 1.7) || y > 16) continue;
+    // keep off cliffs and steep mountain sides
+    const slope = Math.hypot(height(x + 0.8, z) - y, height(x, z + 0.8) - y) / 0.8;
+    if (slope > 0.75) continue;
+    spots.push({ x, y, z });
+    // ferns grow in clumps: often add a neighbour or two
+    for (let n = 0; n < 2 && rand() < 0.6 && spots.length < want; n++) {
+      const nx = x + (rand() - 0.5) * 3.2;
+      const nz = z + (rand() - 0.5) * 3.2;
+      const ny = height(nx, nz);
+      if (ny > 1.2 && Math.abs(ny - y) < 1.2) spots.push({ x: nx, y: ny, z: nz });
+    }
+  }
+  if (spots.length === 0) return;
+
+  const variants = fernVariants();
+  const half = Math.ceil(spots.length / variants.length);
+  const dummy = new THREE.Object3D();
+  const tint = new THREE.Color();
+  variants.forEach((geo, v) => {
+    const mine = spots.slice(v * half, (v + 1) * half);
+    if (mine.length === 0) return;
+    const mesh = new THREE.InstancedMesh(geo, fernMaterial(), mine.length);
+    mine.forEach((s, i) => {
+      dummy.position.set(s.x, s.y - 0.08, s.z);
+      dummy.rotation.set((rand() - 0.5) * 0.25, rand() * Math.PI * 2, (rand() - 0.5) * 0.25);
+      const scale = 0.7 + rand() * 0.9;
+      dummy.scale.set(scale, scale * (0.8 + rand() * 0.4), scale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      // a few shades of green, some yellowed
+      tint.setHSL(0.3 + (rand() - 0.5) * 0.08, 0.5 + rand() * 0.15, 0.33 + rand() * 0.14);
+      mesh.setColorAt(i, tint);
+    });
+    mesh.name = 'ferns';
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    g.add(mesh);
+  });
+}
+
+let _fernMat: THREE.Material | null = null;
+function fernMaterial(): THREE.Material {
+  return (_fernMat ??= toonMaterial(0xffffff, { side: THREE.DoubleSide }));
+}
+
+let _fernVariants: THREE.BufferGeometry[] | null = null;
+function fernVariants(): THREE.BufferGeometry[] {
+  if (_fernVariants) return _fernVariants;
+  const rand = mulberry32(41);
+  _fernVariants = [0, 1, 2].map(() => {
+    const fronds: THREE.BufferGeometry[] = [];
+    const count = 6 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      // a palm-style frond, shrunk: arches up from the centre and droops at the tip
+      const f = buildFrondGeometry(rand, 4.4, 0.75 + rand() * 0.5, 8);
+      const s = 0.26 + rand() * 0.1;
+      f.scale(s, s, s);
+      f.rotateX(-(0.55 + rand() * 0.45));
+      f.rotateY((i / count) * Math.PI * 2 + rand() * 0.5);
+      fronds.push(f);
+    }
+    const merged = mergeGeometries(fronds)!;
+    merged.computeVertexNormals();
+    return merged;
+  });
+  return _fernVariants;
 }
 
 function jitter(geo: THREE.BufferGeometry, rand: () => number, amount: number): void {
