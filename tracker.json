@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:18:46Z",
+  "updated": "2026-11-09T20:24:50Z",
   "categories": [
     {
       "key": "feature",
@@ -457,12 +457,12 @@
         "sailing",
         "feel"
       ],
-      "notes": "Make sailing more arcade friendly. Wind should give a speed boost, but ships must still move regardless of wind direction.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.",
+      "notes": "Make sailing more arcade friendly. Wind should give a speed boost, but ships must still move regardless of wind direction.\n\n2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/2"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:15:15Z",
+      "updated": "2026-11-09T20:24:50Z",
       "by": "Claude"
     },
     {
