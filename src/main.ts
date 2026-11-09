@@ -308,6 +308,7 @@ function applyViewOffset(): void {
 
 function startPlay(): void {
   mode = 'play';
+  audio.setPlaylist(['calm', 'log']);
   if (!voyageStarted) ship.sail = 0;
   voyageStarted = true;
   menu.hide();
@@ -321,6 +322,7 @@ function startPlay(): void {
 
 function openMenu(): void {
   mode = 'menu';
+  audio.setPlaylist(['log']);
   menu.show(voyageStarted);
   hudRoot.classList.add('in-menu');
   settings.showGear(false);

@@ -7,6 +7,18 @@ const SAMPLES = {
 } as const;
 export type SampleName = keyof typeof SAMPLES;
 
+/** Music tracks in public/music/ (name -> file). */
+const MUSIC = {
+  log: 'music/sailors-log.m4a',
+  calm: 'music/sailing-the-calm-seas.m4a',
+  fog: 'music/sailing-into-the-fog.m4a',
+} as const;
+export type MusicName = keyof typeof MUSIC;
+/** Seconds to fade a track in or out. */
+const MUSIC_FADE = 2.5;
+/** Level of the music under the game's other sounds. */
+const MUSIC_LEVEL = 0.55;
+
 export interface PlayOptions {
   volume?: number;
   /** Playback rate; >1 is higher-pitched and shorter (a small gun). */
@@ -38,13 +50,16 @@ export class AudioManager {
   private effects: GainNode | null = null;
   /** Sea and wind beds. */
   private ambience: GainNode | null = null;
-  /** Music (nothing plays here yet; the bus is ready for when there is some). */
+  /** Music tracks play through here. */
   music: GainNode | null = null;
   private readonly buffers = new Map<SampleName, AudioBuffer>();
   private noise: AudioBuffer | null = null;
   private oceanGain: GainNode | null = null;
   private windGain: GainNode | null = null;
   private windFilter: BiquadFilterNode | null = null;
+  private playlist: MusicName[] = [];
+  private track: { name: MusicName; el: HTMLAudioElement; gain: GainNode } | null = null;
+  private readonly musicUrls = new Map<MusicName, Promise<string>>();
   /** Limits how many copies of one sound may start within a short window. */
   private readonly recent = new Map<string, number[]>();
 
@@ -87,6 +102,7 @@ export class AudioManager {
     this.noise = this.makeNoise(ctx, 6);
     this.startBeds(ctx);
     this.applyVolumes();
+    if (this.playlist.length) this.startTrack(this.playlist[0]);
     for (const [name, url] of Object.entries(SAMPLES) as [SampleName, string][]) void this.load(name, url);
   }
 
@@ -121,6 +137,76 @@ export class AudioManager {
     } catch (err) {
       console.warn(`Could not load sound ${url}`, err);
     }
+  }
+
+  /**
+   * Set the music: the tracks play in order and the list repeats. If the track
+   * playing now is in the new list it carries on, so moving between screens
+   * that share a track does not restart it. An empty list fades the music out.
+   */
+  setPlaylist(names: MusicName[]): void {
+    this.playlist = [...names];
+    if (!this.ctx) return; // starts on unlock
+    if (this.track && names.includes(this.track.name)) return;
+    if (names.length) this.startTrack(names[0]);
+    else this.stopTrack();
+  }
+
+  /** Name of the track playing now, if any. */
+  get nowPlaying(): MusicName | null {
+    return this.track?.name ?? null;
+  }
+
+  private stopTrack(): void {
+    const old = this.track;
+    this.track = null;
+    if (!old || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    old.gain.gain.cancelScheduledValues(t);
+    old.gain.gain.setTargetAtTime(0, t, MUSIC_FADE / 3);
+    window.setTimeout(() => {
+      old.el.pause();
+      old.gain.disconnect();
+    }, MUSIC_FADE * 1000 + 200);
+  }
+
+  private startTrack(name: MusicName): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.music) return;
+    this.stopTrack();
+    // The file is fetched whole and played from memory, so playback does not
+    // depend on how the page is served (the desktop app uses its own protocol).
+    let url = this.musicUrls.get(name);
+    if (!url) {
+      url = fetch(`${import.meta.env.BASE_URL}${MUSIC[name]}`)
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.blob();
+        })
+        .then((b) => URL.createObjectURL(b));
+      this.musicUrls.set(name, url);
+    }
+    const el = new Audio();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    ctx.createMediaElementSource(el).connect(gain).connect(this.music);
+    const track = { name, el, gain };
+    this.track = track;
+    el.addEventListener('ended', () => {
+      if (this.track !== track || this.playlist.length === 0) return;
+      const at = this.playlist.indexOf(name);
+      this.startTrack(this.playlist[(at + 1) % this.playlist.length]);
+    });
+    url
+      .then((src) => {
+        if (this.track !== track) return;
+        el.src = src;
+        return el.play().then(() => gain.gain.setTargetAtTime(MUSIC_LEVEL, ctx.currentTime, MUSIC_FADE / 3));
+      })
+      .catch((err) => {
+        this.musicUrls.delete(name);
+        console.warn(`Could not play music ${MUSIC[name]}`, err);
+      });
   }
 
   /** Keep the 3D listener on the camera. */
