@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:20Z",
+  "updated": "2026-11-09T21:20:23Z",
   "categories": [
     {
       "key": "feature",
@@ -947,6 +947,22 @@
       "priority": "low",
       "milestone": "M-6",
       "updated": "2026-11-09T20:49:37Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-34",
+      "cat": "feature",
+      "title": "Gather resources from islands in range (port range if it has a port)",
+      "status": "in-progress",
+      "tags": [],
+      "notes": "PR #6. Wood/stone/food/salvage by island type and size, regrow, hold capacity.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/6"
+      ],
+      "created": "2026-11-09T21:20:23Z",
+      "priority": "high",
+      "milestone": "M-7",
+      "updated": "2026-11-09T21:20:23Z",
       "by": "Claude"
     }
   ],
