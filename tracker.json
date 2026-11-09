@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:49:18Z",
+  "updated": "2026-11-09T20:49:30Z",
   "categories": [
     {
       "key": "feature",
@@ -897,13 +897,15 @@
       "id": "B-4",
       "cat": "bug",
       "title": "Yellowish noise layer (sun glints) clips through the waves",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
       "notes": "Shipped in PR #4 (2026-11-09). Waiting on Devin's playtest. Glint layer removed.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/4"
+      ],
       "created": "2026-11-09T20:49:11Z",
       "priority": "medium",
-      "updated": "2026-11-09T20:49:11Z",
+      "updated": "2026-11-09T20:49:30Z",
       "by": "Claude"
     },
     {
