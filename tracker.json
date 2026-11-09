@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:23Z",
+  "updated": "2026-11-09T21:20:27Z",
   "categories": [
     {
       "key": "feature",
@@ -963,6 +963,22 @@
       "priority": "high",
       "milestone": "M-7",
       "updated": "2026-11-09T21:20:23Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-35",
+      "cat": "feature",
+      "title": "Max range for swivel and broadside, extendable by upgrades",
+      "status": "in-progress",
+      "tags": [],
+      "notes": "PR #5: 90 m and 120 m. Upgrades to extend come later.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/5"
+      ],
+      "created": "2026-11-09T21:20:27Z",
+      "priority": "medium",
+      "milestone": "M-5",
+      "updated": "2026-11-09T21:20:27Z",
       "by": "Claude"
     }
   ],
