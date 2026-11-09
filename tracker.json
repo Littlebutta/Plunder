@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T21:20:09Z",
+  "updated": "2026-11-09T21:20:11Z",
   "categories": [
     {
       "key": "feature",
@@ -727,16 +727,18 @@
       "id": "F-29",
       "cat": "feature",
       "title": "Title menu",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-8",
       "tags": [
         "ui"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): PR #6: title menu, options left, raft sailing right, drag to look around.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/6"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T21:20:11Z",
       "by": "Claude"
     },
     {
