@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:45:40Z",
+  "updated": "2026-11-09T23:45:42Z",
   "categories": [
     {
       "key": "feature",
@@ -1392,6 +1392,19 @@
       "created": "2026-11-09T23:45:40Z",
       "priority": "medium",
       "updated": "2026-11-09T23:45:40Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-57",
+      "cat": "feature",
+      "title": "HUD scaling for 32:9 monitors; middle mouse camera; salvage renamed metals",
+      "status": "idea",
+      "tags": [],
+      "notes": "PR #15",
+      "links": [],
+      "created": "2026-11-09T23:45:42Z",
+      "priority": "medium",
+      "updated": "2026-11-09T23:45:42Z",
       "by": "Claude"
     }
   ],
