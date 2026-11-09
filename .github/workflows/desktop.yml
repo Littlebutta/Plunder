@@ -1,0 +1,84 @@
+name: Desktop build
+
+# Every push to main builds the portable Windows folder and publishes a GitHub Release with:
+#   Plunder-win-x64.zip   the whole portable folder (first download, and shell updates)
+#   game-<version>.zip    just the game files (the small everyday update)
+#   latest.json           what installed copies read on launch to decide what to fetch
+# Pull requests build the same zip as a workflow artifact and publish nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Each build gets a unique, increasing version (0.2.<run number>) so installed copies see it as newer.
+      - name: Set build version
+        run: |
+          VERSION="0.2.${{ github.run_number }}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - run: npm run build
+
+      - name: Shell fingerprint
+        run: echo "SHELL_ID=$(node scripts/shell-id.mjs)" >> "$GITHUB_ENV"
+
+      - name: Package portable folder
+        run: npx electron-builder --win dir --publish never
+
+      - name: Zip release files
+        run: |
+          mkdir -p out
+          node scripts/zip.mjs release/win-unpacked out/Plunder-win-x64.zip
+          node scripts/zip.mjs dist "out/game-$VERSION.zip"
+          cat > out/latest.json <<JSON
+          {
+            "version": "$VERSION",
+            "shellId": "$SHELL_ID",
+            "game": "game-$VERSION.zip",
+            "full": "Plunder-win-x64.zip"
+          }
+          JSON
+          cat out/latest.json
+          ls -la out
+
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v$VERSION" out/* \
+            --target "${{ github.sha }}" \
+            --title "Plunder v$VERSION" \
+            --notes "Built from ${{ github.sha }}. First time: download **Plunder-win-x64.zip**, unzip it anywhere and run **Plunder.exe**. After that it updates itself on launch." \
+            --latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plunder-win-x64-${{ env.VERSION }}
+          path: release/win-unpacked
+          if-no-files-found: error

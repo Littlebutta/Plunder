@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Plunder</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: linear-gradient(#1d5f99, #13324a); color: #f6ecd2;
+        font: 14px/1.4 system-ui, 'Segoe UI', sans-serif; user-select: none; -webkit-app-region: drag;
+      }
+      h1 { margin: 0; font-size: 34px; letter-spacing: 3px; color: #ffd27a; text-shadow: 0 3px 0 #0b2233; }
+      .bar { width: 280px; height: 8px; border-radius: 4px; background: #0b2233; overflow: hidden; }
+      .fill { height: 100%; width: 0; background: #ffd27a; transition: width 0.2s; }
+      .bar.indeterminate .fill { width: 30%; animation: slide 1.1s ease-in-out infinite alternate; }
+      @keyframes slide { from { margin-left: 0; } to { margin-left: 70%; } }
+      button {
+        -webkit-app-region: no-drag; background: none; border: 0; color: #9cc3dd; cursor: pointer;
+        font: inherit; font-size: 12px; text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PLUNDER</h1>
+    <div id="text">Checking for updates…</div>
+    <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
+    <button id="skip">Play now</button>
+    <script>
+      const bar = document.getElementById('bar');
+      const fill = document.getElementById('fill');
+      window.updater.onStatus(({ text, progress }) => {
+        document.getElementById('text').textContent = text;
+        if (typeof progress === 'number') {
+          bar.classList.remove('indeterminate');
+          fill.style.width = `${Math.round(progress * 100)}%`;
+        }
+      });
+      document.getElementById('skip').onclick = () => window.updater.skip();
+    </script>
+  </body>
+</html>
