@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:15:30Z",
+  "updated": "2026-11-09T20:15:32Z",
   "categories": [
     {
       "key": "feature",
@@ -507,7 +507,7 @@
       "title": "Broadside ribbon: outlined ribbon showing where a cannon barrage lands",
       "status": "in-progress",
       "priority": "high",
-      "milestone": "M-5",
+      "milestone": "M-2",
       "tags": [
         "combat"
       ],
@@ -516,7 +516,7 @@
         "https://github.com/Littlebutta/Plunder/pull/2"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:15:24Z",
+      "updated": "2026-11-09T20:15:32Z",
       "by": "Claude"
     },
     {
