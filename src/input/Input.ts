@@ -5,7 +5,7 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<string>();
 
-  /** Mouse drag delta accumulated since last `consumeMouse()` (pixels). */
+  /** Middle-button drag delta accumulated since last `consumeMouse()` (pixels). */
   private dx = 0;
   private dy = 0;
   private wheel = 0;
@@ -13,6 +13,8 @@ export class Input {
   /** Pointer position in normalized device coords (-1..1), for aiming. */
   readonly pointer = { x: 0, y: -0.2, inside: false };
   private dragDist = 0;
+  /** Left button is down (a click in the making). */
+  private pressing = false;
   private downAt = 0;
   private clickedNow = false;
   /** Right mouse button held (fires the swivel gun). */
@@ -28,6 +30,8 @@ export class Input {
     window.addEventListener('blur', () => {
       this.keys.clear();
       this.rightDown = false;
+      this.dragging = false;
+      this.pressing = false;
     });
     // a second button going down or up while one is held arrives as a move, not a down/up
     target.addEventListener('pointermove', (e) => (this.rightDown = (e.buttons & 2) !== 0));
@@ -37,31 +41,46 @@ export class Input {
         this.rightDown = true;
         return;
       }
+      if (e.button === 1) {
+        // middle button: orbit the camera (and keep the browser's auto-scroll out of it)
+        e.preventDefault();
+        this.dragging = true;
+        target.setPointerCapture(e.pointerId);
+        return;
+      }
       if (e.button !== 0) return;
-      this.dragging = true;
+      this.pressing = true;
       this.dragDist = 0;
       this.downAt = performance.now();
-      target.setPointerCapture(e.pointerId);
     });
+    target.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    target.addEventListener('auxclick', (e) => e.preventDefault());
     target.addEventListener('pointerup', (e) => {
       if (e.button === 2) {
         this.rightDown = false;
         return;
       }
+      if (e.button === 1) {
+        this.dragging = false;
+        if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
+        return;
+      }
       if (e.button !== 0) return;
-      this.dragging = false;
-      target.releasePointerCapture(e.pointerId);
-      // A short press that barely moved is a click (select), not an orbit drag.
-      if (this.dragDist < 6 && performance.now() - this.downAt < 600 && e.button === 0) this.clickedNow = true;
+      // A short press that barely moved is a click (select).
+      if (this.pressing && this.dragDist < 8 && performance.now() - this.downAt < 600) this.clickedNow = true;
+      this.pressing = false;
     });
     target.addEventListener('pointermove', (e) => {
       const r = target.getBoundingClientRect();
       this.pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
       this.pointer.y = -(((e.clientY - r.top) / r.height) * 2 - 1);
       this.pointer.inside = true;
+      if (this.pressing) this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
+      // a second button changing while one is held arrives as a move
+      if (this.dragging && (e.buttons & 4) === 0) this.dragging = false;
       if (!this.dragging) return;
-      this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
-      if (this.dragDist < 6) return; // ignore jitter
       this.dx += e.movementX;
       this.dy += e.movementY;
     });

@@ -7,7 +7,8 @@ export const RESOURCE_IDS: ResourceId[] = ['wood', 'stone', 'salvage'];
 export const RESOURCES: Record<ResourceId, { label: string; color: string }> = {
   wood: { label: 'Wood', color: '#c0814a' },
   stone: { label: 'Stone', color: '#b9b2a6' },
-  salvage: { label: 'Salvage', color: '#8fc7e8' },
+  // (the id is still 'salvage' so older saves and code keep working)
+  salvage: { label: 'Metals', color: '#8fc7e8' },
 };
 
 export type Stock = Record<ResourceId, number>;

@@ -237,3 +237,100 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
   background: rgba(42, 23, 8, .8); border: 2px solid #ffb27a; color: #ffd9b8; font-weight: 800; font-size: 14px; white-space: nowrap;
 }
 .hud-edge[hidden] { display: none; }
+
+/* --- Territory: home chip, build prompt, end screen ------------------------- */
+.hud-home { position: absolute; left: 16px; top: 150px; min-width: 190px; padding: 8px 12px; }
+.hud-home .home-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+.hud-home .home-row { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; margin: 2px 0 5px; }
+.hud-home .home-row span { font-size: 12px; opacity: .8; }
+.hud-home .home-bar { height: 8px; border-radius: 5px; background: rgba(0, 0, 0, .45); overflow: hidden; }
+.hud-home .home-bar i { display: block; height: 100%; background: #7ed957; transition: width .25s; }
+.hud-home[data-state='hurt'] .home-bar i { background: #ffc04d; }
+.hud-home[data-state='danger'] { border-color: #e23b3b; }
+.hud-home[data-state='danger'] .home-bar i { background: #e23b3b; }
+.hud-home .home-warn { margin-top: 5px; color: #ffb3b3; font-weight: 800; font-size: 13px; }
+.hud-build { position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%); padding: 7px 14px; white-space: nowrap; font-size: 14px; }
+.hud-build[hidden] { display: none; }
+.hud-build[data-can='false'] { opacity: .8; }
+.in-menu .hud-home, .in-menu .hud-build { display: none; }
+.chart-hint { font-size: 12px; opacity: .75; margin-top: 4px; }
+.endgame {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  background: radial-gradient(ellipse at center, rgba(16, 22, 31, .55), rgba(16, 22, 31, .9));
+}
+.endgame[hidden] { display: none; }
+.endgame-card {
+  min-width: 340px; max-width: 460px; padding: 26px 30px; border-radius: 16px; text-align: center;
+  background: rgba(42, 23, 8, .92); border: 3px solid #e23b3b; color: #fff8e6;
+}
+.endgame[data-tone='victory'] .endgame-card { border-color: #ffd27a; }
+.endgame-title { font-family: 'Pirata One', 'Nunito', serif; font-size: 54px; line-height: 1; margin-bottom: 8px; color: #ffb3b3; }
+.endgame[data-tone='victory'] .endgame-title { color: #ffd27a; }
+.endgame-card p { margin: 0 0 18px; font-size: 16px; }
+.endgame-card button {
+  margin: 0 6px; padding: 9px 18px; border-radius: 10px; border: 2px solid #c0814a; background: #6e3b1b; color: #fff8e6;
+  font: 800 15px Nunito, sans-serif; cursor: pointer;
+}
+.endgame-card button:hover { background: #c0814a; color: #2a1708; }
+.hud-build kbd {
+  display: inline-block; padding: 1px 7px; margin-right: 4px; border-radius: 5px; background: #fff8e6; color: #2a1708; font: 800 13px Nunito, sans-serif;
+}
+.hud-home .home-stores { display: flex; gap: 10px; align-items: center; margin-top: 6px; font-size: 13px; }
+.hud-home .home-stores > span:first-child { opacity: .75; }
+.hud-home .home-stores .res i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+.hud-home .home-stores .income { margin-left: auto; color: #b7e89a; font-weight: 800; }
+.hud-home .home-fleet { margin-top: 4px; font-size: 12px; opacity: .85; }
+
+/* --- Very wide screens (32:9): keep the HUD and menus in a centred band ------- */
+:root { --ui-side: max(0px, calc((100vw - 100vh * 2.4) / 2)); --yard-side: max(0px, calc((100vw - 1720px) / 2)); }
+#hud { left: var(--ui-side); right: var(--ui-side); }
+.menu { left: var(--ui-side); right: var(--ui-side); }
+.settings-gear { right: calc(18px + var(--ui-side) + env(safe-area-inset-right, 0px)); }
+.target-brackets, .target-arrow { position: fixed; }
+.chart-title { left: calc(34px + var(--ui-side)); top: 26px; color: #4a2f17; text-shadow: none; }
+.chart-info { right: calc(34px + var(--ui-side)); top: 96px; background: rgba(42, 23, 8, .9); }
+.chart-close { right: calc(74px + var(--ui-side)); top: 16px; }
+.chart .settings-gear { display: none; }
+.chart-help { bottom: 34px; background: rgba(42, 23, 8, .88); }
+
+/* --- Exploration window (minimap) ---------------------------------------------- */
+.minimap {
+  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  width: 196px; height: 196px; border: 3px solid #c0814a; border-radius: 12px; overflow: hidden; pointer-events: auto; cursor: pointer;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .25); background: #e7d2a0;
+}
+.minimap canvas { display: block; width: 100%; height: 100%; }
+.minimap:hover { border-color: #ffd27a; }
+.in-menu .minimap { display: none; }
+
+/* --- Shipyard v3: cards, tabs, capped width ---------------------------------------- */
+.yard {
+  grid-template-columns: minmax(440px, 660px) minmax(0, 1fr); gap: 20px;
+  padding: 18px calc(22px + var(--yard-side));
+  background: radial-gradient(ellipse at 70% 30%, #3a2212, #1c0f07 75%);
+}
+.yard-left { gap: 9px; }
+.yard-label { opacity: .7; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.yard [data-presets] button { padding: 5px 11px; font-size: 13px; border-radius: 999px; }
+.yard-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 2px solid #c0814a; border-radius: 12px; overflow: hidden; }
+.yard-tabs button { border: 0; border-radius: 0; padding: 10px 8px; font-size: 16px; background: rgba(192, 129, 74, .12); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.yard-tabs button + button { border-left: 2px solid #c0814a; }
+.yard-tabs button i {
+  font-style: normal; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255, 248, 230, .16); font-size: 12px;
+}
+.yard-tabs button.on i, .yard-tabs button:hover i { background: #2a1708; color: #fff8e6; }
+.yard-card { background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.yard-card .yard-tip { min-height: 34px; margin: 0; }
+.yard-sliders[hidden] { display: none; }
+.yard-right { min-width: 0; }
+.yard-view { position: relative; flex: 1; min-height: 240px; display: flex; }
+.yard-view canvas { flex: 1; min-height: 0; height: 100%; }
+.yard-viewbar { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
+.yard-viewbar button { pointer-events: auto; padding: 4px 10px; font-size: 12px; background: rgba(42, 23, 8, .75); }
+.yard-viewbar span { margin-left: auto; font-size: 12px; opacity: .8; text-shadow: 0 1px 2px #000; }
+.yard-stats { background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 12px; padding: 8px 14px; }
+.yard-stats > div:last-child { border-bottom: 0; }
+.yard-actions { justify-content: flex-end; }
+.yard-actions .primary { order: 3; }
+.yard-left > * { flex-shrink: 0; }

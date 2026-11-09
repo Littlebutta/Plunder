@@ -48,11 +48,12 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Esc | Main menu / resume |
 | C | Fit / remove the broadside battery (the raft gets a test battery; a designed ship uses its own cannons) |
 | F | Also fires the broadside on the side you're aiming at (outlined ribbon) |
-| Left mouse drag | Orbit the camera (it stays where you leave it) |
+| Middle mouse drag | Orbit the camera (it stays where you leave it) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
 | Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
-| Tab | Chart: a map of the whole world. Left click selects an island, right click orders your ship to sail there (touch the helm to cancel), drag pans, wheel zooms. |
+| U | Alongside an island: found an outpost on an unclaimed island, or upgrade your stronghold there (pays from the hold). |
+| Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships, right click sends the selected ship there (the flagship if none; touch the helm to cancel), drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | M | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
@@ -78,7 +79,7 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 ## Gathering and ports
 
-Each island holds resources that depend on its type and size (wood, stone, salvage) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+Each island holds resources that depend on its type and size (wood, stone, metals) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into the hold (40 units) while you stay in range. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
 
 ## The world
 
@@ -86,7 +87,32 @@ The map is a disc of sea 760 m in radius (`src/world/worldConfig.ts`). At its ri
 
 Islands are generated from a seed. The same map loads every time until you press **New map** in the main menu, which rolls a new seed and reloads.
 
-The **chart** (Tab, `src/ui/MapView.ts`) shows the whole world from above: islands with their names and owners' banners, ports, your ship, the enemy, and your ordered course. The game keeps running while it is open. Course-keeping and island avoidance are in `src/world/navigation.ts`.
+The **chart** (Tab, `src/ui/MapView.ts`) is drawn as an old paper map: torn parchment, inked coasts, a compass rose, the rim of the world, and ships as little top-down hulls whose sails are their owner's colour. It only shows what you have explored. **Fog of war** (`src/world/FogOfWar.ts`) works as in an RTS: the map starts unknown, is uncovered for good wherever your flagship (210 m), escorts (170 m) or strongholds (150 m and up) have looked, and raider ships are drawn only while one of those can see them. Flags over each stronghold show who holds the island. The same painter draws the **exploration window**, a minimap in the corner of the HUD. The game keeps running while the chart is open. Course-keeping and island avoidance are in `src/world/navigation.ts`.
+
+## Territory
+
+You start with a **hut on a home island** (the unsettled island nearest the start; `src/world/Strongholds.ts`). Lose it and the game is over. Upgrade it with **U** when alongside, or from the chart's island panel from anywhere:
+
+| Level | Hull | Guns | Cost to reach it |
+| --- | --- | --- | --- |
+| Hut | 80 | 0 | (given) |
+| Stockade | 150 | 0 | 12 wood, 4 stone |
+| Watchtower | 230 | 1 | 14 wood, 12 stone, 4 metals |
+| Fort | 340 | 3 | 12 wood, 20 stone, 8 metals |
+
+**Outposts** can be founded on any unclaimed island for 10 wood and 2 stone, which is how you claim it. They climb the same ladder but are smaller: 72% of the size, 60% of the hull, and a fort-level outpost carries two guns. Gathering no longer claims an island.
+
+Strongholds with guns fire on hostile ships within 125 m. Shells that strike the walls (or land right under them) wear a stronghold down; friendly fire does nothing. One left alone for 12 s repairs itself. At zero it is **in ruins**, and if a hostile ship then stays within 110 m for 10 s it is taken: an outpost is burned and the island goes back to unclaimed, the home ends the game.
+
+The raiders have a **home of their own**: a watchtower on the port island furthest from yours. Ruin it and hold your ship close to take it, and you win. About four minutes into a voyage, and every few minutes after, the *Marauder* **raids**: it sails for your home and shells it from offshore until it is sunk or you come within 150 m, when it turns on you instead.
+
+**Stores and income.** Every island you hold sends resources to your stores: 1 + its stronghold's level units every 12 s, in the mix that island yields. Stores are shown on the home chip with the income per minute. Upgrades and ships are paid from the stores from anywhere; a ship alongside pays from its hold first. Founding an outpost needs the flagship alongside.
+
+**Capturing islands.** The raiders also keep a stockade on every other port island. Shoot one to ruins and hold a ship within 110 m for 10 s and the island, its flag and its income are yours. They can take a port back the same way.
+
+**Fleet.** From your home island's panel on the chart, build escort sloops (30 wood, 8 metals, up to 4). An escort follows the flagship, fights the raiders' ship when it comes within 150 m, and shells any raider stronghold it is near. Select one on the chart and right click to send it somewhere; "Follow the flagship" calls it back. Escorts and the *Marauder* are the same class (`src/world/Warship.ts`).
+
+Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
 ## Enemy ship
 
@@ -101,7 +127,7 @@ Open it from the main menu. On the **top view** drag to draw the hull's outline 
 - **Swivel**: stands at the bow or the stern.
  The design is lofted into 3D live on the right, with its weight, draft, speed, handling, hold and cost. **Launch** swaps your vessel for the design where you are; the cannons you placed become the broadside. The last design is remembered.
 
-A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, masts with their sail type, a jib flag, individually placed cannons (`{t, side, level}`) and the swivel's position. Older saved designs are upgraded when loaded. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Building is free for now; costs are shown for balancing.
+A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, masts with their sail type, a jib flag, individually placed cannons (`{t, side, level}`) and the swivel's position. Older saved designs are upgraded when loaded. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Hull and sails are free for now (their costs are shown for balancing). **Cannons** have no limit beyond the room on the hull: the first 4 come with the ship and each one more costs 4 metals, paid once at launch from your stores and hold. The 3D preview shows the guns where they will stand, with Side, Top, Stern and 3/4 views, and deck guns fire through gaps cut in the rail. What is in the hold shows as cargo on deck (timber, stone blocks, metal ingots).
 
 ## Weather and day-night
 

@@ -23,12 +23,16 @@ export interface ShipVisual {
   /** Shared by every sail / the pennant, so the owner's colour can be changed later. */
   sailMaterial: THREE.MeshToonMaterial;
   flagMaterial: THREE.MeshToonMaterial;
+  /** Places on deck where cargo can be stacked, in the order they fill. */
+  cargoPlaces: THREE.Vector3[];
 }
 
 /** Points around half a cross-section, keel to rail. */
 const SECTION = 8;
 /** Lengthwise subdivisions of the lofted skin (finer than the drawn stations). */
-const LOFT = 48;
+const LOFT = 96;
+/** Half the width of the gap cut in the rail and bulwark for a deck gun (m). */
+const EMBRASURE = 0.42;
 /** Lateen yard: how steeply it rakes up toward the stern (radians). */
 const LATEEN_RAKE = 0.6;
 
@@ -99,6 +103,10 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
     return mesh;
   };
 
+  // Deck guns fire through gaps in the rail.
+  const deckGuns = d.cannons.filter((c) => c.level === 0);
+  const inEmbrasure = (t: number, side: number) => deckGuns.some((c) => c.side === side && Math.abs(c.t - t) * d.length < EMBRASURE);
+
   // --- Hull skin ------------------------------------------------------------
   const cols = SECTION * 2 + 1; // port rail .. keel .. starboard rail
   const pos: number[] = [];
@@ -106,7 +114,13 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   for (let i = 0; i <= LOFT; i++) {
     for (let k = 0; k < cols; k++) {
       const s = k / SECTION - 1; // -1 port rail, 0 keel, 1 starboard rail
-      hullPoint(d, i / LOFT, Math.abs(s), Math.sign(s), v);
+      const t = i / LOFT;
+      hullPoint(d, t, Math.abs(s), Math.sign(s), v);
+      // an embrasure for each deck gun: the bulwark is cut down to the deck there
+      if ((k === 0 || k === cols - 1) && inEmbrasure(t, Math.sign(s))) {
+        v.y = deckAt(d, t) + 0.03;
+        v.x = Math.sign(s) * hullHalfWidthAt(d, t, v.y);
+      }
       pos.push(v.x, v.y, v.z);
     }
   }
@@ -130,6 +144,11 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
       if (end === 0) idx.push(centre, a, a + 1);
       else idx.push(centre, a + 1, a);
     }
+    // and across the top, rail to rail, so the end is a solid board
+    const first = end * cols;
+    const last = end * cols + cols - 1;
+    if (end === 0) idx.push(centre, last, first);
+    else idx.push(centre, first, last);
   }
   const hullGeo = new THREE.BufferGeometry();
   hullGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -196,12 +215,29 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   // --- Rails and strakes: dark timbers running the length of each side ----------
   const sideLine = (u: number, radius: number, from = 0, to = 1) => {
     for (const side of [-1, 1]) {
-      const pts: THREE.Vector3[] = [];
-      for (let i = 0; i <= STATIONS * 2; i++) {
-        const t = from + ((to - from) * i) / (STATIONS * 2);
-        pts.push(hullPoint(d, t, u, side, new THREE.Vector3()));
+      // the rail stops either side of each deck gun
+      const cuts = u === 1 ? deckGuns.filter((c) => c.side === side).map((c) => c.t).sort((a, b) => a - b) : [];
+      const gap = (EMBRASURE + 0.05) / d.length;
+      const runs: [number, number][] = [];
+      let start = from;
+      for (const t of cuts) {
+        if (t - gap > start + 0.01) runs.push([start, t - gap]);
+        start = Math.max(start, t + gap);
       }
-      add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, radius, 5), woodDark), 0, u === 1);
+      if (to > start + 0.01) runs.push([start, to]);
+      for (const [a, b] of runs) {
+        const n = Math.max(3, Math.round((b - a) * STATIONS * 2));
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= n; i++) pts.push(hullPoint(d, a + ((b - a) * i) / n, u, side, new THREE.Vector3()));
+        add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), Math.max(6, n * 2), radius, 5), woodDark), 0, u === 1);
+        if (cuts.length) {
+          // a short post squares off each end of the gap
+          for (const end of [pts[0], pts[n]]) {
+            if (end.z < zAt(d, from + 0.02) || end.z > zAt(d, to - 0.02)) continue;
+            add(strut(new THREE.Vector3(end.x, end.y - 0.3, end.z), new THREE.Vector3(end.x, end.y + 0.06, end.z), radius * 1.25, woodDark, 5), 0, false);
+          }
+        }
+      }
     }
   };
   sideLine(1, 0.07 + d.length * 0.003); // rail
@@ -351,7 +387,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
       const post = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 0.16), woodDark), 0.02);
       post.position.set(0, wy + 0.35, zAt(d, wt));
       const wheel = add(new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 6, 14), woodLight), 0.015);
-      wheel.position.set(0, wy + 0.72, zAt(d, wt) - 0.12);
+      wheel.position.set(0, wy + 0.72, zAt(d, wt) + 0.12); // on the after side: the helmsman stands behind it, facing the bow
       for (let n = 0; n < 4; n++) {
         const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.84, 4), woodLight);
         spoke.rotation.z = (n * Math.PI) / 4;
@@ -374,6 +410,29 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
     crate.position.set(-0.3, y + 0.21, zAt(d, 0.4) + 0.1);
     crate.rotation.y = 0.3;
   }
+
+  // --- Places for cargo: rows down the middle of the deck, clear of masts, guns and fittings ---
+  const cargoPlaces: THREE.Vector3[] = [];
+  const upper: THREE.Vector3[] = [];
+  const rowStep = 0.62 / d.length;
+  for (let t = 0.3; t <= 0.8; t += rowStep) {
+    if (!clearOfMasts(t, 0.75)) continue;
+    const gunsHere = deckGuns.some((c) => Math.abs(c.t - t) * d.length < 0.8);
+    const room = halfBeamAt(d, t) * 0.93 - (gunsHere ? 1.75 : 0.45);
+    for (const x of [0.3, -0.3, 0.9, -0.9, 1.5, -1.5]) {
+      if (Math.abs(x) > room) continue;
+      if (Math.abs(t - 0.4) * d.length < 0.7 && Math.abs(x) < 0.7) continue; // the lashed barrel and crate
+      if (big && Math.abs(t - 0.87) * d.length < 1) continue; // the wheel
+      const at = new THREE.Vector3(x, deckAt(d, t) + 0.01, zAt(d, t));
+      cargoPlaces.push(at);
+      if (Math.abs(x) < 0.5) upper.push(at.clone().setY(at.y + 0.44));
+    }
+  }
+  // fill from amidships outward, then a second tier down the middle
+  const mid = zAt(d, 0.55);
+  cargoPlaces.sort((a, b) => Math.abs(a.z - mid) + Math.abs(a.x) * 0.6 - (Math.abs(b.z - mid) + Math.abs(b.x) * 0.6));
+  cargoPlaces.splice(26);
+  cargoPlaces.push(...upper.slice(0, 8));
 
   // --- Gun ports for the guns below deck ---------------------------------------------
   const portDark = new THREE.MeshBasicMaterial({ color: 0x1a0f08 });
@@ -400,7 +459,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   const gunMounts = d.cannons.map((c) => cannonMount(d, c));
   void hull;
 
-  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial };
+  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces };
 }
 
 /** Free the GPU memory of a built ship (the shipyard rebuilds its preview on every edit). */

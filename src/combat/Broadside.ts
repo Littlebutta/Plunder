@@ -34,7 +34,7 @@ function wrapAngle(a: number): number {
   return a - Math.PI * 2 * Math.round(a / (Math.PI * 2));
 }
 
-interface Gun {
+export interface Gun {
   side: 1 | -1;
   root: THREE.Group;
   yawPivot: THREE.Group;
@@ -395,6 +395,15 @@ export class Broadside {
   }
 
   private buildGun(mount: THREE.Vector3): Gun {
+    const gun = buildGunModel(mount);
+    this.ship.add(gun.root);
+    return gun;
+  }
+}
+
+/** A cannon on its carriage, standing at `mount` in ship space and pointing out over that side. */
+export function buildGunModel(mount: THREE.Vector3): Gun {
+  {
     const side: 1 | -1 = mount.x >= 0 ? 1 : -1;
     const root = new THREE.Group();
     root.position.copy(mount);
@@ -440,7 +449,6 @@ export class Broadside {
     root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh && !o.name.endsWith('-outline')) o.castShadow = true;
     });
-    this.ship.add(root);
     return { side, root, yawPivot, pitchPivot, barrel, recoil: 0 };
   }
 }

@@ -9,6 +9,8 @@ import {
   cloneDesign,
   computeStats,
   DESIGN_LIMITS,
+  FREE_CANNONS,
+  METALS_PER_CANNON,
   gunHeight,
   halfBeamAt,
   HullDesign,
@@ -24,6 +26,7 @@ import {
   STATIONS,
 } from '../ship/HullDesign';
 import { buildShipVisual, disposeShipVisual } from '../ship/ShipVisual';
+import { buildGunModel } from '../combat/Broadside';
 import type { Stock } from '../world/Resources';
 
 export interface ShipyardActions {
@@ -32,6 +35,8 @@ export interface ShipyardActions {
   back(): void;
   /** What the player has in the hold, to compare against the cost. */
   stock(): Stock;
+  /** Extra cannons (beyond the free ones) already paid for. */
+  cannonsPaid(): number;
 }
 
 type Tool = 'draw' | 'masts' | 'cannons';
@@ -78,6 +83,8 @@ export class Shipyard {
   private model: THREE.Group | null = null;
   private yaw = 0.9;
   private pitch = 0.42;
+  private zoom = 1;
+  private spin = true;
   private orbiting = false;
   private raf = 0;
   private lastTime = 0;
@@ -99,24 +106,32 @@ export class Shipyard {
           <input class="yard-name" data-name maxlength="24" aria-label="Ship name">
         </div>
         <div class="yard-row" data-presets>
-          <span>Start from</span>
+          <span class="yard-label">Start from</span>
           ${PRESETS.map((p, i) => `<button data-preset="${i}">${p.name}</button>`).join('')}
         </div>
-        <div class="yard-row" data-tools>
-          <button data-tool="draw">Draw hull</button>
-          <button data-tool="masts">Place masts</button>
-          <button data-tool="cannons">Place cannons</button>
+        <div class="yard-tabs" data-tools>
+          <button data-tool="draw"><i>1</i>Hull</button>
+          <button data-tool="masts"><i>2</i>Sails</button>
+          <button data-tool="cannons"><i>3</i>Guns</button>
         </div>
-        <div class="yard-row yard-opts" data-opts></div>
-        <div class="yard-tip" data-tip></div>
+        <div class="yard-card">
+          <div class="yard-sliders" data-sliders>
+            ${slider('length', 'Length')}${slider('beam', 'Beam')}${slider('depth', 'Keel depth')}${slider('freeboard', 'Freeboard')}
+          </div>
+          <div class="yard-row yard-opts" data-opts></div>
+          <div class="yard-tip" data-tip></div>
+        </div>
         <div class="yard-board"><span>Top view</span><canvas data-top width="${W}" height="${TOP_H}"></canvas></div>
         <div class="yard-board"><span>Side view</span><canvas data-side width="${W}" height="${SIDE_H}"></canvas></div>
-        <div class="yard-sliders">
-          ${slider('length', 'Length')}${slider('beam', 'Beam')}${slider('depth', 'Keel depth')}${slider('freeboard', 'Freeboard')}
-        </div>
       </div>
       <div class="yard-right">
-        <canvas data-preview></canvas>
+        <div class="yard-view">
+          <canvas data-preview></canvas>
+          <div class="yard-viewbar">
+            <button data-view="quarter">3/4</button><button data-view="side">Side</button><button data-view="top">Top</button><button data-view="stern">Stern</button><button data-view="spin">Spin</button>
+            <span>Drag to turn · wheel to zoom</span>
+          </div>
+        </div>
         <div class="yard-stats" data-stats></div>
         <div class="yard-actions">
           <button data-act="launch" class="primary">Launch this ship</button>
@@ -153,7 +168,12 @@ export class Shipyard {
         this.changed();
       } else if (btn.dataset.tool) {
         this.tool = btn.dataset.tool as Tool;
+        // turn the model side-on for the guns, so they can be seen going in
+        if (this.tool === 'cannons') this.setView('side');
         this.changed(false);
+      } else if (btn.dataset.view) {
+        this.setView(btn.dataset.view);
+        this.refreshPanel();
       } else if (btn.dataset.level) {
         this.gunLevel = Number(btn.dataset.level);
         this.changed(false);
@@ -199,8 +219,17 @@ export class Shipyard {
       this.orbiting = false;
       this.preview.releasePointerCapture(e.pointerId);
     });
+    this.preview.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        this.zoom = THREE.MathUtils.clamp(this.zoom * (e.deltaY < 0 ? 1 / 1.12 : 1.12), 0.35, 1.8);
+      },
+      { passive: false },
+    );
     this.preview.addEventListener('pointermove', (e) => {
       if (!this.orbiting) return;
+      this.spin = false;
       this.yaw -= e.movementX * 0.008;
       this.pitch = THREE.MathUtils.clamp(this.pitch + e.movementY * 0.006, 0.05, 1.3);
     });
@@ -227,6 +256,24 @@ export class Shipyard {
   close(): void {
     this.root.hidden = true;
     cancelAnimationFrame(this.raf);
+  }
+
+  /** Show a message in the tip line (e.g. why a launch was refused). */
+  warn(message: string): void {
+    this.warning = message;
+    this.refreshPanel();
+  }
+
+  private setView(view: string): void {
+    if (view === 'spin') {
+      this.spin = !this.spin;
+      return;
+    }
+    this.spin = false;
+    const v = { quarter: [0.9, 0.42], side: [Math.PI / 2, 0.16], top: [Math.PI / 2, 1.3], stern: [0, 0.3] }[view] ?? [0.9, 0.42];
+    this.yaw = v[0];
+    this.pitch = v[1];
+    this.zoom = 1;
   }
 
   /** Current design (a copy). */
@@ -535,13 +582,15 @@ export class Shipyard {
       (this.root.querySelector(`[data-val="${key}"]`) as HTMLElement).textContent = `${d[key].toFixed(1)} m`;
     }
     this.root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === this.tool));
+    (this.root.querySelector('[data-sliders]') as HTMLElement).hidden = this.tool !== 'draw';
+    (this.root.querySelector('[data-view="spin"]') as HTMLElement).classList.toggle('on', this.spin);
     const tip = this.root.querySelector('[data-tip]') as HTMLElement;
     tip.textContent =
       this.warning ||
       {
         draw: 'Drag on the top view to draw the outline, and on the side view to draw the keel.',
-        masts: `Click a ring: square sail (best with the wind behind), then triangle sail (best with the wind on the beam or ahead), then none. Up to ${MAX_MASTS} masts.`,
-        cannons: 'Click along either edge of the top view to place a cannon; click one to remove it. Lower decks need a tall enough hull (freeboard).',
+        masts: `Click a ring on the top view: square sail (best with the wind behind), then triangle sail (best with the wind on the beam or ahead), then none. Up to ${MAX_MASTS} masts.`,
+        cannons: `Click along either edge of the top view to place a cannon; click one to remove it. Fit as many as the hull has room for: the first ${FREE_CANNONS} are free, each one more costs ${METALS_PER_CANNON} metals. Lower decks need a tall enough hull (freeboard).`,
       }[this.tool];
     tip.classList.toggle('warn', !!this.warning);
     // options for the current tool
@@ -574,6 +623,9 @@ export class Shipyard {
     const deckText = s.guns === 0 ? '' : ` on ${decks} deck${decks > 1 ? 's' : ''}`;
     const turn = s.agility > 0.9 ? 'Nimble' : s.agility > 0.65 ? 'Steady' : 'Heavy';
     const cost = (label: string, need: number, got: number) => `<span class="${got >= need ? '' : 'short'}">${label} ${need}</span>`;
+    const extra = Math.max(0, s.guns - FREE_CANNONS);
+    const due = Math.max(0, extra - this.actions.cannonsPaid()) * METALS_PER_CANNON;
+    const gunCost = extra === 0 ? 'included with the hull' : due === 0 ? `${extra} extra, paid for` : `${extra} extra · <span class="${have.salvage >= due ? '' : 'short'}">${due} metals due at launch (you have ${have.salvage})</span>`;
     this.statsEl.innerHTML = `
       <div><span>Length × beam</span><b>${d.length.toFixed(1)} × ${d.beam.toFixed(1)} m</b></div>
       <div><span>Draft</span><b>${s.draft.toFixed(1)} m</b></div>
@@ -584,8 +636,8 @@ export class Shipyard {
       <div><span>Wind boost</span><b>astern ${pct(1)} · beam ${pct(0)} · close-hauled ${pct(-0.6)}</b></div>
       <div><span>Cannons</span><b>${s.guns}${deckText}</b></div>
       <div><span>Hold</span><b>${s.hold}</b></div>
-      <div class="cost"><span>Cost</span><b>${cost('Wood', s.cost.wood, have.wood)} · ${cost('Stone', s.cost.stone, have.stone)} · ${cost('Salvage', s.cost.salvage, have.salvage)}</b></div>
-      <div class="note">Building is free while the shipyard is being tested. Costs are shown so we can balance them.</div>`;
+      <div class="cost"><span>Cannon cost</span><b>${gunCost}</b></div>
+      <div class="cost"><span>Hull cost (not charged yet)</span><b>${cost('Wood', s.cost.wood, have.wood)} · ${cost('Stone', s.cost.stone, have.stone)}</b></div>`;
   }
 
   // --- 3D preview ---------------------------------------------------------------
@@ -600,7 +652,13 @@ export class Shipyard {
         this.scene.remove(this.model);
         disposeShipVisual(this.model);
       }
-      this.model = buildShipVisual(this.design, this.colour).group;
+      const visual = buildShipVisual(this.design, this.colour);
+      this.model = visual.group;
+      // the guns as they will stand in the game, and a marker for the swivel
+      for (const mount of visual.gunMounts) this.model.add(buildGunModel(mount).root);
+      const swivel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.9, 8), toonMaterial(0xb7853b));
+      swivel.position.copy(visual.swivelMount).setY(visual.swivelMount.y + 0.45);
+      this.model.add(swivel);
       this.scene.add(this.model);
     }
     const w = this.preview.clientWidth;
@@ -611,8 +669,8 @@ export class Shipyard {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
-    if (!this.orbiting) this.yaw += dt * 0.25;
-    const dist = this.design.length * 1.9 + 6;
+    if (!this.orbiting && this.spin) this.yaw += dt * 0.25;
+    const dist = (this.design.length * 1.9 + 6) * this.zoom;
     const cp = Math.cos(this.pitch);
     this.camera.position.set(Math.sin(this.yaw) * cp * dist, Math.sin(this.pitch) * dist + 1, Math.cos(this.yaw) * cp * dist);
     this.camera.lookAt(0, this.design.length * 0.16, 0);

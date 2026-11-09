@@ -27,7 +27,7 @@ export class MainMenu {
         <button data-act="newmap">New map <small>generate a fresh set of islands</small></button>
         <button data-act="settings">Settings <small>sound and music volume</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
-        <div class="menu-foot">Drag to look around</div>
+        <div class="menu-foot">Hold the middle mouse button and drag to look around</div>
       </div>`;
     parent.append(this.root);
     this.playBtn = this.root.querySelector('[data-act="play"]') as HTMLButtonElement;
