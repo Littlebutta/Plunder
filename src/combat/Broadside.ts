@@ -17,6 +17,9 @@ export const BROADSIDE = {
   elevateRate: 0.9, // rad/s
   traverseRate: 0.7, // rad/s
   rippleDelay: 0.09, // s between guns in a ripple
+  /** Random extra delay per gun (s): sequential fire, and all-at-once (so a volley is ragged, not one bang). */
+  rippleJitter: 0.035,
+  volleyJitter: 0.16,
   kind: 1, // ProjectileSim KINDS index (cannon shell)
 };
 
@@ -39,6 +42,8 @@ interface Gun {
   barrel: THREE.Group;
   recoil: number;
 }
+
+export type FireMode = 'ripple' | 'volley';
 
 export interface BroadsideShot {
   position: THREE.Vector3;
@@ -66,6 +71,10 @@ export interface BroadsideShot {
  */
 export class Broadside {
   readonly guns: Gun[] = [];
+  /** 'ripple' fires the guns one after another, bow to stern; 'volley' fires them all at once (give or take). */
+  fireMode: FireMode = 'ripple';
+  /** Guns that stayed silent in the last salvo because their muzzles were under water. */
+  drowned = 0;
   /** Active side: 1 = starboard, -1 = port. */
   side: 1 | -1 = 1;
   elevation = 0.12;
@@ -264,9 +273,14 @@ export class Broadside {
       if (q.delay > 0) continue;
       const shot = { position: new THREE.Vector3(), direction: new THREE.Vector3() };
       this.muzzle(q.gun, shot.position, shot.direction);
+      this.queue.splice(i, 1);
+      // a gun whose muzzle is under water (a low port in a big sea, or a heeling hull) cannot fire
+      if (shot.position.y < this.waves.heightAt(shot.position.x, shot.position.z) + 0.05) {
+        this.drowned++;
+        continue;
+      }
       q.gun.recoil = 1;
       out.push(shot);
-      this.queue.splice(i, 1);
     }
 
     if (this.visible) this.updateRibbon(dt);
@@ -274,10 +288,17 @@ export class Broadside {
 
   /** Fire the active side as a ripple, bow to stern. Returns false if still reloading. */
   tryFire(): boolean {
-    if (!this.visible || !this.ready) return false;
+    if (!this.visible || !this.ready || !this.guns.some((g) => g.side === this.side)) return false;
     this.cooldown[this.side] = BROADSIDE.reload;
     const side = this.guns.filter((g) => g.side === this.side).sort((a, b) => a.root.position.z - b.root.position.z);
-    side.forEach((gun, i) => this.queue.push({ delay: i * BROADSIDE.rippleDelay, gun }));
+    if (side.length === 0) return false;
+    this.drowned = 0;
+    side.forEach((gun, i) =>
+      this.queue.push({
+        delay: this.fireMode === 'volley' ? Math.random() * BROADSIDE.volleyJitter : i * BROADSIDE.rippleDelay + Math.random() * BROADSIDE.rippleJitter,
+        gun,
+      }),
+    );
     return true;
   }
 
@@ -327,6 +348,7 @@ export class Broadside {
 
   private updateRibbon(dt: number): void {
     const side = this.guns.filter((g) => g.side === this.side).sort((a, b) => a.root.position.z - b.root.position.z);
+    this.ribbonGeo.setDrawRange(0, side.length === 0 ? 0 : Infinity);
     if (side.length === 0) return;
     const na = this.track(side[0], this.trackA);
     const nb = this.track(side[side.length - 1], this.trackB);

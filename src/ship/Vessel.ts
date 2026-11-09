@@ -44,8 +44,10 @@ export abstract class Vessel {
   /** Called once each time the sail fills: full sail AND a good wind. */
   onSailFilled: (() => void) | null = null;
 
-  /** Bow mount point for the swivel gun, in ship space. */
-  abstract readonly bowMount: THREE.Vector3;
+  /** Where the swivel gun stands, in ship space. */
+  abstract readonly swivelMount: THREE.Vector3;
+  /** Which way the swivel faces when centred: 0 = over the bow, PI = over the stern. */
+  readonly swivelFacing: number = 0;
   /** Broadside cannon positions in ship space; the sign of x picks the side. */
   abstract readonly gunMounts: THREE.Vector3[];
   /** Overall length (m). */
@@ -54,7 +56,8 @@ export abstract class Vessel {
   abstract readonly displayName: string;
 
   private filled = false;
-  protected readonly apparentLocal = new THREE.Vector3();
+  /** Apparent wind in ship space (m/s). */
+  readonly apparentLocal = new THREE.Vector3();
 
   constructor(
     hull: HullSpec,
@@ -103,11 +106,10 @@ export abstract class Vessel {
   physicsStep(h: number): void {
     const b = this.body;
     if (this.sail >= 0) {
-      // How much the wind is behind us: 1 dead downwind, ~0.25 on the beam, 0 into it.
+      // How well the rig takes this wind: a square sail wants it astern, a lateen on the beam.
       const fwd = b.forward(_fw).setY(0).normalize();
       const along = fwd.dot(this.wind.direction);
-      const behind = THREE.MathUtils.clamp((along + 0.3) / 1.3, 0, 1);
-      this.windBoost = behind * Math.min(this.wind.strength, 1.2);
+      this.windBoost = this.rigBoost(along) * Math.min(this.wind.strength, 1.2);
       const headwind = Math.max(0, -along) * this.wind.strength * this.drive.headwindPenalty;
       b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost);
       b.sideForce = 0;
@@ -122,6 +124,18 @@ export abstract class Vessel {
     b.yawTorque = -this.rudder * this.drive.steerTorque * gain * (speed < -0.2 ? -1 : 1);
     b.step(h);
   }
+
+  /**
+   * Share of the wind's boost this rig takes at a point of sail, 0..1.
+   * `along` = heading . wind direction (1 running downwind, 0 beam, -1 head to wind).
+   * Default: a square sail, best with the wind astern.
+   */
+  protected rigBoost(along: number): number {
+    return THREE.MathUtils.clamp((along + 0.3) / 1.3, 0, 1);
+  }
+
+  /** Paint the sails and pennant in the owner's colour. */
+  abstract setColour(colour: THREE.ColorRepresentation): void;
 
   /** Per-frame: copy physics state to the visuals and animate rigging. */
   abstract syncVisuals(dt: number): void;

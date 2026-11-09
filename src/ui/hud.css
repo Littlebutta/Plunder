@@ -169,3 +169,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .settings-gear[hidden] { display: none; }
 .settings-gear:hover, .settings-gear:focus-visible { background: #c0814a; color: #2a1708; outline: none; }
 .hud-hold { right: calc(68px + env(safe-area-inset-right, 0px)); }
+
+/* --- Shipyard v2 --- */
+.yard-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.yard-opts input { accent-color: #c0814a; width: 16px; height: 16px; }
+.yard-opts button:disabled { opacity: .4; cursor: default; }
+.yard-opts[hidden] { display: none; }
+.yard-tip.warn { color: #ffb27a; opacity: 1; font-weight: 800; }
+.settings-select { display: flex; gap: 8px; margin: 6px 0 4px; }
+.settings-select button, .settings-swatches button {
+  font: 800 13px 'Nunito', sans-serif; color: #fff8e6; cursor: pointer; background: rgba(192, 129, 74, .18);
+  border: 2px solid #c0814a; border-radius: 9px; padding: 6px 12px;
+}
+.settings-select button.on { background: #c0814a; color: #2a1708; }
+.settings-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+.settings-swatches button { width: 34px; height: 34px; padding: 0; border-color: rgba(255,248,230,.35); }
+.settings-swatches button.on { border-color: #fff8e6; box-shadow: 0 0 0 2px #2a1708, 0 0 0 4px #fff8e6; }
+.settings-note { font-size: 12px; opacity: .75; }
+.yard-left { overflow-y: auto; padding-right: 4px; }
+.yard-opts button { padding: 5px 10px; font-size: 13px; }
+.yard-tip { min-height: 34px; }

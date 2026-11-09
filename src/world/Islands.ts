@@ -36,7 +36,11 @@ export interface Island {
   stock: Stock;
   /** World position of the end of the island's pier, if it has a port. */
   port: THREE.Vector3 | null;
+  /** Who holds the island. NPC islands fly white; the player's fly the player's colour. */
+  owner: IslandOwner;
 }
+
+export type IslandOwner = 'none' | 'player' | 'npc';
 
 export interface IslandWorld {
   group: THREE.Group;
@@ -335,7 +339,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   };
   const capacity = islandCapacity(type, radius);
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null };
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null, owner: 'none' };
 }
 
 const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];
@@ -427,6 +431,7 @@ function addPort(island: Island, angle: number): void {
   door.position.set(hx + 2.12, ground + 0.85, 3.5);
 
   island.group.add(port);
+  island.owner = 'npc'; // a settled island: someone built this port
   island.port = new THREE.Vector3(PIER, DECK_Y, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), -angle).add(port.position).add(island.center);
 }
 
