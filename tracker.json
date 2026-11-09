@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T20:15:24Z",
+  "updated": "2026-11-09T20:15:27Z",
   "categories": [
     {
       "key": "feature",
@@ -555,17 +555,19 @@
       "id": "F-19",
       "cat": "feature",
       "title": "More varied, better-looking island mountains (not every island has one)",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-6",
       "tags": [
         "islands",
         "visuals"
       ],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/2"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-09T20:15:27Z",
       "by": "Claude"
     },
     {
