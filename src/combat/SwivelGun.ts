@@ -9,6 +9,8 @@ const PREVIEW_DOTS = 48;
 export const SWIVEL = {
   muzzleSpeed: 38, // m/s: slow enough for a readable, lobbed arc
   reload: 1.1, // s
+  /** Furthest the gun will aim (m). Upgrades will extend this later. */
+  maxRange: 90,
   traverseRate: 3.2, // rad/s
   elevateRate: 2.2, // rad/s
   maxYaw: THREE.MathUtils.degToRad(160), // either side of the bow
@@ -39,7 +41,7 @@ export class SwivelGun {
   private targetPitch = 0.05;
   cooldown = 0;
   private recoil = 0;
-  /** True when the aim point is beyond max range. */
+  /** True when the aim point is beyond max range (the ring turns red and stops at the limit). */
   outOfRange = false;
 
   // aim preview
@@ -134,14 +136,22 @@ export class SwivelGun {
    */
   aimAt(target: THREE.Vector3): void {
     const muzzle = this.pivotWorld(_m);
-    const dx = target.x - muzzle.x;
-    const dz = target.z - muzzle.z;
-    const dy = target.y - muzzle.y;
-    const d = Math.hypot(dx, dz);
+    let dx = target.x - muzzle.x;
+    let dz = target.z - muzzle.z;
+    let dy = target.y - muzzle.y;
+    let d = Math.hypot(dx, dz);
+    // Beyond max range the gun aims at the edge of its range, in the same direction.
+    const tooFar = d > SWIVEL.maxRange;
+    if (tooFar) {
+      dx *= SWIVEL.maxRange / d;
+      dz *= SWIVEL.maxRange / d;
+      d = SWIVEL.maxRange;
+      dy = this.waves.heightAt(muzzle.x + dx, muzzle.z + dz) - muzzle.y;
+    }
     // the ball leaves the muzzle, a barrel length ahead of the pivot
     const reach = Math.max(0.5, d + this.muzzleLocal.z);
     let elev = d < 1e-3 ? null : solveElevation(reach, dy, SWIVEL.muzzleSpeed, KINDS[SWIVEL.kind].drag);
-    this.outOfRange = elev === null && d >= 1e-3;
+    this.outOfRange = tooFar || (elev === null && d >= 1e-3);
     elev ??= Math.PI / 4;
     const dirWorld = _d.set((dx / (d || 1)) * Math.cos(elev), Math.sin(elev), (dz / (d || 1)) * Math.cos(elev));
     const inv = _q.copy(this.mount.getWorldQuaternion(_q2)).invert();
@@ -224,7 +234,7 @@ export class SwivelGun {
       this.ring.scale.setScalar(1.1 * pulse);
     }
     const mat = this.ring.material as THREE.MeshBasicMaterial;
-    mat.color.set(this.ready ? 0xffffff : 0xffb27a);
+    mat.color.set(this.outOfRange ? 0xff6a5a : this.ready ? 0xffffff : 0xffb27a);
   }
 }
 

@@ -12,11 +12,7 @@ export class Input {
   dragging = false;
   /** Pointer position in normalized device coords (-1..1), for aiming. */
   readonly pointer = { x: 0, y: -0.2, inside: false };
-  private downAt = 0;
   private dragDist = 0;
-  private clicked = false;
-  /** Seconds since the user last orbited the camera by hand. */
-  idleOrbit = Infinity;
 
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -29,15 +25,12 @@ export class Input {
 
     target.addEventListener('pointerdown', (e) => {
       this.dragging = true;
-      this.downAt = performance.now();
       this.dragDist = 0;
       target.setPointerCapture(e.pointerId);
     });
     target.addEventListener('pointerup', (e) => {
       this.dragging = false;
       target.releasePointerCapture(e.pointerId);
-      // A short press that barely moved is a click (fire), not an orbit drag.
-      if (this.dragDist < 6 && performance.now() - this.downAt < 600 && e.button === 0) this.clicked = true;
     });
     target.addEventListener('pointermove', (e) => {
       const r = target.getBoundingClientRect();
@@ -46,10 +39,9 @@ export class Input {
       this.pointer.inside = true;
       if (!this.dragging) return;
       this.dragDist += Math.abs(e.movementX) + Math.abs(e.movementY);
-      if (this.dragDist < 6) return; // ignore jitter during a click
+      if (this.dragDist < 6) return; // ignore jitter
       this.dx += e.movementX;
       this.dy += e.movementY;
-      this.idleOrbit = 0;
     });
     target.addEventListener('pointerleave', () => (this.pointer.inside = false));
     target.addEventListener(
@@ -80,9 +72,9 @@ export class Input {
     return this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
   }
 
-  /** Fire request this frame: a click on the sea or Space. */
+  /** Fire request: Space, held or tapped (the gun's reload sets the pace). The mouse only aims. */
   get fire(): boolean {
-    return this.clicked || this.wasPressed('Space');
+    return this.isDown('Space');
   }
 
   get steer(): number {
@@ -96,10 +88,8 @@ export class Input {
   }
 
   /** Call at the end of each frame. */
-  endFrame(dt: number): void {
+  endFrame(): void {
     this.pressed.clear();
-    this.clicked = false;
-    if (!this.dragging) this.idleOrbit += dt;
   }
 
   get element(): HTMLElement {

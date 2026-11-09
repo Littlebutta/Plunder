@@ -93,7 +93,6 @@ const COLORS = {
   rock: new THREE.Color(PALETTE.rock),
   rockDark: new THREE.Color(0x8a5d55),
   cliff: new THREE.Color(0xc29a7a),
-  snow: new THREE.Color(0xf5f1e8),
   seabed: new THREE.Color(0x2f86b4),
 };
 
@@ -236,7 +235,6 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : COLORS.rock);
     else if ((type === 'peak' || type === 'ridge') && y > peakTop * 0.62 + n * 4) c.copy(COLORS.rockDark);
     else c.copy(n > 0.05 ? COLORS.grassDark : COLORS.grass);
-    if (type === 'peak' && y > peakTop * 0.88 && slope < 0.6) c.copy(COLORS.snow);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;
