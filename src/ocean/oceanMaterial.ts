@@ -12,6 +12,9 @@ import { ShoreField, SHORE_TEX_MIN, SHORE_TEX_RANGE } from './shore';
  * hand-drawn-looking foam streaks, fresnel and fog. Near land (from the shore
  * map) the water turns shallow turquoise and foam lines lap at the beach.
  */
+/** Most sea creatures the ocean shader can draw at once. */
+export const MAX_LURKERS = 4;
+
 export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, shore: ShoreField | null): THREE.ShaderMaterial {
   // Terrain height map as an 8-bit texture; a single deep texel if there is no land.
   const size = shore?.size ?? 1;
@@ -36,6 +39,15 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
       uHorizon: { value: new THREE.Color(PALETTE.horizon) },
       uFogRange: { value: new THREE.Vector2(250, 1400) },
       uFoamAmount: { value: 1 },
+      // Day-night + weather (see src/weather): light multiplier, tint toward a colour (red tide)
+      uLight: { value: new THREE.Color(1, 1, 1) },
+      uTint: { value: new THREE.Color(0x8a1010) },
+      uTintAmount: { value: 0 },
+      uFlash: { value: 0 },
+      // Sea creatures under the surface: xz, heading (cos, sin) / strength, eye open, scale, glow
+      uLurkA: { value: Array.from({ length: MAX_LURKERS }, () => new THREE.Vector4()) },
+      uLurkB: { value: Array.from({ length: MAX_LURKERS }, () => new THREE.Vector4()) },
+      uLurkCount: { value: 0 },
     },
     vertexShader: /* glsl */ `
       ${GERSTNER_GLSL}
@@ -82,6 +94,13 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
       uniform vec3 uHorizon;
       uniform vec2 uFogRange;
       uniform float uFoamAmount;
+      uniform vec3 uLight;
+      uniform vec3 uTint;
+      uniform float uTintAmount;
+      uniform float uFlash;
+      uniform vec4 uLurkA[${MAX_LURKERS}];
+      uniform vec4 uLurkB[${MAX_LURKERS}];
+      uniform int uLurkCount;
 
       varying vec3 vWorldPos;
       varying vec3 vNormal;
@@ -172,12 +191,46 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
         float swash = 1.0 - aastep(0.22 + sn * 0.5 + 0.12 * sin(uTime * 0.9 + sn * 9.0), depth);
         col = mix(col, uFoam, max(lapLine * 0.85, swash));
 
+        // Red tide: pull the water toward a blood-red version of itself.
+        float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(col, uTint * (0.55 + lum * 1.6), uTintAmount);
+
+        // Something huge under the surface: a dark shape with glowing eyes.
+        vec3 eyes = vec3(0.0);
+        for (int i = 0; i < ${MAX_LURKERS}; i++) {
+          if (i >= uLurkCount) break;
+          vec4 la = uLurkA[i];
+          vec4 lb = uLurkB[i];
+          vec2 rel = vWorldPos.xz - la.xy;
+          float sc = lb.z;
+          vec2 q = vec2(dot(rel, vec2(-la.w, la.z)), dot(rel, la.zw)) / sc; // x = right, y = forward
+          float wob = fbm(q * 0.25 + uTime * 0.15) - 0.5;
+          float body = length(vec2(q.x / 5.0, (q.y + 2.0) / 8.0)) + wob * 0.35;
+          col *= 1.0 - 0.7 * lb.x * (1.0 - smoothstep(0.55, 1.05, body));
+          for (int s = -1; s <= 1; s += 2) {
+            vec2 e = q - vec2(float(s) * 1.7, 3.4);
+            vec2 er = e / vec2(1.05, 0.62 * max(lb.y, 0.05));
+            float r = length(er);
+            float core = 1.0 - smoothstep(0.8, 1.0, r);
+            float slit = smoothstep(0.12, 0.24, abs(e.x));
+            float halo = exp(-dot(e, e) * 0.45) * lb.w;
+            vec3 eyeCol = mix(vec3(1.0, 0.55, 0.08), vec3(1.0, 0.92, 0.35), 1.0 - r);
+            eyes += lb.x * (eyeCol * core * mix(0.15, 1.0, slit) * lb.y * 1.3 + vec3(0.55, 0.9, 0.3) * halo * 0.35);
+          }
+        }
+
+        col *= uLight;
+        col += eyes;
+        col += vec3(0.6, 0.65, 0.8) * uFlash * 0.5;
+
         // Fresnel toward the sky at grazing angles.
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
         col = mix(col, uHorizon, fres * 0.45);
 
         // Fog into the horizon colour.
-        float fog = smoothstep(uFogRange.x, uFogRange.y, dist);
+        // linear like the scene fog, so the sea and islands fade together in thick weather
+        float fog = clamp((dist - uFogRange.x) / max(uFogRange.y - uFogRange.x, 1.0), 0.0, 1.0);
+        fog = fog * fog * (3.0 - 2.0 * fog) * 0.35 + fog * 0.65;
         col = mix(col, uHorizon, fog);
 
         gl_FragColor = vec4(col, 1.0);
