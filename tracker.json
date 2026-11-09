@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:15:49Z",
+  "updated": "2026-11-09T22:15:52Z",
   "categories": [
     {
       "key": "feature",
@@ -1184,6 +1184,20 @@
       "created": "2026-11-09T22:15:49Z",
       "priority": "medium",
       "updated": "2026-11-09T22:15:49Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-47",
+      "cat": "feature",
+      "title": "Generated map with a world's-edge waterfall",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-09T22:15:52Z",
+      "priority": "high",
+      "milestone": "M-6",
+      "updated": "2026-11-09T22:15:52Z",
       "by": "Claude"
     }
   ],
