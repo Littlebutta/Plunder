@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T22:47:47Z",
+  "updated": "2026-11-09T23:45:24Z",
   "categories": [
     {
       "key": "feature",
@@ -1238,14 +1238,16 @@
       "id": "F-49",
       "cat": "feature",
       "title": "Home island: hut by default, upgrades to a fort; lose when it is taken; smaller forts on other islands",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-09 (Claude): PR #15: hut to fort, outposts, raids, capture, win/lose",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/15"
+      ],
       "created": "2026-11-09T22:15:56Z",
       "priority": "high",
       "milestone": "M-7",
-      "updated": "2026-11-09T22:15:56Z",
+      "updated": "2026-11-09T23:45:24Z",
       "by": "Claude"
     },
     {
