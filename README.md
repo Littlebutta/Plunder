@@ -45,4 +45,5 @@ src/
   input/Input.ts          keyboard/mouse state
   ui/                     HUD + lil-gui tuning panel
 docs/PIPELINE.md          technical plan: drawing → hull, waves, physics
+tracker/                  dev tracker: open tracker/index.html (data on the tracker-data branch, see CLAUDE.md)
 ```
