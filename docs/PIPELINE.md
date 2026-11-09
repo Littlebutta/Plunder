@@ -48,12 +48,23 @@ Everything after step 1 is pure geometry, so it can run in a Web Worker and prev
 - **Fixed step** (`src/physics/Simulation.ts`): 120 Hz. Waves and bodies advance in lockstep so buoyancy always sees the water at the right moment, independent of frame rate.
 - **Buoyancy** (`FloatingBody`): each probe samples water height; submerged depth → upward spring force applied *at the probe*, so pitch and roll emerge naturally. Stiffness is derived from mass and the desired rest draft. Heave damping acts on velocity *relative to the water*, so the hull rides the swell instead of being buried by crests.
 - **Drag in body space:** low along the keel, high sideways (gives that boat-like carve), each with linear + quadratic terms. These are exactly the knobs the hull generator will set.
-- **Propulsion:** for now the sail is a throttle (W/S) and the rudder a yaw torque that scales with speed. Next: a wind vector + sail trim (points of sail), which is what makes broadside positioning interesting.
+- **Propulsion:** a square-sail model. The apparent wind (true wind minus the hull's velocity) pushes along the sail's normal, and only when it hits the back face. Force ∝ apparent speed² × cos²(angle). The forward part drives the hull, and part of the sideways part becomes leeway that the high lateral drag resists. Auto-trim searches yard angles for the most forward drive. The rudder is a yaw torque that scales with speed.
 
-## Roadmap after Step 1
+## 4. Multithreading
 
-1. Wind + sail trim; wake/foam trail behind hulls.
-2. Shipyard scene: 2D draw canvas → lofted hull preview → HullSpec → test sail.
+Combat is where the frame budget goes (barrages, splashes, hit tests), so it is built to run off the main thread from the start.
+
+- **Projectiles run in a Web Worker** (`src/combat/projectile.worker.ts`). The worker owns every shell in one packed `Float32Array`: semi-implicit Euler with gravity and quadratic air drag, swept segment-vs-sphere hit tests against ship colliders, and water impact against its own copy of the `WaveField`, kept in sync by sending the sea state when it changes and the wave clock every frame.
+- **One message per frame, pipelined.** The main thread sends spawns + colliders and receives the previous step's snapshot and impact events as transferable buffers (no copying). The worker and the renderer overlap instead of waiting on each other. Positions are extrapolated by velocity to the current frame to hide the one-frame delay.
+- **Everything visual is instanced:** shells, splash columns, foam rings, droplets, smoke and splinters each draw in a single call, whatever the count.
+- **Numbers:** 2,000 shells in flight step in about 1.6 ms per frame on the worker (measured headless in Node). The barrage test (B) fires 400 by default and can go up to 4,000 from the tuning panel.
+- **Fallback:** if a worker can't start, the same `ProjectileSim` runs on the main thread with identical results.
+- **Next:** the desktop build is cross-origin isolated, so `SharedArrayBuffer` is available there. Later we can move to a shared ring buffer with no messages at all, and split buoyancy for many AI ships across a small worker pool.
+
+## Roadmap
+
+1. ~~Wind + sail trim; wake/foam trail behind hulls.~~ Done in Step 2, together with the swivel gun, worker projectiles, sounds and detailed palms.
+2. **Shipyard scene:** 2D draw canvas → lofted hull preview → HullSpec → test sail. *(next)*
 3. Snap points + mast/cannon components with weight affecting draft and stability.
-4. Broadside aiming: water-draped ribbon arc, ballistic shots using the CPU wave sampler.
-5. Procedural islands + resource pickups; round/shipyard loop.
+4. Broadside aiming: water-draped ribbon arc (the swivel gun's dotted arc + impact ring is the first version), cannon types with arcs and reloads.
+5. Procedural islands + resource pickups; round/shipyard loop; enemy ships.

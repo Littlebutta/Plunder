@@ -33,3 +33,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .compass .needle { position: absolute; left: 50%; top: 50%; width: 4px; height: 22px; margin-left: -2px; margin-top: -22px; background: #d8343a; border-radius: 2px; transform-origin: 50% 100%; }
 .hidden { display: none; }
 @media (max-width: 600px) { .hud-help { font-size: 11px; } .hud-title { font-size: 26px; } }
+
+/* --- Step 2: wind, trim, gun, score --- */
+#game { cursor: crosshair; }
+.compass .wind {
+  position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin-left: -6px; margin-top: -24px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 12px solid #bfe9ff;
+  transform-origin: 6px 24px; opacity: .9;
+}
+.reload { width: 64px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.18); overflow: hidden; margin: 6px 0 4px; }
+.reload i { display: block; height: 100%; background: #e67b50; border-radius: 5px; }
+.reload i.ready { background: #9be37a; }
+.hud-score {
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px)); right: calc(18px + env(safe-area-inset-right, 0px));
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.hud-score b { font-size: 18px; }

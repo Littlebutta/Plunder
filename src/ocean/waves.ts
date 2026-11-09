@@ -30,6 +30,11 @@ export const DEFAULT_WAVES: WaveParams[] = [
   { direction: 5, wavelength: 5, steepness: 0.05 },
 ];
 
+export interface SeaState {
+  waves: WaveParams[];
+  intensity: number;
+}
+
 export interface WaveSample {
   height: number;
   normal: THREE.Vector3;
@@ -69,6 +74,23 @@ export class WaveField {
 
   get currentTime(): number {
     return this.time;
+  }
+
+  /** Jump to an absolute wave time (used by the projectile worker to stay in sync). */
+  setTime(t: number): void {
+    this.time = t;
+    this.uniforms.uTime.value = t;
+  }
+
+  /** Plain-data snapshot of the sea state, cheap to post to a worker. */
+  serialize(): SeaState {
+    return { waves: this.waves.map((w) => ({ ...w })), intensity: this.intensity };
+  }
+
+  applySeaState(state: SeaState): void {
+    this.waves = state.waves.map((w) => ({ ...w }));
+    this.intensity = state.intensity;
+    this.syncUniforms();
   }
 
   syncUniforms(): void {

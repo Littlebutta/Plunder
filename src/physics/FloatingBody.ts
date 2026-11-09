@@ -46,6 +46,7 @@ export class FloatingBody {
 
   /** External inputs, set by the controller each frame (body space). */
   thrust = 0; // N along forward (-Z)
+  sideForce = 0; // N along body +X (leeway push from the sail)
   yawTorque = 0; // N·m around body up
 
   /** Fraction (0..1) of probes currently in the water, for UI/FX. */
@@ -138,6 +139,7 @@ export class FloatingBody {
 
     // --- Propulsion (thrust along keel, kept horizontal) --------------------
     dragLocal.z -= this.thrust * wetK;
+    dragLocal.x += this.sideForce * wetK;
     const dragWorld = dragLocal.applyQuaternion(this.quaternion);
     force.add(dragWorld);
 
