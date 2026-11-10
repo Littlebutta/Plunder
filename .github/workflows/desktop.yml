@@ -58,7 +58,7 @@ jobs:
           cat > out/latest.json <<JSON
           {
             "version": "$VERSION",
-            "shellId": "$SHELL_ID",
+            "shell": "$SHELL_ID",
             "game": "game-$VERSION.zip",
             "full": "Plunder-win-x64.zip"
           }

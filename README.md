@@ -21,8 +21,9 @@ Plunder ships as a **portable folder**: no installer, nothing written outside th
 
 **Updates happen on launch.** Every push to `main` makes GitHub Actions publish a release. When Plunder starts it shows a small "Checking for updates" window and reads that release's `latest.json`:
 
-- **Game-only change** (the usual case): downloads `game-<version>.zip` (a couple of MB) into `game/` inside the folder and starts it.
-- **Desktop shell changed** (Electron or anything in `electron/`, detected by a fingerprint from `scripts/shell-id.mjs`): downloads the full folder zip, quits, swaps the files in place (keeping `data/`) and relaunches.
+- **The game** is always updated first: `game-<version>.zip` (a few MB) goes into `game/` inside the folder and starts at once.
+- **Desktop shell changed** (Electron or anything in `electron/`, detected by the `shell` fingerprint from `scripts/shell-id.mjs`): the full folder zip downloads in the background while you play and is unpacked into `update/`. When you quit, a small script waits for Plunder to close and copies it over the folder (keeping `data/`). If the copy fails, it is retried on the next quit without downloading again, up to 3 times per version. Each step is logged to `data/updater.log`.
+- Shells built before 2026-11-10 read a key called `shellId` and downloaded the full folder on the splash screen every launch when the swap failed. `latest.json` now calls it `shell`, so those shells just take game updates. Install the new shell once by hand (unzip `Plunder-win-x64.zip` over the folder) to get Steam online play and the new updater.
 - Offline, slow (>10 s to check) or any error: plays what's already in the folder. "Play now" skips the wait, and `--no-update` skips the check entirely. A read-only folder never updates.
 
 | Command | What it does |

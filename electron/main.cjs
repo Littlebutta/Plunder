@@ -2,7 +2,8 @@
 //
 // Plunder is a portable folder: no installer, nothing written outside it.
 // Packaged builds show a small "checking for updates" window, pull the newest
-// release from GitHub (Littlebutta/Plunder) into the folder, then open the game.
+// game build from GitHub (Littlebutta/Plunder) into the folder, then open the game.
+// A newer shell downloads in the background and is copied in when the game quits.
 // Offline or on any updater error the game just starts. See updater.cjs.
 //
 // The game itself is the normal Vite build (dist/, or a newer downloaded copy in
@@ -13,7 +14,7 @@
 const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { runUpdateCheck, installedGame, portableDir } = require('./updater.cjs');
+const { runUpdateCheck, fetchShellInBackground, applyStagedShell, installedGame, portableDir } = require('./updater.cjs');
 
 const BUNDLED_DIST = path.join(__dirname, '..', 'dist');
 let gameRoot = BUNDLED_DIST; // swapped for <folder>/game when a newer game build was downloaded
@@ -115,8 +116,8 @@ async function start() {
       gameRoot = installedGame().dir || BUNDLED_DIST;
     } else {
       const result = await runUpdateCheck(ipcMain);
-      if (result.action === 'restart') return app.quit(); // files get swapped, then Plunder relaunches
       gameRoot = result.gameDir || BUNDLED_DIST;
+      shellUpdate = result.shell;
     }
   }
 
@@ -132,7 +133,19 @@ async function start() {
   });
 
   gameWindow = createGameWindow();
+  // a newer shell (Electron, this file) downloads while you play and is copied in when the game quits
+  if (shellUpdate) gameWindow.once('ready-to-show', () => setTimeout(() => fetchShellInBackground(shellUpdate), 15_000));
 }
+
+let shellUpdate = null;
+app.on('will-quit', () => {
+  if (!app.isPackaged) return;
+  try {
+    applyStagedShell();
+  } catch (err) {
+    console.error('Could not start the shell update:', err);
+  }
+});
 
 // The splash closes before the game window opens, so only quit once the game has been shown.
 let gameWindow = null;
