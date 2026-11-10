@@ -451,3 +451,50 @@ export function loadDesign(): HullDesign | null {
     return null;
   }
 }
+
+const SHIP_WORDS = ['Wasp', 'Viper', 'Revenge', 'Fury', 'Raven', 'Corsair', 'Hornet', 'Jackal', 'Serpent', 'Barracuda', 'Lamprey', 'Cutlass'];
+
+/**
+ * A ship nobody drew: hull, rig and guns rolled within sensible bounds, so the
+ * captains' fleets are not all the same boat. `size` 0 (small) .. 1 (large).
+ */
+export function randomDesign(rand: () => number, size = 0.4): HullDesign {
+  const r = (lo: number, hi: number) => lo + rand() * (hi - lo);
+  const length = THREE.MathUtils.clamp(9 + size * 11 + r(-2, 2.5), 8, 24);
+  const beam = THREE.MathUtils.clamp(length * r(0.26, 0.38), 2.8, 7.5);
+  const depth = THREE.MathUtils.clamp(length * r(0.07, 0.1), 0.7, 2.6);
+  const freeboard = THREE.MathUtils.clamp(length * r(0.07, 0.11), 0.8, 2.8);
+  const nMasts = length < 12 ? 1 : length < 18 ? (rand() < 0.6 ? 2 : 1) : rand() < 0.6 ? 3 : 2;
+  const slots = nMasts === 1 ? [[0.46], [0.34], [0.58]] : nMasts === 2 ? [[0.34, 0.7], [0.34, 0.58], [0.46, 0.82], [0.22, 0.58]] : [[0.22, 0.46, 0.82], [0.22, 0.46, 0.7], [0.34, 0.58, 0.82]];
+  const at = slots[Math.floor(rand() * slots.length)];
+  const masts: MastFit[] = at.map((t, i) => ({ t, sail: i === 0 ? (rand() < 0.75 ? 'square' : 'lateen') : rand() < 0.5 ? 'square' : 'lateen' }));
+  const d: HullDesign = {
+    name: SHIP_WORDS[Math.floor(rand() * SHIP_WORDS.length)],
+    length,
+    beam,
+    depth,
+    freeboard,
+    plan: planShape(r(0.4, 0.8), r(0.4, 0.85)),
+    keel: keelShape(r(0.3, 0.6)),
+    masts,
+    jib: rand() < 0.65,
+    cannons: [],
+    swivel: rand() < 0.8 ? 'bow' : 'stern',
+  };
+  // guns: a row on the open deck, and gun decks below on the bigger hulls
+  const levels = length > 19 && rand() < 0.7 ? 3 : length > 14 && rand() < 0.75 ? 2 : 1;
+  for (let level = 0; level < levels; level++) {
+    const span = level === 0 ? [0.26, 0.72] : [0.3, 0.72];
+    const n = Math.max(1, Math.round(((span[1] - span[0]) * length) / r(1.6, 2.6)));
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? (span[0] + span[1]) / 2 : span[0] + ((span[1] - span[0]) * i) / (n - 1);
+      for (const side of [1, -1] as const) {
+        const fit: CannonFit = { t, side, level };
+        if (cannonAllowed(d, fit)) d.cannons.push(fit);
+      }
+    }
+  }
+  // never send one out unarmed
+  if (!d.cannons.length) d.cannons.push(...pairs(0, 0.44));
+  return sanitizeDesign(d);
+}

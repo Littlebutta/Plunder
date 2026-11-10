@@ -4,7 +4,7 @@ import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
-import type { Island } from './Islands';
+import { clearGround, type Island } from './Islands';
 import { Factions, ME, NONE } from './Factions';
 import { ECONOMY, emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
 
@@ -93,6 +93,8 @@ export class Stronghold {
   readonly group = new THREE.Group();
   /** World position of the ground it stands on. */
   readonly site = new THREE.Vector3();
+  /** Upgraded income not yet paid out (fractions of a unit). */
+  bonusAcc = 0;
   readonly collider: Collider;
   level = 0;
   hp = 0;
@@ -119,6 +121,8 @@ export class Stronghold {
   ) {
     this.group.name = 'stronghold';
     findSite(island, preferAngle, this.site);
+    // room for the biggest fort it can become, and the villagers around it
+    clearGround(island, this.site.x, this.site.z, 11 * (home ? 1 : STRONGHOLD.outpostScale));
     this.group.position.copy(this.site);
     // face the sea
     this.group.rotation.y = -Math.atan2(this.site.z - island.center.z, this.site.x - island.center.x);
@@ -468,6 +472,8 @@ export class Territory {
   /** Classic voyage: the raiders' home island, if the map has a port for them. Taking it wins. */
   readonly enemyHome: Stronghold | null = null;
   private incomeTimer = 0;
+  /** Upgrades: each captain's income as a multiple (missing = 1). */
+  readonly incomeMul = new Map<number, number>();
   /**
    * Online, on a copy that is not the host: the host decides who holds what.
    * Here nothing fires, falls or changes hands on its own; `applyNet` copies
@@ -483,7 +489,7 @@ export class Territory {
   ) {
     this.group.name = 'territory';
     for (const i of islands) i.owner = NONE;
-    const captains = factions.list.filter((f) => f.kind !== 'raiders');
+    const captains = factions.list.filter((f) => f.kind !== 'raiders' && f.kind !== 'ghosts');
     const raiders = factions.list.find((f) => f.kind === 'raiders') ?? null;
     const inward = (i: Island) => Math.atan2(-i.center.z, -i.center.x);
 
@@ -589,7 +595,7 @@ export class Territory {
 
   /** Units a minute coming in from the islands a faction holds. */
   incomeOf(faction: number): number {
-    return (this.strongholds.filter((s) => s.side === faction && !s.ruined).reduce((n, s) => n + ECONOMY.incomeBase + ECONOMY.incomeMetal + ECONOMY.incomePerLevel * s.level, 0) * 60) / STRONGHOLD.incomeEvery;
+    return (this.strongholds.filter((s) => s.side === faction && !s.ruined).reduce((n, s) => n + ECONOMY.incomeMetal + (ECONOMY.incomeBase + ECONOMY.incomePerLevel * s.level) * (this.incomeMul.get(faction) ?? 1), 0) * 60) / STRONGHOLD.incomeEvery;
   }
 
   get incomePerMinute(): number {
@@ -662,7 +668,12 @@ export class Territory {
         if (!owner || owner.kind === 'raiders' || s.ruined || (this.remote && s.side !== ME)) continue;
         const total = RESOURCE_IDS.reduce((n, id) => n + s.island.capacity[id], 0) || 1;
         owner.stores.salvage += ECONOMY.incomeMetal;
-        for (let u = 0; u < ECONOMY.incomeBase + ECONOMY.incomePerLevel * s.level; u++) {
+        // upgraded income comes as the odd extra unit, carried over between ticks
+        const units = ECONOMY.incomeBase + ECONOMY.incomePerLevel * s.level;
+        s.bonusAcc += units * ((this.incomeMul.get(s.side) ?? 1) - 1);
+        const extra = Math.floor(s.bonusAcc);
+        s.bonusAcc -= extra;
+        for (let u = 0; u < units + extra; u++) {
           for (const id of RESOURCE_IDS) s.yieldAcc[id] += s.island.capacity[id] / total;
           const pick = RESOURCE_IDS.reduce((a: ResourceId, b) => (s.yieldAcc[b] > s.yieldAcc[a] ? b : a));
           s.yieldAcc[pick] -= 1;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { shunRocks } from './Grounding';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -99,6 +100,8 @@ export class Warship {
   private patrolLeg = 0;
   /** With no order: keep station on this point (the flagship). */
   escort: THREE.Vector3 | null = null;
+  /** A trade ship: she never stops to fight. */
+  trader = false;
   hp = ENEMY.hp;
   readonly maxHp: number;
   /** 'patrol' | 'fight' | 'raid' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
@@ -120,6 +123,8 @@ export class Warship {
   /** True once she has been put on the water somewhere. */
   private placed = false;
   private fadeMats: THREE.Material[] | null = null;
+  /** A ghost ship (see `haunt`). */
+  ghostly = false;
   private readonly fadeOutlines: THREE.Object3D[] = [];
   /** Which way she circles a target: chosen so the side that carries her guns faces it. */
   private circle = 1;
@@ -129,7 +134,7 @@ export class Warship {
   private readonly shots: BroadsideShot[] = [];
   private timer = 0;
   private waypoint = 0;
-  private readonly collider: Collider;
+  readonly collider: Collider;
   private readonly dest = new THREE.Vector3();
 
   constructor(
@@ -192,6 +197,26 @@ export class Warship {
    * Set how much of her shows (see `reveal`). She fades in and out at the edge
    * of what the player's ships and islands can see. Call every frame.
    */
+  /** A ghost ship: pale, see-through and glowing faintly. */
+  haunt(): void {
+    this.ghostly = true;
+    this.ship.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || o.name.endsWith('-outline')) return;
+      const ms = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
+        const c = m.clone() as THREE.MeshToonMaterial;
+        c.color?.lerp(_ghostTint, 0.65);
+        if (c.emissive) c.emissive.set(0x2a7a5a);
+        return c;
+      });
+      mesh.material = Array.isArray(mesh.material) ? ms : ms[0];
+    });
+    this.fadeMats = null;
+    const k = this.reveal;
+    this.reveal = -1;
+    this.showAs(k);
+  }
+
   showAs(k: number): void {
     const group = this.ship.group;
     group.visible = this.placed && this.state !== 'gone' && k > 0.02;
@@ -207,10 +232,10 @@ export class Warship {
       });
       this.fadeMats = [...mats];
     }
-    const solid = k >= 1;
+    const solid = k >= 1 && !this.ghostly;
     for (const m of this.fadeMats) {
       m.transparent = !solid;
-      m.opacity = solid ? 1 : k;
+      m.opacity = solid ? 1 : k * (this.ghostly ? 0.62 : 1);
       m.depthWrite = solid || k > 0.5;
     }
     // outlines share their material between ships, so they simply wait until she is solid
@@ -251,6 +276,19 @@ export class Warship {
       if (m >= 0) this.ship.rig.hit(m, 0);
     }
     this.hp -= ENEMY.damage[kind] ?? ENEMY.damage[0];
+    if (this.hp > 0) return false;
+    this.hp = 0;
+    this.state = 'sinking';
+    this.timer = 0;
+    this.sunkCount++;
+    this.hooks.sunk(this);
+    return true;
+  }
+
+  /** She struck a rock: the hull takes `amount` like a shot would. Returns true if that sank her. */
+  scrape(amount: number): boolean {
+    if (!this.alive || amount <= 0) return false;
+    this.hp -= amount;
     if (this.hp > 0) return false;
     this.hp = 0;
     this.state = 'sinking';
@@ -317,7 +355,7 @@ export class Warship {
     if (this.order && this.queue.length && Math.hypot(this.order.x - pos.x, this.order.z - pos.z) < 36) this.order = this.queue.shift()!;
     // under a plain move order she does not stop to fight; on patrol she fights what comes into her zone
     const zone = this.order ? null : this.patrol;
-    const mayEngage = this.order ? this.attackMove : !zone || Math.hypot(player.x - zone.x, player.z - zone.z) < zone.r + 50;
+    const mayEngage = this.trader ? false : this.order ? this.attackMove : !zone || Math.hypot(player.x - zone.x, player.z - zone.z) < zone.r + 50;
     if (this.state === 'patrol' && hostile && foe && mayEngage && range < ENEMY.engageRange) this.state = 'fight';
     else if (this.state === 'fight' && (!hostile || !foe || !mayEngage || range > ENEMY.loseRange)) this.state = 'patrol';
     // A raid goes ahead until the player comes close enough to fight instead.
@@ -364,11 +402,12 @@ export class Warship {
       const dz = pos.z - island.center.z;
       const d = Math.hypot(dx, dz);
       const clear = d - island.radius;
-      const keepOff = raid ? 38 : 70; // a raider has to come in close to shell the shore
+      const keepOff = raid || this.trader ? 38 : 70; // a raider has to come in close to shell the shore
       if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 3);
     }
-    want.normalize();
     const fwd = ship.body.forward(_fwd).setY(0).normalize();
+    shunRocks(pos, fwd, want, this.islands);
+    want.normalize();
     const turn = fwd.x * want.z - fwd.z * want.x;
     const ahead = fwd.dot(want);
     const steer = ahead < -0.2 ? Math.sign(turn || 1) : THREE.MathUtils.clamp(turn * 2.5, -1, 1);
@@ -488,6 +527,7 @@ export class Warship {
   }
 }
 
+const _ghostTint = new THREE.Color(0xbfffe6);
 const NET_STATES: Warship['state'][] = ['patrol', 'fight', 'raid', 'sinking', 'gone'];
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const r2 = (v: number) => Math.round(v * 100) / 100;

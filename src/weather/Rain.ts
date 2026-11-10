@@ -8,6 +8,21 @@ const TOP = 40;
  * Rain streaks in a box that follows the camera, slanted by the wind.
  * `amount` 0..1 sets how many drops fall and how visible they are.
  */
+export interface RainLook {
+  /** Fall speed range (m/s). */
+  speed: [number, number];
+  /** Base colour (before day and night). */
+  colour: [number, number, number];
+  /** Streak length, in seconds of travel. */
+  streak: number;
+  /** How hard the wind carries it sideways. */
+  drift: number;
+  opacity: [number, number];
+}
+const RAIN: RainLook = { speed: [26, 36], colour: [0.83, 0.87, 0.93], streak: 0.045, drift: 9, opacity: [0.18, 0.32] };
+/** Volcanic ash: slow grey flakes that drift with the wind. */
+export const ASH: RainLook = { speed: [2.5, 5.5], colour: [0.42, 0.38, 0.36], streak: 0.12, drift: 5, opacity: [0.35, 0.4] };
+
 export class Rain {
   readonly mesh: THREE.LineSegments;
   amount = 0;
@@ -15,14 +30,14 @@ export class Rain {
   private readonly drops: Float32Array; // x, y, z, speed (relative to the box origin)
   private readonly material: THREE.LineBasicMaterial;
 
-  constructor() {
+  constructor(private readonly look: RainLook = RAIN) {
     this.pos = new Float32Array(MAX_DROPS * 6);
     this.drops = new Float32Array(MAX_DROPS * 4);
     for (let i = 0; i < MAX_DROPS; i++) {
       this.drops[i * 4] = (Math.random() * 2 - 1) * BOX;
       this.drops[i * 4 + 1] = Math.random() * TOP;
       this.drops[i * 4 + 2] = (Math.random() * 2 - 1) * BOX;
-      this.drops[i * 4 + 3] = 26 + Math.random() * 10;
+      this.drops[i * 4 + 3] = look.speed[0] + Math.random() * (look.speed[1] - look.speed[0]);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -37,10 +52,11 @@ export class Rain {
     const n = Math.floor(MAX_DROPS * Math.min(this.amount, 1));
     this.mesh.visible = n > 0;
     if (!n) return;
-    this.material.opacity = 0.18 + 0.32 * Math.min(this.amount, 1);
-    this.material.color.setRGB(0.83, 0.87, 0.93).multiplyScalar(0.35 + 0.65 * brightness);
-    const wx = wind.x * windStrength * 9;
-    const wz = wind.z * windStrength * 9;
+    const look = this.look;
+    this.material.opacity = look.opacity[0] + look.opacity[1] * Math.min(this.amount, 1);
+    this.material.color.setRGB(...look.colour).multiplyScalar(0.35 + 0.65 * brightness);
+    const wx = wind.x * windStrength * look.drift;
+    const wz = wind.z * windStrength * look.drift;
     const d = this.drops;
     const p = this.pos;
     const ox = cameraPos.x;
@@ -62,7 +78,7 @@ export class Rain {
       let z = ((d[j + 2] - oz) % (2 * BOX) + 3 * BOX) % (2 * BOX) - BOX + oz;
       const y = d[j + 1] + oy;
       const k = i * 6;
-      const len = 0.045; // streak length in seconds of travel
+      const len = look.streak; // streak length in seconds of travel
       p[k] = x;
       p[k + 1] = y;
       p[k + 2] = z;

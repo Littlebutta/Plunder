@@ -30,6 +30,8 @@ export interface Island {
   shoreAt(angle: number): number;
   /** Highest point of the terrain (m). */
   topY: number;
+  /** Where that highest point is, in the island's own space (y = topY). */
+  summit: THREE.Vector3;
   name: string;
   /** Resources the island holds when untouched, and what is left right now. */
   capacity: Stock;
@@ -40,6 +42,8 @@ export interface Island {
   owner: number;
   /** Fair maps: this island is the home of the n-th captain. */
   start?: number;
+  /** Rocks standing out of the sea (sea stacks, reefs), in the island's own space: hulls that hit them are holed. */
+  rocks: { x: number; z: number; r: number; mesh?: THREE.Object3D }[];
 }
 
 export interface IslandWorld {
@@ -303,12 +307,14 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const terrain = new THREE.Mesh(facet(geo), terrainMaterial());
+  terrain.name = 'terrain';
   terrain.receiveShadow = true;
   terrain.castShadow = true;
   g.add(terrain);
 
   // --- Dressing -----------------------------------------------------------
-  if (type === 'stacks') addSeaStacks(g, radius, rand);
+  const rocks: Island['rocks'] = [];
+  if (type === 'stacks') addSeaStacks(g, radius, rand, rocks);
 
   const palmCount = { peak: 5, ridge: 4, mesa: 3, hills: 7, cay: 6, stacks: 1, wreck: 4 }[type] + Math.floor(rand() * 3);
   for (let i = 0, tries = 0; i < palmCount && tries < 200; tries++) {
@@ -341,10 +347,16 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     b.position.set(x, height(x, z) - 0.3, z);
     b.rotation.y = rand() * Math.PI * 2;
     g.add(b);
+    // a boulder standing in the water is a rock to steer round
+    if (height(x, z) < 0.2) {
+      b.userData.rock = true;
+      rocks.push({ x, z, r: s * 0.9, mesh: b });
+    }
   }
 
   if (type === 'wreck') {
     const wreck = buildWreck(rand);
+    wreck.name = 'wreck';
     const a = rand() * Math.PI * 2;
     const r = coastAt(a) * 0.82;
     const x = Math.cos(a) * r;
@@ -355,6 +367,10 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     g.add(wreck);
   }
 
+  // Reefs: a few rocks breaking the surface a little way off the beach. Drawn from their own
+  // stream so they never change the rest of the island.
+  if (type !== 'cay') addReefs(g, coastAt, mulberry32(Math.floor(rand() * 1e9)), rocks);
+
   g.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) o.receiveShadow = true;
   });
@@ -363,6 +379,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   const SHORE_STEPS = 72;
   const shoreTable = new Float32Array(SHORE_STEPS);
   let topY = 0;
+  const summit = new THREE.Vector3();
   for (let i = 0; i < SHORE_STEPS; i++) {
     const a = (i / SHORE_STEPS) * Math.PI * 2;
     const coast = coastAt(a);
@@ -370,8 +387,19 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     for (let k = 0; k <= 30; k++) {
       const r = coast * (1.05 - k * 0.03);
       const h = height(Math.cos(a) * r, Math.sin(a) * r);
-      topY = Math.max(topY, h);
+      if (h > topY) {
+        topY = h;
+        summit.set(Math.cos(a) * r, h, Math.sin(a) * r);
+      }
       if (h > 0 && shoreTable[i] === coast * 0.5) shoreTable[i] = r;
+    }
+  }
+  // the scan above runs in rings; a mountain's own top can sit between them
+  for (const p of [{ x: 0, z: 0 }, ...peaks]) {
+    const h = height(p.x, p.z);
+    if (h > topY) {
+      topY = h;
+      summit.set(p.x, h, p.z);
     }
   }
   const shoreAt = (angle: number) => {
@@ -381,7 +409,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   };
   const capacity = islandCapacity(type, radius);
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null, owner: -1 };
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, summit, name: '', capacity, stock: { ...capacity }, port: null, owner: -1, rocks };
 }
 
 const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];
@@ -417,6 +445,14 @@ function addPort(island: Island, angle: number): void {
     port.add(mesh);
     return mesh;
   };
+
+  // keep the approach to the pier clear of reefs
+  island.rocks = island.rocks.filter((r) => {
+    const off = Math.abs(Math.atan2(Math.sin(Math.atan2(r.z, r.x) - angle), Math.cos(Math.atan2(r.z, r.x) - angle)));
+    if (off > 0.6 || !r.mesh) return true;
+    r.mesh.removeFromParent();
+    return false;
+  });
 
   // The port group sits on the waterline with +X pointing out to sea.
   const shore = island.shoreAt(angle);
@@ -508,8 +544,63 @@ function rockMesh(geo: THREE.BufferGeometry, outline: number): THREE.Mesh {
   return mesh;
 }
 
+const _m = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+/**
+ * Clear a patch of an island for building: palms, boulders, ferns and wreckage
+ * whose footprint reaches within `radius` of the world point (x, z) are taken away.
+ */
+export function clearGround(island: Island, x: number, z: number, radius: number): void {
+  const lx = x - island.center.x;
+  const lz = z - island.center.z;
+  for (const o of [...island.group.children]) {
+    if (o.name === 'terrain' || o.name === 'port' || o.userData.rock) continue;
+    if ((o as THREE.InstancedMesh).isInstancedMesh) {
+      const inst = o as THREE.InstancedMesh;
+      let changed = false;
+      for (let i = 0; i < inst.count; i++) {
+        inst.getMatrixAt(i, _m);
+        _p.setFromMatrixPosition(_m);
+        if (Math.hypot(_p.x - lx, _p.z - lz) < radius + 1) {
+          inst.setMatrixAt(i, _zero);
+          changed = true;
+        }
+      }
+      if (changed) inst.instanceMatrix.needsUpdate = true;
+      continue;
+    }
+    // how far the thing spreads: a wreck is a whole ship, a palm's crown a few metres
+    const reach = o.name === 'wreck' ? 9 : o.type === 'Group' ? 3 : 2.5 * Math.max(o.scale.x, o.scale.z);
+    if (Math.hypot(o.position.x - lx, o.position.z - lz) < radius + reach) o.removeFromParent();
+  }
+}
+
+/** Clusters of low rocks off the beach, wet and dark, the kind a careless helmsman finds. */
+function addReefs(g: THREE.Group, coastAt: (a: number) => number, rand: () => number, rocks: Island['rocks']): void {
+  const clusters = 1 + Math.floor(rand() * 3);
+  for (let c = 0; c < clusters; c++) {
+    const a0 = rand() * Math.PI * 2;
+    const n = 2 + Math.floor(rand() * 3);
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (rand() - 0.5) * 0.35;
+      const d = coastAt(a) * (1.18 + rand() * 0.25) + 4;
+      const s = 1.6 + rand() * 2.2;
+      const geo = new THREE.IcosahedronGeometry(1, 1);
+      jitter(geo, rand, 0.3);
+      const rock = rockMesh(geo, 0.08);
+      rock.scale.set(s, s * (0.55 + rand() * 0.4), s * (0.8 + rand() * 0.4));
+      rock.position.set(Math.cos(a) * d, -s * 0.15, Math.sin(a) * d);
+      rock.rotation.y = rand() * Math.PI * 2;
+      rock.userData.rock = true;
+      g.add(rock);
+      rocks.push({ x: rock.position.x, z: rock.position.z, r: s * 0.95, mesh: rock });
+    }
+  }
+}
+
 /** Tall eroded rock pillars rising out of the sea, with a few birds-eye flat tops. */
-function addSeaStacks(g: THREE.Group, radius: number, rand: () => number): void {
+function addSeaStacks(g: THREE.Group, radius: number, rand: () => number, rocks: Island['rocks']): void {
   const n = 4 + Math.floor(rand() * 4);
   for (let i = 0; i < n; i++) {
     const h = 8 + rand() * 20;
@@ -520,7 +611,9 @@ function addSeaStacks(g: THREE.Group, radius: number, rand: () => number): void 
     const a = rand() * Math.PI * 2;
     const d = rand() * radius * 0.8;
     stack.position.set(Math.cos(a) * d, h / 2 - 2, Math.sin(a) * d);
+    rocks.push({ x: stack.position.x, z: stack.position.z, r: r * 1.1 });
     stack.rotation.set((rand() - 0.5) * 0.15, rand() * Math.PI, (rand() - 0.5) * 0.15);
+    stack.userData.rock = true;
     g.add(stack);
     // grassy cap on some
     if (rand() < 0.5) {

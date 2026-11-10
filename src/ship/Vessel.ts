@@ -46,6 +46,10 @@ export abstract class Vessel {
   windBoost = 0;
   /** Share of her drive the rig can deliver: below 1 with masts shot away. */
   driveFactor = 1;
+  /** Upgrades: sail thrust, fair-wind push and rudder bite, as multiples. */
+  speedMul = 1;
+  windMul = 1;
+  turnMul = 1;
   /** Called once each time the sail fills: full sail AND a good wind. */
   onSailFilled: (() => void) | null = null;
 
@@ -118,7 +122,7 @@ export abstract class Vessel {
       const along = fwd.dot(this.wind.direction);
       this.windBoost = this.rigBoost(along) * Math.min(this.wind.strength, 1.2);
       const headwind = Math.max(0, -along) * this.wind.strength * this.drive.headwindPenalty;
-      b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost) * this.driveFactor;
+      b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost * this.windMul) * this.driveFactor * this.speedMul;
       b.sideForce = 0;
     } else {
       b.thrust = -this.drive.reverseThrust;
@@ -128,7 +132,7 @@ export abstract class Vessel {
     const speed = b.forwardSpeed;
     const gain = 1 + this.drive.steerSpeedGain * Math.abs(speed);
     // Steering reverses when moving backwards, like a real rudder.
-    b.yawTorque = -this.rudder * this.drive.steerTorque * gain * (speed < -0.2 ? -1 : 1);
+    b.yawTorque = -this.rudder * this.drive.steerTorque * this.turnMul * gain * (speed < -0.2 ? -1 : 1);
     b.step(h);
   }
 

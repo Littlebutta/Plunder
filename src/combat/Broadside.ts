@@ -72,6 +72,9 @@ export interface BroadsideShot {
  * the hull a few degrees does not swing the ribbon.
  */
 export class Broadside {
+  /** Upgrades: muzzle speed and reload time, as multiples. */
+  speedMul = 1;
+  reloadMul = 1;
   readonly guns: Gun[] = [];
   /** 'ripple' fires the guns one after another, bow to stern; 'volley' fires them all at once (give or take). */
   fireMode: FireMode = 'ripple';
@@ -213,7 +216,7 @@ export class Broadside {
   get reloadProgress(): number {
     const armed = this.armedDecks();
     if (armed.length === 0) return 1;
-    return 1 - Math.max(Math.min(...armed.map((d) => this.cooldown[this.side][d])), 0) / BROADSIDE.reload;
+    return 1 - Math.max(Math.min(...armed.map((d) => this.cooldown[this.side][d])), 0) / (BROADSIDE.reload * this.reloadMul);
   }
 
   /** True when at least one deck on the active side can fire. */
@@ -258,8 +261,9 @@ export class Broadside {
     if (Math.abs(across) > 3) this.side = across >= 0 ? 1 : -1;
 
     const dist = Math.hypot(dx, dz);
-    this.outOfRange = dist > BROADSIDE.maxRange;
-    const wantRange = Math.max(6, Math.min(dist, BROADSIDE.maxRange));
+    const maxRange = BROADSIDE.maxRange * this.speedMul * this.speedMul;
+    this.outOfRange = dist > maxRange;
+    const wantRange = Math.max(6, Math.min(dist, maxRange));
     const wantBearing = Math.atan2(dx, dz);
     if (!this.aimStarted) {
       this.aimStarted = true;
@@ -289,7 +293,7 @@ export class Broadside {
     // guns sit a little above the water; aim for the sea level the ribbon ends at
     this.seaLevel = Math.min(0, origin.y);
     const range = Math.max(4, this.aimRange - 1.2);
-    const elev = solveElevation(range, this.seaLevel - (origin.y + 0.9), BROADSIDE.muzzleSpeed, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
+    const elev = solveElevation(range, this.seaLevel - (origin.y + 0.9), BROADSIDE.muzzleSpeed * this.speedMul, KINDS[BROADSIDE.kind].drag) ?? BROADSIDE.maxElevation;
     this.targetElevation = THREE.MathUtils.clamp(elev, BROADSIDE.minElevation, BROADSIDE.maxElevation);
   }
 
@@ -343,7 +347,7 @@ export class Broadside {
     if (deck < 0) return false;
     const cd = this.cooldown[this.side];
     const firing = all ? this.armedDecks().filter((d) => cd[d] <= 0) : [deck];
-    for (const d of firing) cd[d] = BROADSIDE.reload;
+    for (const d of firing) cd[d] = BROADSIDE.reload * this.reloadMul;
     this.lastDeck = all ? -1 : deck;
     const side = this.guns.filter((g) => g.side === this.side && firing.includes(g.deck)).sort((a, b) => a.root.position.z - b.root.position.z);
     if (side.length === 0) return false;
@@ -383,7 +387,7 @@ export class Broadside {
     const pos = _p;
     const dir = _d;
     this.muzzle(g, pos, dir);
-    const vel = _v.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed);
+    const vel = _v.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed * this.speedMul);
     const drag = KINDS[BROADSIDE.kind].drag;
     const h = 1 / 40;
     let n = 0;

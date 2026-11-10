@@ -101,6 +101,16 @@ Islands are generated from a seed. The same map loads every time until you press
 
 The **chart** (Tab, `src/ui/MapView.ts`) is drawn as an old paper map: torn parchment, inked coasts, a compass rose, the rim of the world, and ships as little top-down hulls whose sails are their owner's colour. It only shows what you have explored. **Fog of war** (`src/world/FogOfWar.ts`) works as in an RTS: the map starts unknown, is uncovered for good wherever your flagship (210 m), escorts (170 m) or strongholds (150 m and up) have looked, and raider ships are drawn only while one of those can see them. Flags over each stronghold show who holds the island. The same painter draws the **exploration window**, a minimap in the corner of the HUD. The game keeps running while the chart is open. Course-keeping and island avoidance are in `src/world/navigation.ts`.
 
+## Salvage, trade, ghosts and upgrades
+
+- **Islands are solid** (`src/world/Grounding.ts`): a hull is pushed back off the beach and loses the speed it carried in. **Reefs and sea stacks** (each island's `rocks`) hole the hull, harder the faster she hit them; the AI and the chart's autopilot steer round them.
+- **Wreckage** (`src/world/Flotsam.ts`): every ship that sinks leaves barrels and planks for 100 s; the first hull to sail over them hauls the wood and metals. Whoever sank her also gets a **bounty** in metals at once.
+- **Trade ships** (`src/world/Trade.ts`): built from the home island's chart panel once you hold a second island. They sail from home to each of your islands in turn and bring back a cargo of that island's goods (more from far islands and trading posts). They carry no guns.
+- **Ghost ships** drift in every few minutes (more often as the match goes on), fight anyone they meet and fade away after three and a half minutes. Sinking one gives your flagship a random **upgrade** (`src/world/Upgrades.ts`): sight, cannon range, reload, hull, repairs, speed, turning, income, salvage, free shots, trade. Each is small; they stack up to a limit. The HQ (home island's chart panel) sells the same upgrades at random for a price that rises by half each time.
+- **Random enemy ships**: the Marauder, AI flagships and AI escorts are rolled by `randomDesign()` in `src/ship/HullDesign.ts`.
+- **The volcano** (`src/weather/Volcano.ts`): a mountain island erupts, the sky turns red and ash falls, and fireballs come down all over. A red ring on the water marks where each will land.
+- **Match based**: there are no rounds. Weather events roll after calm spells that get shorter, and their level and kind (the volcano and armageddon) get worse the longer the match runs (`Weather.escalation`, full after 30 minutes).
+
 ## Territory
 
 You start with a **hut on a home island** (the unsettled island nearest the start; `src/world/Strongholds.ts`). Lose it and the game is over. Upgrade it with **U** when alongside, or from the chart's island panel from anywhere:
