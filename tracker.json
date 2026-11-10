@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:46:11Z",
+  "updated": "2026-11-10T01:47:56Z",
   "categories": [
     {
       "key": "feature",
@@ -1514,13 +1514,13 @@
       "title": "Vs mode: lobby, teams, AI captains, fair island placement",
       "status": "in-progress",
       "tags": [],
-      "notes": "Batch 4. PR #17. Factions, Match, AiCaptain, Lobby.",
+      "notes": "Batch 4. PR #17. Factions, Match, AiCaptain, Lobby.\n\n2026-11-10 (Claude): Merged in PR #17 (2026-11-10); awaiting Devin's playtest",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/17"
       ],
       "created": "2026-11-10T01:45:43Z",
       "priority": "high",
-      "updated": "2026-11-10T01:46:11Z",
+      "updated": "2026-11-10T01:47:56Z",
       "by": "Claude"
     },
     {
