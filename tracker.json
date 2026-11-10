@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:34:05Z",
+  "updated": "2026-11-10T02:34:07Z",
   "categories": [
     {
       "key": "feature",
@@ -1811,6 +1811,19 @@
       "created": "2026-11-10T02:34:05Z",
       "priority": "medium",
       "updated": "2026-11-10T02:34:05Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-86",
+      "cat": "feature",
+      "title": "Forts repair very slowly by consuming stone",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:34:07Z",
+      "priority": "low",
+      "updated": "2026-11-10T02:34:07Z",
       "by": "Claude"
     }
   ],
