@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:38Z",
+  "updated": "2026-11-10T02:33:40Z",
   "categories": [
     {
       "key": "feature",
@@ -1655,6 +1655,19 @@
       "created": "2026-11-10T02:33:38Z",
       "priority": "medium",
       "updated": "2026-11-10T02:33:38Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-74",
+      "cat": "feature",
+      "title": "Wind trails sometimes larger so the wind direction reads",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:40Z",
+      "priority": "low",
+      "updated": "2026-11-10T02:33:40Z",
       "by": "Claude"
     }
   ],
