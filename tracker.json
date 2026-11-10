@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:51Z",
+  "updated": "2026-11-10T02:33:53Z",
   "categories": [
     {
       "key": "feature",
@@ -1733,6 +1733,19 @@
       "created": "2026-11-10T02:33:51Z",
       "priority": "high",
       "updated": "2026-11-10T02:33:51Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-80",
+      "cat": "feature",
+      "title": "Salvage wreckage; resources for sinking ships",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:53Z",
+      "priority": "medium",
+      "updated": "2026-11-10T02:33:53Z",
       "by": "Claude"
     }
   ],
