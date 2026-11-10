@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:26Z",
+  "updated": "2026-11-10T05:32:28Z",
   "categories": [
     {
       "key": "feature",
@@ -1739,15 +1739,15 @@
       "id": "F-78",
       "cat": "feature",
       "title": "Islands are solid; rocks in the sea damage ships",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #21",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/21"
       ],
       "created": "2026-11-10T02:33:49Z",
       "priority": "high",
-      "updated": "2026-11-10T03:50:00Z",
+      "updated": "2026-11-10T05:32:28Z",
       "by": "Claude"
     },
     {
