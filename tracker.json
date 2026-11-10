@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:46:06Z",
+  "updated": "2026-11-10T01:46:09Z",
   "categories": [
     {
       "key": "feature",
@@ -1525,13 +1525,15 @@
       "id": "F-64",
       "cat": "feature",
       "title": "HUD: controls behind a ? button, P mutes, M opens the chart",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 4. PR #16.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/16"
+      ],
       "created": "2026-11-10T01:45:45Z",
       "priority": "medium",
-      "updated": "2026-11-10T01:45:45Z",
+      "updated": "2026-11-10T01:46:09Z",
       "by": "Claude"
     }
   ],
