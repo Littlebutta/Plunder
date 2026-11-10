@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:52Z",
+  "updated": "2026-11-10T17:03:56Z",
   "categories": [
     {
       "key": "feature",
@@ -2139,6 +2139,19 @@
       "created": "2026-11-10T17:03:52Z",
       "priority": "high",
       "updated": "2026-11-10T17:03:52Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-16",
+      "cat": "bug",
+      "title": "Building health bars show black bits",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Fixed in PR #25: one drawn sprite instead of an offset fill sprite.",
+      "links": [],
+      "created": "2026-11-10T17:03:56Z",
+      "priority": "medium",
+      "updated": "2026-11-10T17:03:56Z",
       "by": "Claude"
     }
   ],
