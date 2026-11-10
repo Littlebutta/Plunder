@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:40Z",
+  "updated": "2026-11-10T05:32:42Z",
   "categories": [
     {
       "key": "feature",
@@ -1844,15 +1844,15 @@
       "id": "F-85",
       "cat": "feature",
       "title": "HQ upgrade button: random upgrades (same pool as ghost ships), each dearer than the last",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #21",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/21"
       ],
       "created": "2026-11-10T02:34:05Z",
       "priority": "medium",
-      "updated": "2026-11-10T03:50:13Z",
+      "updated": "2026-11-10T05:32:42Z",
       "by": "Claude"
     },
     {
