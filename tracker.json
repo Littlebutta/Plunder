@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:35Z",
+  "updated": "2026-11-10T17:03:39Z",
   "categories": [
     {
       "key": "feature",
@@ -2087,6 +2087,19 @@
       "created": "2026-11-10T17:03:35Z",
       "priority": "medium",
       "updated": "2026-11-10T17:03:35Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-97",
+      "cat": "feature",
+      "title": "Ocean tornado (waterspout) event that picks ships up",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-10T17:03:39Z",
+      "priority": "medium",
+      "updated": "2026-11-10T17:03:39Z",
       "by": "Claude"
     }
   ],
