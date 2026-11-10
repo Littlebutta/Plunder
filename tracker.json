@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:12:28Z",
+  "updated": "2026-11-10T03:12:30Z",
   "categories": [
     {
       "key": "feature",
@@ -1718,13 +1718,15 @@
       "id": "F-77",
       "cat": "feature",
       "title": "Chart: shift-click multi-select with shared orders; hold right click to draw a patrol zone",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/20"
+      ],
       "created": "2026-11-10T02:33:47Z",
       "priority": "high",
-      "updated": "2026-11-10T02:33:47Z",
+      "updated": "2026-11-10T03:12:30Z",
       "by": "Claude"
     },
     {
