@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:35Z",
+  "updated": "2026-11-10T05:32:37Z",
   "categories": [
     {
       "key": "feature",
@@ -1799,15 +1799,15 @@
       "id": "F-82",
       "cat": "feature",
       "title": "Ghost ships: sinking one gives the flagship a varied, modest upgrade",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #21",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/21"
       ],
       "created": "2026-11-10T02:33:58Z",
       "priority": "medium",
-      "updated": "2026-11-10T03:50:08Z",
+      "updated": "2026-11-10T05:32:37Z",
       "by": "Claude"
     },
     {
