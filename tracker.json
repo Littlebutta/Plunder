@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:32Z",
+  "updated": "2026-11-10T01:45:34Z",
   "categories": [
     {
       "key": "feature",
@@ -1444,6 +1444,19 @@
       "created": "2026-11-10T01:45:32Z",
       "priority": "high",
       "updated": "2026-11-10T01:45:32Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-59",
+      "cat": "feature",
+      "title": "Mast destruction: hitboxes, masts topple and slow the ship, repaired for wood",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #16. src/ship/Masts.ts",
+      "links": [],
+      "created": "2026-11-10T01:45:34Z",
+      "priority": "high",
+      "updated": "2026-11-10T01:45:34Z",
       "by": "Claude"
     }
   ],
