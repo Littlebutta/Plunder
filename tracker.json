@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:12Z",
+  "updated": "2026-11-10T05:32:14Z",
   "categories": [
     {
       "key": "feature",
@@ -1917,13 +1917,15 @@
       "id": "F-90",
       "cat": "feature",
       "title": "Polish pass on everything: smooth and well designed",
-      "status": "idea",
+      "status": "good-enough",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-10 (Claude): Shipped in PR #22",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/22"
+      ],
       "created": "2026-11-10T03:27:12Z",
       "priority": "high",
-      "updated": "2026-11-10T03:27:12Z",
+      "updated": "2026-11-10T05:32:14Z",
       "by": "Claude"
     },
     {
