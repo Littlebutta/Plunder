@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T08:49:55Z",
+  "updated": "2026-11-10T08:51:18Z",
   "categories": [
     {
       "key": "feature",
@@ -1994,15 +1994,15 @@
       "id": "F-93",
       "cat": "feature",
       "title": "Batch 6: volcano revamp, ship collision, calmer steering, raft starts, plunder (E), reload costs 1 metal per 3 guns, hull foam, upgrades panel (I), captain picker, no-scroll menus, shipyard waves, capsize respawn, night-only roaming kraken",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "",
+      "notes": "2026-11-10 (Claude): Merged in PR #24",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/24"
       ],
       "created": "2026-11-10T08:49:44Z",
       "priority": "high",
-      "updated": "2026-11-10T08:49:44Z",
+      "updated": "2026-11-10T08:51:18Z",
       "by": "Claude"
     },
     {
