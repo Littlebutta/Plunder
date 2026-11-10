@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:09Z",
+  "updated": "2026-11-10T17:04:12Z",
   "categories": [
     {
       "key": "feature",
@@ -2084,13 +2084,15 @@
       "id": "F-96",
       "cat": "feature",
       "title": "Tsunami weather event: a huge swell that wanders the map",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:35Z",
       "priority": "medium",
-      "updated": "2026-11-10T17:03:35Z",
+      "updated": "2026-11-10T17:04:12Z",
       "by": "Claude"
     },
     {
