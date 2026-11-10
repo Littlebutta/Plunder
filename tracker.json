@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:27:17Z",
+  "updated": "2026-11-10T03:49:56Z",
   "categories": [
     {
       "key": "feature",
@@ -1647,13 +1647,15 @@
       "id": "F-72",
       "cat": "feature",
       "title": "Volcano event: a mountain island erupts, fireballs to dodge, red ashy sky",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/21"
+      ],
       "created": "2026-11-10T02:33:36Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:33:36Z",
+      "updated": "2026-11-10T03:49:56Z",
       "by": "Claude"
     },
     {
