@@ -48,7 +48,7 @@ export class GatherUi {
         RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i>${RESOURCES[id].label} <b>${hold.stock[id]}</b></span>`).join('') +
         (income > 0 ? `<span class="income" title="Sent in by the islands you hold">+${Math.round(income)}/min</span>` : '');
 
-      this.prompt.hidden = !!sel || !near;
+      this.prompt.hidden = true; // gathering needs no key: the crew work whatever island the ship lies off
       if (near && !sel) {
         this.prompt.innerHTML = `<kbd>E</kbd> or click the island to gather at <b>${near.name}</b>${near.port ? ' (port)' : ''}`;
       }
@@ -73,8 +73,7 @@ export class GatherUi {
           <div class="island-type">${TYPE_LABEL[sel.type]}${sel.port ? ' · port' : ''}</div>
           ${rows}
           <div class="haul"><i data-haul></i></div>
-          <div class="island-status ${g.status}">${status}</div>
-          <div class="island-hint"><kbd>E</kbd> stop gathering</div>`;
+          <div class="island-status ${g.status}">${status}</div>`;
       }
     }
     const haul = this.panel.querySelector('[data-haul]') as HTMLElement | null;

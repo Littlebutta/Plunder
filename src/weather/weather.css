@@ -11,19 +11,19 @@
 .weather-chip[data-kind='lurker'] { border-color: #63e6d2; }
 .weather-chip[data-kind='armageddon'] { border-color: #ff5a26; color: #ffd0c0; }
 
+/* Announcements: one small line under the weather chip, out of the way of the sea. */
 .weather-banner {
-  position: absolute; top: 18%; left: 50%; transform: translate(-50%, -10px); text-align: center;
-  opacity: 0; transition: opacity .6s, transform .6s; max-width: calc(100% - 32px);
+  position: absolute; top: 50px; left: 50%; transform: translate(-50%, -6px); text-align: center;
+  opacity: 0; transition: opacity .35s, transform .35s; max-width: min(520px, calc(100% - 32px));
+  padding: 4px 12px; border-radius: 9px; background: rgba(42, 23, 8, .72); border: 1px solid rgba(192, 129, 74, .7);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
 .weather-banner.show { opacity: 1; transform: translate(-50%, 0); }
-.weather-banner b {
-  display: block; font-family: 'Pirata One', serif; font-weight: 400; font-size: 54px; letter-spacing: 1px;
-  text-shadow: 0 3px 0 #3a1f0c, 0 0 18px rgba(0,0,0,.45);
-}
-.weather-banner span { display: block; font-size: 16px; font-weight: 800; text-shadow: 0 2px 0 #3a1f0c, 0 0 10px rgba(0,0,0,.5); }
+.weather-banner b { font-size: 14px; font-weight: 800; margin-right: 8px; }
+.weather-banner span { font-size: 12px; font-weight: 700; opacity: .85; }
 .weather-banner[data-tone='danger'] b { color: #ffb08a; }
 .weather-banner[data-tone='good'] b { color: #b8f59a; }
-@media (max-width: 600px) { .weather-banner b { font-size: 36px; } }
+
 
 .weather-hull {
   bottom: calc(96px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%);

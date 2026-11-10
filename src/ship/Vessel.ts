@@ -35,8 +35,10 @@ export abstract class Vessel {
   readonly group = new THREE.Group();
   readonly body: FloatingBody;
 
-  /** 0 = furled, 1 = full sail. Negative = paddling backwards. */
+  /** 0 = furled, 1 = full sail. */
   sail = 0;
+  /** Backing water: only while the helm holds "back" with the sail already struck. Never a state she stays in. */
+  backing = false;
   rudder = 0;
   /** Yard angle in radians (0 = square across the hull); swings to the wind on its own. */
   trim = 0;
@@ -76,7 +78,9 @@ export abstract class Vessel {
    * throttle -1..1 (S/W) raises/lowers the sail, steer -1..1 (A/D).
    */
   control(dt: number, throttleInput: number, steerInput: number): void {
-    this.sail = THREE.MathUtils.clamp(this.sail + throttleInput * this.drive.sailRate * dt, -0.4, 1);
+    // "back" strikes the sail; held on after that, the crew back her with the sweeps until it is let go
+    this.backing = throttleInput < 0 && this.sail <= 0.001;
+    this.sail = THREE.MathUtils.clamp(this.sail + throttleInput * this.drive.sailRate * dt, 0, 1);
     this.rudder = THREE.MathUtils.damp(this.rudder, steerInput, 6, dt);
     // Purely visual: the yard swings to catch the wind.
     this.trim = THREE.MathUtils.damp(this.trim, this.bestTrim(), 2.5, dt);
@@ -108,7 +112,7 @@ export abstract class Vessel {
   /** Fixed-step: turn sail / rudder into forces and integrate. */
   physicsStep(h: number): void {
     const b = this.body;
-    if (this.sail >= 0) {
+    if (!this.backing) {
       // How well the rig takes this wind: a square sail wants it astern, a lateen on the beam.
       const fwd = b.forward(_fw).setY(0).normalize();
       const along = fwd.dot(this.wind.direction);
@@ -117,7 +121,7 @@ export abstract class Vessel {
       b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost) * this.driveFactor;
       b.sideForce = 0;
     } else {
-      b.thrust = (this.sail / 0.4) * this.drive.reverseThrust;
+      b.thrust = -this.drive.reverseThrust;
       b.sideForce = 0;
       this.windBoost = 0;
     }

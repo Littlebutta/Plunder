@@ -42,7 +42,7 @@ export class WeatherUi {
     this.banner.classList.remove('show');
     void this.banner.offsetWidth; // restart the animation
     this.banner.classList.add('show');
-    this.bannerTimer = 4.5;
+    this.bannerTimer = 3.5;
   }
 
   hit(): void {

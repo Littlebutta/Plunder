@@ -10,6 +10,8 @@ interface Streak {
   length: number;
   curl: number;
   phase: number;
+  /** Most are fine lines; now and then a broad one comes through so the wind's direction is plain. */
+  size: number;
 }
 
 /**
@@ -38,7 +40,7 @@ export class WindStreaks {
         const a = base + i * 2;
         idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
       }
-      this.streaks.push({ origin: new THREE.Vector3(), age: 0, life: 1, length: 1, curl: 0, phase: 0 });
+      this.streaks.push({ origin: new THREE.Vector3(), age: 0, life: 1, length: 1, curl: 0, phase: 0, size: 1 });
     }
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
     this.geometry.setAttribute('alpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
@@ -92,7 +94,7 @@ export class WindStreaks {
           .addScaledVector(dir, along + Math.sin(ang) * loop * 0.6 + s.age * speed * 0.3)
           .addScaledVector(side, Math.sin(u * 7 + s.phase) * 0.3)
           .add(_up.set(0, (Math.cos(ang) - 1) * loop * 0.6, 0));
-        const w = 0.03 * Math.sin(Math.PI * (i / SEGMENTS));
+        const w = 0.03 * s.size * Math.sin(Math.PI * (i / SEGMENTS));
         const a = Math.sin(Math.PI * (i / SEGMENTS)) * Math.sin(Math.PI * t) * strengthFade;
         for (let k = 0; k < 2; k++) {
           const v = base + i * 2 + k;
@@ -116,7 +118,8 @@ export class WindStreaks {
     s.origin.addScaledVector(dir, -6); // start upwind so it drifts through view
     s.age = 0;
     s.life = 2.2 + Math.random() * 1.8;
-    s.length = 3 + Math.random() * 4;
+    s.size = Math.random() < 0.3 ? 2 + Math.random() * 1.6 : 1;
+    s.length = (3 + Math.random() * 4) * (s.size > 1 ? 1.9 : 1);
     s.curl = Math.random() < 0.5 ? 1 : 0;
     s.phase = Math.random() * Math.PI * 2;
   }

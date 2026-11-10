@@ -23,14 +23,14 @@ export class Hud {
       <button class="hud-helpbtn" data-helpbtn title="Controls (H)" aria-label="Show or hide the controls">?</button>
       <div class="hud-panel hud-help hidden">
         <div class="help-head">Controls</div>
-        <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost; hold S at zero to back-paddle)</div>
+        <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost). S strikes the sail; keep holding it to back her</div>
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
-        <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire broadside</div>
+        <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire a gun deck (each press the next deck; a shell costs 1 metal)</div>
         <div><kbd>C</kbd> fit / stow broadside cannons · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
         <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go)</div>
         <div><kbd>M</kbd> or <kbd>Tab</kbd> chart: right click on it to send a ship somewhere</div>
         <div><kbd>U</kbd> alongside an island: build an outpost or upgrade your stronghold</div>
-        <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
+        <div>Lie off an island (at its pier if it has one) and the crew gather from it on their own</div>
         <div><kbd>Y</kbd> at your home dock: open the shipyard</div>
         <div><kbd>Middle mouse drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>P</kbd> mute · <kbd>H</kbd> or <kbd>?</kbd> show / hide this</div>

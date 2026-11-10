@@ -41,6 +41,8 @@ export interface Gun {
   pitchPivot: THREE.Group;
   barrel: THREE.Group;
   recoil: number;
+  /** Which gun deck it stands on: 0 is the lowest. Each deck fires and reloads on its own. */
+  deck: number;
 }
 
 export type FireMode = 'ripple' | 'volley';
@@ -84,7 +86,12 @@ export class Broadside {
   outOfArc = false;
   /** True when the aim point is beyond max range (the ribbon turns red and stops at the limit). */
   outOfRange = false;
-  private readonly cooldown = { '1': 0, '-1': 0 };
+  /** Reload timers by side, then by deck. */
+  private readonly cooldown: Record<string, number[]> = { '1': [], '-1': [] };
+  /** How many gun decks the ship has. */
+  decks = 1;
+  /** The deck the last press fired, so the next press takes the one after. */
+  private lastDeck = -1;
 
   readonly ribbon: THREE.Mesh;
   private readonly ribbonPos: Float32Array;
@@ -112,6 +119,14 @@ export class Broadside {
     private readonly waves: WaveField,
   ) {
     for (const m of mounts) this.guns.push(this.buildGun(m));
+    // decks: guns standing at about the same height belong together
+    const heights: number[] = [];
+    for (const g of [...this.guns].sort((a, b) => a.root.position.y - b.root.position.y)) {
+      if (heights.length === 0 || g.root.position.y - heights[heights.length - 1] > 0.45) heights.push(g.root.position.y);
+      g.deck = heights.length - 1;
+    }
+    this.decks = Math.max(1, heights.length);
+    for (const side of ['1', '-1']) this.cooldown[side] = new Array(this.decks).fill(0);
 
     // Ribbon strip: 2 verts per sample, uv.x across, uv.y along.
     this.ribbonPos = new Float32Array(RIBBON_POINTS * 2 * 3);
@@ -187,13 +202,45 @@ export class Broadside {
     return this.guns[0]?.root.visible ?? false;
   }
 
-  /** 0..1 reload progress of the active side. */
-  get reloadProgress(): number {
-    return 1 - Math.max(this.cooldown[this.side], 0) / BROADSIDE.reload;
+  /** Decks on the active side that carry guns. */
+  private armedDecks(): number[] {
+    const out: number[] = [];
+    for (let d = 0; d < this.decks; d++) if (this.guns.some((g) => g.side === this.side && g.deck === d)) out.push(d);
+    return out;
   }
 
+  /** 0..1 reload progress of the active side: the deck nearest to ready. */
+  get reloadProgress(): number {
+    const armed = this.armedDecks();
+    if (armed.length === 0) return 1;
+    return 1 - Math.max(Math.min(...armed.map((d) => this.cooldown[this.side][d])), 0) / BROADSIDE.reload;
+  }
+
+  /** True when at least one deck on the active side can fire. */
   get ready(): boolean {
-    return this.cooldown[this.side] <= 0;
+    return this.armedDecks().some((d) => this.cooldown[this.side][d] <= 0);
+  }
+
+  /** How many guns the next press would fire (0 while every deck is reloading). */
+  get nextSalvo(): number {
+    const d = this.nextDeck();
+    return d < 0 ? 0 : this.guns.filter((g) => g.side === this.side && g.deck === d).length;
+  }
+
+  /** How many guns on the active side are loaded, all decks together. */
+  get loaded(): number {
+    return this.guns.filter((g) => g.side === this.side && this.cooldown[this.side][g.deck] <= 0).length;
+  }
+
+  /** The deck the next press fires: the first loaded one after the deck fired last. */
+  private nextDeck(): number {
+    const armed = this.armedDecks();
+    const start = armed.findIndex((d) => d > this.lastDeck);
+    for (let i = 0; i < armed.length; i++) {
+      const d = armed[(Math.max(start, 0) + i) % armed.length];
+      if (this.cooldown[this.side][d] <= 0) return d;
+    }
+    return -1;
   }
 
   /**
@@ -248,8 +295,7 @@ export class Broadside {
 
   /** Returns shots to spawn this frame (ripple fire is spread over a few frames). */
   update(dt: number, out: BroadsideShot[]): void {
-    this.cooldown['1'] -= dt;
-    this.cooldown['-1'] -= dt;
+    for (const side of ['1', '-1']) for (let d = 0; d < this.decks; d++) this.cooldown[side][d] -= dt;
     const step = (cur: number, target: number, rate: number) => cur + THREE.MathUtils.clamp(target - cur, -rate * dt, rate * dt);
     this.elevation = step(this.elevation, this.targetElevation, BROADSIDE.elevateRate);
 
@@ -286,11 +332,20 @@ export class Broadside {
     if (this.visible) this.updateRibbon(dt);
   }
 
-  /** Fire the active side as a ripple, bow to stern. Returns false if still reloading. */
-  tryFire(): boolean {
-    if (!this.visible || !this.ready || !this.guns.some((g) => g.side === this.side)) return false;
-    this.cooldown[this.side] = BROADSIDE.reload;
-    const side = this.guns.filter((g) => g.side === this.side).sort((a, b) => a.root.position.z - b.root.position.z);
+  /**
+   * Fire the active side as a ripple, bow to stern. One press fires one gun
+   * deck, and the next press the next deck; `all` fires every loaded deck at
+   * once (the AI's way). Returns false if nothing was loaded.
+   */
+  tryFire(all = false): boolean {
+    if (!this.visible) return false;
+    const deck = this.nextDeck();
+    if (deck < 0) return false;
+    const cd = this.cooldown[this.side];
+    const firing = all ? this.armedDecks().filter((d) => cd[d] <= 0) : [deck];
+    for (const d of firing) cd[d] = BROADSIDE.reload;
+    this.lastDeck = all ? -1 : deck;
+    const side = this.guns.filter((g) => g.side === this.side && firing.includes(g.deck)).sort((a, b) => a.root.position.z - b.root.position.z);
     if (side.length === 0) return false;
     this.drowned = 0;
     side.forEach((gun, i) =>
@@ -449,7 +504,7 @@ export function buildGunModel(mount: THREE.Vector3): Gun {
     root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh && !o.name.endsWith('-outline')) o.castShadow = true;
     });
-    return { side, root, yawPivot, pitchPivot, barrel, recoil: 0 };
+    return { side, root, yawPivot, pitchPivot, barrel, recoil: 0, deck: 0 };
   }
 }
 
