@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:54Z",
+  "updated": "2026-11-10T03:12:26Z",
   "categories": [
     {
       "key": "feature",
@@ -1587,13 +1587,15 @@
       "id": "F-68",
       "cat": "feature",
       "title": "Chart: chained move orders and an attack-move order",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/20"
+      ],
       "created": "2026-11-10T02:33:27Z",
       "priority": "high",
-      "updated": "2026-11-10T02:33:27Z",
+      "updated": "2026-11-10T03:12:26Z",
       "by": "Claude"
     },
     {
