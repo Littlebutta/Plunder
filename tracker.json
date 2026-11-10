@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:47Z",
+  "updated": "2026-11-10T02:52:49Z",
   "categories": [
     {
       "key": "feature",
@@ -1686,13 +1686,15 @@
       "id": "F-75",
       "cat": "feature",
       "title": "No reverse sail: S strikes sail to 0, then backs only while held (AI unaffected)",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:33:42Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:33:42Z",
+      "updated": "2026-11-10T02:52:49Z",
       "by": "Claude"
     },
     {
