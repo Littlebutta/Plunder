@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:56Z",
+  "updated": "2026-11-10T17:04:06Z",
   "categories": [
     {
       "key": "feature",
@@ -2054,13 +2054,15 @@
       "id": "F-94",
       "cat": "feature",
       "title": "Control groups: Ctrl+number makes a fleet, number picks it",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:28Z",
       "priority": "medium",
-      "updated": "2026-11-10T17:03:28Z",
+      "updated": "2026-11-10T17:04:06Z",
       "by": "Claude"
     },
     {
