@@ -41,10 +41,10 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | --- | --- |
 | W / S (or ↑ / ↓) | Raise / lower the sail. Hold S at 0% to back-paddle. |
 | A / D (or ← / →) | Steer (stronger at speed, reverses when going backwards) |
+| S held with the sail struck | Back her with the sweeps, only for as long as it is held |
 | Mouse | Aim at the sea |
 | Right mouse button | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
-| Space | Fire the main guns: the broadside when it is run out, otherwise the swivel. |
-| E / click island | Gather from the island in range (a marker floats over it). E again to stop. |
+| Space | Fire the main guns: one gun deck per press (hold it and the decks follow one another), or the swivel when no broadside is run out. Each shell costs 1 metal. |
 | Esc | Main menu / resume |
 | C | Fit / remove the broadside battery (the raft gets a test battery; a designed ship uses its own cannons) |
 | F | Also fires the broadside on the side you're aiming at (outlined ribbon) |
@@ -81,7 +81,17 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 ## Gathering and ports
 
-Each island holds resources that depend on its type and size (wood, stone, metals) and regrow slowly. Sail within range of an island's shore and a marker appears over it: press E or click the island to select it, and the crew hauls resources into your stores while you stay in range. There is one pool of resources for everything (gathered, sent in by islands, spent on building); it is not kept aboard a ship, and the cargo on your flagship's deck shows how full the pool is. Islands with a **port** (a pier and hut; the green-hill and mesa islands have one for now) must be worked from the pier head instead, and load twice as fast. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+Each island holds resources that depend on its type and size (wood, stone, metals) and regrow. There is nothing to press: lie off an island's shore and a marker appears over it while the crew haul what it has into your stores. There is one pool of resources for everything (gathered, sent in by islands, spent on building, shot and repairs); it is not kept aboard a ship, and the cargo on your flagship's deck shows how full the pool is. Islands with a **port** (a pier and hut) must be worked from the pier head instead, and load faster. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+
+## Economy
+
+Everything is paid for from the one pool (`ECONOMY` in `src/world/Resources.ts`):
+
+- **Metals** are shot: every cannon shell fired by a ship or a fort costs its owner 1 metal (the swivel gun is free). A ship or fort with no metal holds its fire.
+- **Wood** builds, and mends ships: hull repairs take 1 wood per 8 points, a new mast 3.
+- **Stone** builds, and mends walls: strongholds repair slowly (1.2 points a second) at 1 stone per 12 points, and not at all without stone.
+- Every 10 s each stronghold you hold sends in 2 units of what its island yields, 2 more per level, and 1 metal.
+- The raiders pay for nothing. AI captains get a stipend in place of gathering by hand.
 
 ## The world
 

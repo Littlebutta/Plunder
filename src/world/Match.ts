@@ -54,9 +54,9 @@ export const TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
 export const SLOT_COLOURS = ['#d8343a', '#2f7fd6', '#3aa655', '#e0a020', '#8a4fc7', '#e06a9a', '#20a5a5', '#3a3a44'];
 export const AI_NAMES = ['Blackwood', 'Redmayne', 'Calloway', 'Vane', 'Marlowe', 'Drummond', 'Ashby'];
 export const START_STOCK: Record<MatchConfig['stock'], Stock> = {
-  lean: { wood: 15, stone: 4, salvage: 0 },
-  standard: { wood: 40, stone: 12, salvage: 8 },
-  rich: { wood: 120, stone: 50, salvage: 40 },
+  lean: { wood: 30, stone: 10, salvage: 25 },
+  standard: { wood: 60, stone: 25, salvage: 60 },
+  rich: { wood: 160, stone: 70, salvage: 160 },
 };
 
 const KEY = 'plunder.match';

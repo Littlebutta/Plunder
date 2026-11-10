@@ -8,12 +8,12 @@ export const GATHER = {
   /** How close to the pier the ship must be when the island has a port (m). */
   portRange: 48,
   /** Seconds per haul. */
-  haulTime: 2.5,
+  haulTime: 2,
   /** Units brought aboard per haul; ports are better organised. */
-  haulSize: 2,
-  portHaulSize: 4,
+  haulSize: 3,
+  portHaulSize: 5,
   /** Seconds for an island to regrow one unit of each resource it offers. */
-  regrowTime: 30,
+  regrowTime: 12,
 };
 
 /**
@@ -34,6 +34,8 @@ export class Gathering {
   /** Called with what was just brought aboard. */
   onHaul: ((island: Island, what: Partial<Stock>) => void) | null = null;
 
+  /** Gather from the island in range without being asked. */
+  auto = true;
   private regrow = 0;
   private next = 0;
 
@@ -89,6 +91,8 @@ export class Gathering {
       }
     }
     this.inRange = best;
+    // nothing to press: the crew work whatever island the ship lies off, and stop when she leaves
+    if (this.auto && best !== this.selected) this.select(best);
 
     const sel = this.selected;
     if (!sel) {

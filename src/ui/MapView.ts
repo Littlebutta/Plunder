@@ -1,3 +1,4 @@
+import { ME } from '../world/Factions';
 import * as THREE from 'three';
 import { FOG_N, FogOfWar } from '../world/FogOfWar';
 import type { Island } from '../world/Islands';
@@ -525,6 +526,18 @@ export class MapPainter {
         c.stroke();
         c.setLineDash([]);
       }
+      // whose she is, at a glance: a disc in her owner's colour, ringed white for yours and red for an enemy
+      c.beginPath();
+      c.arc(x, y, size * (mini ? 1.5 : 1.35), 0, Math.PI * 2);
+      c.globalAlpha = 0.5;
+      c.fillStyle = ship.colour;
+      c.fill();
+      c.globalAlpha = 1;
+      c.lineWidth = mini ? 1.6 : 2.2;
+      c.strokeStyle = ship.hostile ? '#c22a2a' : ship.id === 0 || ship.mine ? '#ffffff' : INK;
+      if (ship.hostile) c.setLineDash(mini ? [3, 2] : [5, 3]);
+      c.stroke();
+      c.setLineDash([]);
       drawShipIcon(c, x, y, ship.heading, size, ship.colour, ship.hostile);
       if (!mini) {
         c.font = '800 12px Nunito, sans-serif';
@@ -816,7 +829,7 @@ export class MapView {
       return;
     }
     if (!sel) return;
-    const owner = sel.owner === 0 ? `<span style="color:${state.colourOf(0)}">Yours</span>` : sel.owner > 0 ? `Held by ${state.nameOf(sel.owner)}` : 'Unclaimed';
+    const owner = sel.owner === ME ? `<span style="color:${state.colourOf(ME)}">Yours</span>` : sel.owner >= 0 ? `Held by ${state.nameOf(sel.owner)}` : 'Unclaimed';
     const res = RESOURCE_IDS.filter((id) => sel.capacity[id] > 0)
       .map((id) => `<div class="row"><span>${RESOURCES[id].label}</span><b>${sel.stock[id]} / ${sel.capacity[id]}</b></div>`)
       .join('');

@@ -6,7 +6,7 @@ import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
 import type { Island } from './Islands';
 import { Factions, ME, NONE } from './Factions';
-import { emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
+import { ECONOMY, emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
 
 /** Collider ids of strongholds: one per island, 300 + the island's index. */
 export const STRONGHOLD_ID_BASE = 300;
@@ -51,9 +51,10 @@ export const STRONGHOLD = {
   captureTime: 10,
   /** Repairs start this long after the last hit (s), at this rate (hp/s). */
   repairDelay: 12,
-  repairRate: 4,
-  /** Every this many seconds each island you hold sends (1 + its stronghold's level) units to your stores. */
-  incomeEvery: 12,
+  /** Walls mend very slowly, and only while the owner has stone to mend them with. */
+  repairRate: 1.2,
+  /** How often the islands send their goods in (see ECONOMY in Resources.ts for how much). */
+  incomeEvery: ECONOMY.incomeEvery,
   /** A new escort ship, and how many the fleet can hold. */
   shipCost: { wood: 30, stone: 0, salvage: 8 } as Stock,
   fleetMax: 4,
@@ -99,6 +100,8 @@ export class Stronghold {
   /** Seconds a hostile ship has stood over the ruins. */
   capture = 0;
   sinceHit = 99;
+  /** Stone owed for repairs under way. */
+  stoneDue = 0;
   /** Running shares that decide which resource the next unit of income is. */
   readonly yieldAcc = emptyStock();
   private readonly gunTimers: number[] = [];
@@ -435,6 +438,8 @@ export interface TerritoryHooks {
   captured(s: Stronghold, by: Side, from: Side, wasHome: boolean, burned: boolean): void;
   /** Something the UI shows has changed (level, owner, a new outpost). */
   changed(): void;
+  /** Take `n` of a resource from a faction's stores: metal for a fort's shot, stone for its repairs. False if they cannot pay. */
+  pay(side: Side, id: ResourceId, n: number): boolean;
 }
 
 /** A ship as the territory rules see it. */
@@ -585,7 +590,7 @@ export class Territory {
 
   /** Units a minute coming in from the islands a faction holds. */
   incomeOf(faction: number): number {
-    return (this.strongholds.filter((s) => s.side === faction && !s.ruined).reduce((n, s) => n + 1 + s.level, 0) * 60) / STRONGHOLD.incomeEvery;
+    return (this.strongholds.filter((s) => s.side === faction && !s.ruined).reduce((n, s) => n + ECONOMY.incomeBase + ECONOMY.incomeMetal + ECONOMY.incomePerLevel * s.level, 0) * 60) / STRONGHOLD.incomeEvery;
   }
 
   get incomePerMinute(): number {
@@ -657,7 +662,8 @@ export class Territory {
         const owner = this.factions.get(s.side);
         if (!owner || owner.kind === 'raiders' || s.ruined || (this.remote && s.side !== ME)) continue;
         const total = RESOURCE_IDS.reduce((n, id) => n + s.island.capacity[id], 0) || 1;
-        for (let u = 0; u < 1 + s.level; u++) {
+        owner.stores.salvage += ECONOMY.incomeMetal;
+        for (let u = 0; u < ECONOMY.incomeBase + ECONOMY.incomePerLevel * s.level; u++) {
           for (const id of RESOURCE_IDS) s.yieldAcc[id] += s.island.capacity[id] / total;
           const pick = RESOURCE_IDS.reduce((a: ResourceId, b) => (s.yieldAcc[b] > s.yieldAcc[a] ? b : a));
           s.yieldAcc[pick] -= 1;
@@ -683,11 +689,24 @@ export class Territory {
           foe = ship;
         }
       }
-      s.update(dt, range < STRONGHOLD.captureRange);
+      // walls are mended with stone from the owner's stores
+      let mending = range >= STRONGHOLD.captureRange;
+      if (mending && s.hp < s.maxHp && s.sinceHit > STRONGHOLD.repairDelay) {
+        s.stoneDue += (STRONGHOLD.repairRate * dt) / ECONOMY.wallPerStone;
+        if (s.stoneDue >= 1) {
+          if (this.hooks.pay(s.side, 'stone', 1)) s.stoneDue -= 1;
+          else {
+            s.stoneDue = 1;
+            mending = false;
+          }
+        }
+      }
+      s.update(dt, !mending);
 
-      // guns
+      // guns: every shot is paid for in metal
       const ready = s.gunsReady(dt, !s.ruined && range < STRONGHOLD.gunRange);
       for (let g = 0; g < ready; g++) {
+        if (!this.hooks.pay(s.side, 'salvage', ECONOMY.shotMetal)) break;
         s.muzzle(_from);
         const lead = range / STRONGHOLD.gunSpeed;
         const stray = range * STRONGHOLD.gunScatter;

@@ -7,6 +7,7 @@ import { DesignedShip } from '../ship/DesignedShip';
 import { cloneDesign, HullDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
 import { MAST } from '../ship/Masts';
 import type { Island } from './Islands';
+import { ECONOMY, ResourceId } from './Resources';
 import { Wind } from './Wind';
 
 /** Collider ids of warships: 1000 up (the player's flagship is 0, barrels 100+, strongholds 300+, weather 700+, masts 2000+). */
@@ -48,6 +49,8 @@ export interface WarshipHooks {
   fire(ship: Warship, position: THREE.Vector3, direction: THREE.Vector3): void;
   /** It has just been sunk. */
   sunk(ship: Warship): void;
+  /** Take `n` of a resource from her owner's stores (shot for the guns, timber for repairs). False if they cannot pay. */
+  pay(ship: Warship, id: ResourceId, n: number): boolean;
 }
 
 export interface WarshipOptions {
@@ -104,6 +107,15 @@ export class Warship {
   remote = false;
   private readonly net = { x: 0, z: 0, heading: 0, vx: 0, vz: 0, sail: 0, rudder: 0, age: 0, fresh: false };
   private sinceHit = 99;
+  private woodDue = 0;
+  /** How much of her the local player can see: 0 hidden in the fog of war, 1 in plain sight. */
+  reveal = 1;
+  /** True once she has been put on the water somewhere. */
+  private placed = false;
+  private fadeMats: THREE.Material[] | null = null;
+  private readonly fadeOutlines: THREE.Object3D[] = [];
+  /** Which way she circles a target: chosen so the side that carries her guns faces it. */
+  private circle = 1;
   private retired = false;
 
   private readonly battery: Broadside;
@@ -132,16 +144,19 @@ export class Warship {
     this.ship.group.name = 'warship';
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
+    // guns on one side only: circle the other way round, so that side bears
+    const starboard = this.battery.guns.filter((g) => g.side === 1).length;
+    if (starboard === 0 && this.battery.guns.length > 0) this.circle = -1;
     this.collider = { id: opts.id, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
     if (opts.remote) {
       this.remote = true;
       this.ship.spendWood = () => false; // her masts go up when her owner says so
-      this.ship.group.visible = false; // until her owner says where she is
     } else if (opts.respawn && !opts.berth) this.spawn();
   }
 
   /** Put it on the water somewhere, ready to sail. */
   placeAt(x: number, z: number, heading: number): void {
+    this.placed = true;
     this.ship.body.placeOnWater(x, z, heading);
     this.ship.body.velocity.set(0, 0, 0);
     this.ship.sail = 0.4;
@@ -164,6 +179,35 @@ export class Warship {
 
   get alive(): boolean {
     return this.state === 'patrol' || this.state === 'fight' || this.state === 'raid';
+  }
+
+  /**
+   * Set how much of her shows (see `reveal`). She fades in and out at the edge
+   * of what the player's ships and islands can see. Call every frame.
+   */
+  showAs(k: number): void {
+    const group = this.ship.group;
+    group.visible = this.placed && this.state !== 'gone' && k > 0.02;
+    if (k === this.reveal) return;
+    this.reveal = k;
+    if (!this.fadeMats) {
+      const mats = new Set<THREE.Material>();
+      group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (o.name.endsWith('-outline')) this.fadeOutlines.push(o);
+        else for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
+      });
+      this.fadeMats = [...mats];
+    }
+    const solid = k >= 1;
+    for (const m of this.fadeMats) {
+      m.transparent = !solid;
+      m.opacity = solid ? 1 : k;
+      m.depthWrite = solid || k > 0.5;
+    }
+    // outlines share their material between ships, so they simply wait until she is solid
+    for (const o of this.fadeOutlines) o.visible = solid;
   }
 
   /** Go down for good: her captain is out of the game. */
@@ -251,7 +295,14 @@ export class Warship {
 
     // the crew patch the hull once the shooting stops
     this.sinceHit += dt;
-    if (this.sinceHit > ENEMY.repairDelay) this.hp = Math.min(this.maxHp, this.hp + ENEMY.repairRate * dt);
+    if (this.sinceHit > ENEMY.repairDelay && this.hp < this.maxHp) {
+      // repairs take timber from her owner's stores
+      this.woodDue += (ENEMY.repairRate * dt) / ECONOMY.hullPerWood;
+      if (this.woodDue < 1 || this.hooks.pay(this, 'wood', 1)) {
+        if (this.woodDue >= 1) this.woodDue -= 1;
+        this.hp = Math.min(this.maxHp, this.hp + ENEMY.repairRate * dt);
+      } else this.woodDue = 1;
+    }
 
     const pos = this.position;
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
@@ -273,7 +324,7 @@ export class Warship {
       const rx = (pos.x - focus.x) / fr;
       const rz = (pos.z - focus.z) / fr;
       const k = THREE.MathUtils.clamp((fr - (raid ? ENEMY.raidStandoff : ENEMY.standoff)) / 40, -1, 1);
-      want.set(-rz - rx * k, 0, rx - rz * k);
+      want.set(-rz * this.circle - rx * k, 0, rx * this.circle - rz * k);
     } else if (this.order || this.escort) {
       // go where the chart says, or keep station on the flagship; loiter in a slow circle on arrival
       const to = this.order ?? this.escort!;
@@ -314,7 +365,8 @@ export class Warship {
       const mark = raid ?? player;
       const reach = Math.hypot(mark.x - pos.x, mark.z - pos.z);
       this.battery.aimAt(mark, dt);
-      if (!this.battery.outOfArc && !this.battery.outOfRange && reach < BROADSIDE.maxRange && this.battery.ready) this.battery.tryFire();
+      // every shell is paid for in metal
+      if (!this.battery.outOfArc && !this.battery.outOfRange && reach < BROADSIDE.maxRange && this.battery.ready && this.hooks.pay(this, 'salvage', this.battery.loaded * ECONOMY.shotMetal)) this.battery.tryFire(true);
     }
     this.shots.length = 0;
     this.battery.update(dt, this.shots);
@@ -346,7 +398,7 @@ export class Warship {
     const [, x, z, heading, vx, vz, sail, rudder, hp, code, masts] = a;
     const state = NET_STATES[code] ?? 'patrol';
     const afloat = state !== 'sinking' && state !== 'gone';
-    if (afloat && (!this.alive || !this.ship.group.visible)) {
+    if (afloat && (!this.alive || !this.placed)) {
       this.placeAt(x, z, heading); // a fresh ship
     } else if (!afloat && this.alive) {
       this.state = 'sinking';
@@ -404,6 +456,7 @@ export class Warship {
       if (score > best.score) best = { x, z, score };
     }
     const heading = Math.atan2(-best.z, best.x) + Math.PI / 2;
+    this.placed = true;
     this.ship.body.placeOnWater(best.x, best.z, heading);
     this.ship.body.velocity.set(0, 0, 0);
     this.ship.sail = 0.5;

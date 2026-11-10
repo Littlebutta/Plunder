@@ -20,7 +20,7 @@ import { Wake } from './fx/Wake';
 import { WindStreaks } from './fx/WindStreaks';
 import { AudioManager } from './audio/AudioManager';
 import { Gathering } from './world/Gathering';
-import { Hold } from './world/Resources';
+import { ECONOMY, emptyStock, Hold, ResourceId, Stock } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
 import { IslandMarkers } from './world/IslandMarkers';
 import { Warship, WarshipHooks, warshipId, HUMAN_ID_BASE, WARSHIP_ID_BASE, WARSHIP_ID_END } from './world/Warship';
@@ -287,6 +287,7 @@ const warshipHooks: WarshipHooks = {
     effects.muzzle(from, dir, w.ship.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 0.95, rateJitter: 0.06, position: from });
   },
+  pay: (w, id, n) => charge(w.faction, id, n),
   sunk: (w) => {
     effects.splinters(w.position, 40);
     effects.splash(w.position, 2.2);
@@ -298,6 +299,26 @@ const warshipHooks: WarshipHooks = {
   },
 };
 
+/**
+ * Take resources from a faction's stores (shot, repairs). The raiders pay for
+ * nothing. Online, a guest's stores live on their own copy: the host works
+ * from the figures they last sent and sends the bill ('c').
+ */
+const owed = new Map<number, Stock>();
+function charge(faction: number, id: ResourceId, n: number): boolean {
+  if (n <= 0) return true;
+  const f = factions.get(faction);
+  if (!f || f.kind === 'raiders') return true;
+  if (f.stores[id] < n) return false;
+  f.stores[id] -= n;
+  if (link?.host && f.kind === 'human' && faction !== ME) {
+    const bill = owed.get(faction) ?? emptyStock();
+    bill[id] += n;
+    owed.set(faction, bill);
+  }
+  return true;
+}
+
 // --- Sides ---------------------------------------------------------------------------
 const factions = new Factions();
 if (vs) {
@@ -307,6 +328,7 @@ if (vs) {
   });
   if (match.forts) factions.add('Raiders', NPC_COLOUR, 99, 'raiders');
 } else {
+  hold.stock.salvage = 30; // shot for the first fights
   factions.add('You', myColour(), 0, 'human', hold.stock);
   factions.add('Raiders', NPC_COLOUR, 99, 'raiders');
 }
@@ -329,7 +351,7 @@ const fleet: Warship[] = [];
 const fleetBuilt = new Map<number, number>();
 const FLEET_NAMES = ['Swift', 'Gannet', 'Petrel', 'Osprey', 'Heron', 'Kestrel', 'Curlew', 'Tern'];
 const escortsOf = (faction: number) => ships.filter((w) => w.faction === faction && !w.flagship && w.state !== 'gone');
-const hostileShips = () => ships.filter((w) => w.alive && factions.hostile(ME, w.faction));
+const hostileShips = () => ships.filter((w) => w.alive && w.reveal > 0.3 && factions.hostile(ME, w.faction));
 const targetUi = new TargetUi(hudRoot);
 /** The ship the player has marked (click it; click it again or press T to let go). */
 let targeted: Warship | null = null;
@@ -359,7 +381,7 @@ function updateTargeting(playing: boolean): void {
     const near = hostileShips().sort((a, b) => a.position.distanceTo(ship.body.position) - b.position.distanceTo(ship.body.position))[0];
     targeted = targeted ? null : (near ?? null);
   }
-  if (targeted && targeted.state === 'gone') targeted = null;
+  if (targeted && (targeted.state === 'gone' || targeted.reveal <= 0)) targeted = null;
   if (!playing || !targeted) {
     targetUi.update(null, camera);
     return;
@@ -466,6 +488,7 @@ const territory = new Territory(world.islands, {
     else if (from === ME) weatherUi.announce(`${s.island.name} is lost`, burned ? 'The raiders burned your outpost' : `${factions.name(by)} took it`, 'danger');
   },
   changed: () => islandMarkers.refresh(),
+  pay: (side, id, n) => charge(side, id, n),
 }, factions, { mode: match.mode, forts: match.forts });
 territory.remote = !authority;
 islandMarkers.colourOf = (f) => factions.colour(f);
@@ -685,7 +708,10 @@ if (link) {
   const on = link.handlers;
   on.set('p', (from, m) => {
     const w = humanShips.get(from);
-    if (w) w.applyNet([w.id, ...(m.slice(1) as number[])]);
+    if (w) w.applyNet([w.id, ...(m.slice(1, 11) as number[])]);
+    // the host keeps a copy of each guest's stores, to know what their forts and escorts can afford
+    const stores = factions.get(from)?.stores;
+    if (link.host && stores && m.length >= 14) Object.assign(stores, { wood: Number(m[11]), stone: Number(m[12]), salvage: Number(m[13]) });
   });
   on.set('d', (from, m) => {
     if (from !== ME) setHumanShip(from, sanitizeDesign(m[1] as HullDesign));
@@ -716,6 +742,13 @@ if (link) {
       if (w) w.order = m.length >= 4 ? new THREE.Vector3(Number(m[2]), 0, Number(m[3])) : null;
     });
   } else {
+    on.set('c', (from, m) => {
+      // the host's bill for what this player's forts and escorts used
+      if (from !== 0) return;
+      hold.stock.wood = Math.max(0, hold.stock.wood - Number(m[1]));
+      hold.stock.stone = Math.max(0, hold.stock.stone - Number(m[2]));
+      hold.stock.salvage = Math.max(0, hold.stock.salvage - Number(m[3]));
+    });
     on.set('r', (from, m) => {
       if (from === 0) applyRoster(m[1] as Roster);
     });
@@ -756,9 +789,11 @@ function netTick(dt: number): void {
     tellIn = 1 / 12;
     const b = ship.body;
     b.forward(fwd);
-    link.send(['p', r1(b.position.x), r1(b.position.z), r2(Math.atan2(-fwd.x, -fwd.z)), r1(b.velocity.x), r1(b.velocity.z), r2(ship.sail), r2(ship.rudder), Math.round(hull.fraction * 100), sunkFor >= 0 ? 3 : 0, ship instanceof DesignedShip ? ship.rig.downMask : 0], false);
+    link.send(['p', r1(b.position.x), r1(b.position.z), r2(Math.atan2(-fwd.x, -fwd.z)), r1(b.velocity.x), r1(b.velocity.z), r2(ship.sail), r2(ship.rudder), Math.round(hull.fraction * 100), sunkFor >= 0 ? 3 : 0, ship instanceof DesignedShip ? ship.rig.downMask : 0, hold.stock.wood, hold.stock.stone, hold.stock.salvage], false);
   }
   if (link.host) {
+    for (const [f, bill] of owed) link.send(['c', bill.wood, bill.stone, bill.salvage], true, f);
+    owed.clear();
     worldIn -= dt;
     if (worldIn > 0) return;
     worldIn = 1 / 8;
@@ -910,26 +945,9 @@ halo.position.y = -1.9;
 marker.add(gem, halo);
 marker.visible = false;
 scene.add(marker);
-const islandMeshes = new Map<THREE.Object3D, Island>();
-for (const island of world.islands) islandMeshes.set(island.group, island);
-
-function islandUnderPointer(): Island | null {
-  raycaster.setFromCamera(new THREE.Vector2(input.pointer.x, input.pointer.y), camera);
-  const hits = raycaster.intersectObject(world.group, true);
-  for (const hit of hits) {
-    for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
-      const island = islandMeshes.get(o);
-      if (island) return island;
-    }
-  }
-  return null;
-}
-
 function updateGathering(dt: number): void {
   const at = ship.body.position;
   gathering.update(dt, at);
-  if (input.wasPressed('KeyE')) gathering.toggle();
-  if (input.clicked && gathering.inRange && !gathering.selected && islandUnderPointer() === gathering.inRange) gathering.select(gathering.inRange);
   gatherUi.update(gathering, territory.incomePerMinute);
 
   const target = gathering.selected ?? gathering.inRange;
@@ -1157,6 +1175,10 @@ Object.assign(window, {
     fog,
     buildEscort,
     tryBuild,
+    presets: PRESETS,
+    /** Tests: put to sea in one of the stock designs. */
+    launchPreset: (n: number) => setShip(new DesignedShip(PRESETS[n], waves, wind, myColour(), RAFT_ID)),
+    announce: (title: string, sub: string, tone: 'calm' | 'danger' | 'good') => weatherUi.announce(title, sub, tone),
     atHomeDock,
     /** Tests: run the game ahead by this many seconds without drawing. */
     fastForward: async (seconds: number) => {
@@ -1362,6 +1384,21 @@ function updateAimPoint(dt: number): void {
   aimLevel.y = 0;
 }
 
+let fireHeld = 0;
+let fireRepeat = 0;
+/** Timber owed for hull repairs under way. */
+let hullWood = 0;
+hull.spend = (hp) => {
+  hullWood += hp / ECONOMY.hullPerWood;
+  if (hullWood < 1) return true;
+  if (hold.stock.wood < 1) {
+    hullWood = 1;
+    return false;
+  }
+  hold.stock.wood--;
+  hullWood -= 1;
+  return true;
+};
 const _playerSight: ShipSight = { position: ship.body.position, velocity: ship.body.velocity, alive: true, faction: ME };
 /** Every ship afloat this frame, as the territory rules and the AI see them. */
 const sights: ShipSight[] = [];
@@ -1469,7 +1506,17 @@ function step(rawDt: number): void {
   if (active && input.wasPressed('KeyC')) broadside.setVisible(!broadside.visible);
   if (active && broadside.visible) {
     broadside.aimAt(aimLevel, dt);
-    if (input.fire || input.wasPressed('KeyF') || input.wasPressed('KeyX')) broadside.tryFire();
+    // each press fires one gun deck; held down, the decks follow one another
+    const press = input.wasPressed('Space') || input.wasPressed('KeyF') || input.wasPressed('KeyX');
+    fireHeld = input.fire ? fireHeld + dt : 0;
+    fireRepeat -= dt;
+    if (press || (fireHeld > 0.45 && fireRepeat <= 0)) {
+      fireRepeat = 0.3;
+      const metal = broadside.nextSalvo * ECONOMY.shotMetal;
+      if (metal > 0 && hold.stock.salvage >= metal) {
+        if (broadside.tryFire()) hold.stock.salvage -= metal;
+      } else if (metal > 0 && press) weatherUi.announce('No metal for the guns', `That salvo needs ${metal} metals`, 'danger');
+    }
   }
   broadsideShots.length = 0;
   broadside.update(dt, broadsideShots);
@@ -1535,6 +1582,9 @@ function step(rawDt: number): void {
       }
     }
     w.update(dt, foe, running);
+    // ships out of sight of the player's own ships and islands are hidden, and fade in at the edge
+    const seen = !voyageStarted || factions.allied(ME, w.faction) || fog.canSee(w.position.x, w.position.z);
+    w.showAs(THREE.MathUtils.clamp(w.reveal + (seen ? dt : -dt) * 1.4, 0, 1));
     if (w.alive) edgeCurrent(w.position, w.ship.body.velocity, dt);
   }
   ship.setCargo(hold.stock, CARGO_FULL);
@@ -1603,7 +1653,7 @@ function step(rawDt: number): void {
   }
 
   // Compass heading: 0 = north (-Z), clockwise positive.
-  hud.update(rawDt, ship.body.forwardSpeed, ship.sail, Math.atan2(fwd.x, -fwd.z));
+  hud.update(rawDt, ship.body.forwardSpeed, ship.backing ? -0.4 : ship.sail, Math.atan2(fwd.x, -fwd.z));
   hud.updateSailing(Math.atan2(wind.direction.x, -wind.direction.z), ship.windBoost, ship.sail);
   hud.updateCombat(gun.reloadProgress, broadside.visible ? broadside.reloadProgress : -1, targets.score, projectiles.stats.active, projectiles.stats.threaded, projectiles.stats.workerMs);
 

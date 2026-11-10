@@ -17,6 +17,21 @@ export function emptyStock(): Stock {
   return { wood: 0, stone: 0, salvage: 0 };
 }
 
+/** What things cost to use, and what the islands bring in. */
+export const ECONOMY = {
+  /** Metals per cannon shell, from ships and forts alike (the swivel gun is free). */
+  shotMetal: 1,
+  /** Hull points mended per unit of wood. */
+  hullPerWood: 8,
+  /** Fort wall points mended per unit of stone. */
+  wallPerStone: 12,
+  /** Every this many seconds each stronghold sends in (incomeBase + incomePerLevel x level) units of what its island yields, plus `incomeMetal` metals. */
+  incomeEvery: 10,
+  incomeBase: 2,
+  incomePerLevel: 2,
+  incomeMetal: 1,
+};
+
 /** What each island type offers, as shares of its total (which grows with island size). */
 const YIELD: Record<IslandType, Partial<Stock>> = {
   peak: { stone: 0.6, wood: 0.4 },

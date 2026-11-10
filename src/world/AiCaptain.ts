@@ -10,9 +10,9 @@ export type AiLevel = 'easy' | 'normal' | 'hard';
 /** How an AI captain plays at each level. */
 export const AI: Record<AiLevel, { stipend: number; escorts: number; attackAfter: number; outposts: number }> = {
   // stipend: units a minute, standing in for the gathering a human does by hand
-  easy: { stipend: 7, escorts: 1, attackAfter: 300, outposts: 2 },
-  normal: { stipend: 14, escorts: 2, attackAfter: 180, outposts: 3 },
-  hard: { stipend: 24, escorts: 3, attackAfter: 100, outposts: 5 },
+  easy: { stipend: 10, escorts: 1, attackAfter: 300, outposts: 2 },
+  normal: { stipend: 20, escorts: 2, attackAfter: 180, outposts: 3 },
+  hard: { stipend: 36, escorts: 3, attackAfter: 100, outposts: 5 },
 };
 
 export interface AiWorld {
@@ -54,12 +54,12 @@ export class AiCaptain {
     if (!f.alive) return;
     const cfg = AI[this.level];
     this.elapsed += dt;
-    // supplies trickle in, mostly timber
+    // supplies trickle in: timber, stone for the walls and metal for the guns
     this.stipend += (dt * cfg.stipend) / 60;
     while (this.stipend >= 1) {
       this.stipend -= 1;
       const n = this.stipendN++ % 10;
-      f.stores[n < 6 ? 'wood' : n < 9 ? 'stone' : 'salvage']++;
+      f.stores[n < 4 ? 'wood' : n < 6 ? 'stone' : 'salvage']++;
     }
     this.think -= dt;
     if (this.think > 0) return;

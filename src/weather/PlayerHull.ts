@@ -13,6 +13,8 @@ export class PlayerHull {
   repairRate = 2.5;
   onBattered: (() => void) | null = null;
   onDamage: ((amount: number) => void) | null = null;
+  /** Asked before each bit of repair for the timber it takes; return false and the repair waits. Null = free. */
+  spend: ((hp: number) => boolean) | null = null;
 
   get fraction(): number {
     return this.hp / this.max;
@@ -32,6 +34,6 @@ export class PlayerHull {
 
   update(dt: number): void {
     this.sinceHit += dt;
-    if (this.hp > 0 && this.sinceHit > this.repairDelay) this.hp = Math.min(this.max, this.hp + this.repairRate * dt);
+    if (this.hp > 0 && this.hp < this.max && this.sinceHit > this.repairDelay && (!this.spend || this.spend(this.repairRate * dt))) this.hp = Math.min(this.max, this.hp + this.repairRate * dt);
   }
 }
