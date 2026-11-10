@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:28Z",
+  "updated": "2026-11-10T17:03:31Z",
   "categories": [
     {
       "key": "feature",
@@ -2061,6 +2061,19 @@
       "created": "2026-11-10T17:03:28Z",
       "priority": "medium",
       "updated": "2026-11-10T17:03:28Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-95",
+      "cat": "feature",
+      "title": "Contested captures: no taking an island while an enemy ship is there",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-10T17:03:31Z",
+      "priority": "medium",
+      "updated": "2026-11-10T17:03:31Z",
       "by": "Claude"
     }
   ],
