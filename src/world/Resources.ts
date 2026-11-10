@@ -19,8 +19,9 @@ export function emptyStock(): Stock {
 
 /** What things cost to use, and what the islands bring in. */
 export const ECONOMY = {
-  /** Metals per cannon shell, from ships and forts alike (the swivel gun is free). */
+  /** Reloading costs metal, firing does not: this much metal loads `shotsPerMetal` guns, for ships and forts alike (the swivel gun is free). */
   shotMetal: 1,
+  shotsPerMetal: 3,
   /** Hull points mended per unit of wood. */
   hullPerWood: 8,
   /** Fort wall points mended per unit of stone. */

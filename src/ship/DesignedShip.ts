@@ -15,15 +15,16 @@ import type { Stock } from '../world/Resources';
 function deckSurface(d: HullDesign, visual: ShipVisual): CrewSurface {
   const tOf = (z: number) => THREE.MathUtils.clamp(z / d.length + 0.5, 0, 1);
   const stations: CrewSurface['stations'] = [];
+  // the crew's two jobs: serving the guns and taking a turn at the helm
   d.cannons.forEach((c, i) => {
     if (c.level !== 0) return;
     const m = visual.gunMounts[i];
-    stations.push({ at: new THREE.Vector3(m.x - Math.sign(m.x) * 0.6, 0, m.z + 0.1), work: true });
+    // standing inboard of the gun, facing out over it
+    stations.push({ at: new THREE.Vector3(m.x - Math.sign(m.x) * 0.6, 0, m.z + 0.1), work: true, kind: 'gun', face: m.x > 0 ? Math.PI / 2 : -Math.PI / 2 });
   });
-  if (d.length >= 9) stations.push({ at: new THREE.Vector3(0, 0, zAt(d, 0.87) + 0.45), work: true }); // the helm
+  stations.push({ at: visual.helm.clone(), work: true, kind: 'helm', face: Math.PI });
   for (const m of visual.masts) stations.push({ at: new THREE.Vector3(0.4, 0, m.foot.z + 0.2), work: true });
-  visual.cargoPlaces.slice(0, 4).forEach((c) => stations.push({ at: new THREE.Vector3(c.x + 0.45, 0, c.z), work: false }));
-  stations.push({ at: new THREE.Vector3(0, 0, zAt(d, 0.16)), work: false }, { at: new THREE.Vector3(0.3, 0, zAt(d, 0.9)), work: false });
+  visual.cargoPlaces.slice(0, 2).forEach((c) => stations.push({ at: new THREE.Vector3(c.x + 0.45, 0, c.z), work: false }));
   return {
     stations,
     height: (_x, z) => deckAt(d, tOf(z)) + 0.02,
@@ -100,6 +101,11 @@ export class DesignedShip extends Vessel {
 
   protected override rigBoost(along: number): number {
     return rigBoost(this.design, along);
+  }
+
+  /** The deck cargo (shares its materials with every ship, so it is hidden rather than faded). */
+  get cargoGroup(): THREE.Group {
+    return this.cargo.group;
   }
 
   override setCargo(stock: Stock, capacity: number): void {

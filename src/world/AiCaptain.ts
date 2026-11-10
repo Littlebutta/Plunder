@@ -23,6 +23,10 @@ export interface AiWorld {
   escortsOf(faction: number): Warship[];
   /** Build an escort for a faction at its home, if it can pay. */
   launchEscort(faction: number): boolean;
+  /** What the captain's next ship would cost, or null when they already sail one (not the starting raft). */
+  refitCost(faction: number): Stock | null;
+  /** Trade the raft for that ship at home. False if it cannot be done now. */
+  refit(faction: number): boolean;
   /** Hostile ships afloat near a point. */
   threatNear(faction: number, at: THREE.Vector3, range: number): boolean;
 }
@@ -47,7 +51,7 @@ export class AiCaptain {
 
   constructor(
     readonly faction: Faction,
-    readonly flagship: Warship,
+    public flagship: Warship,
     private readonly world: AiWorld,
     readonly level: AiLevel,
   ) {}
@@ -81,19 +85,26 @@ export class AiCaptain {
     const afford = (cost: Stock) => canAfford(plus(cost, reserve), f.stores, null);
     if (home.level < LEVELS.length - 1 && afford(LEVELS[home.level + 1].cost) && (home.level === 0 || escorts.length >= Math.min(1, cfg.escorts))) {
       territory.build(home.island, false, f.id);
-    } else if (escorts.length < (f.stores.wood > 160 ? cfg.escorts + 2 : cfg.escorts) && home.level >= 1) {
+    } else if (escorts.length < (f.stores.wood > 160 ? cfg.escorts + 2 : cfg.escorts) && home.level >= 1 && (!this.world.refitCost(f.id) || f.stores.wood > 120)) {
+      // (a captain still on the raft saves for a ship of their own before building escorts)
       this.world.launchEscort(f.id);
     } else if (this.level !== 'easy') {
       const outpost = held.find((s) => s !== home && s.level < 1 && afford(LEVELS[1].cost));
       if (outpost) territory.build(outpost.island, false, f.id);
     }
 
-    // --- the flagship ---
-    const ship = this.flagship;
+    // --- the flagship: off the raft and into a proper ship as soon as the stores allow ---
+    const refit = this.world.refitCost(f.id);
+    const wantShip = !!refit && home.level >= 1 && canAfford(plus(refit, wantOutpost ? STRONGHOLD.outpostCost : { wood: 0, stone: 0, salvage: 0 }), f.stores, null);
+    let ship = this.flagship;
+    if (wantShip && ship.alive && territory.islandInReach(ship.position) === home.island && this.world.refit(f.id)) ship = this.flagship;
     if (!ship.alive) return;
     const pos = ship.position;
     let raid: Stronghold | null = null;
-    if ((home.sinceHit < 20 || home.ruined) && this.world.threatNear(f.id, home.site, 240)) {
+    if (wantShip && !((home.sinceHit < 20 || home.ruined) && this.world.threatNear(f.id, home.site, 240))) {
+      this.goal = 'refit at home';
+      ship.order = this.offShore(home.island, pos);
+    } else if ((home.sinceHit < 20 || home.ruined) && this.world.threatNear(f.id, home.site, 240)) {
       // home is under attack: everything else waits
       this.goal = 'defend';
       ship.order = this.offShore(home.island, pos);

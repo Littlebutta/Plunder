@@ -167,7 +167,12 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
 
         // Foam streaks: wavy white lines drifting with the water, like the
         // brush strokes in the reference art. Denser on crests.
-        vec2 fp = vGrid * 0.11 + vec2(uTime * 0.05, uTime * 0.02);
+        // the drift turns from one stretch of sea to the next and the lines are
+        // domain-warped, so they never line up into one direction of travel
+        float driftA = fbm(vGrid * 0.004 + 3.7) * 12.0;
+        vec2 drift = vec2(cos(driftA), sin(driftA)) * uTime * 0.05;
+        vec2 fp = vGrid * 0.11 + drift;
+        fp += (vec2(fbm(vGrid * 0.02 + 1.3 + uTime * 0.01), fbm(vGrid * 0.02 + 7.1 - uTime * 0.012)) - 0.5) * 3.0;
         float n1 = fbm(fp);
         float line = 1.0 - aastep(0.03, abs(fract(n1 * 5.0) - 0.5));
         // Wave groups: vEnv > 1 inside a big set, < 1 in the lulls between.

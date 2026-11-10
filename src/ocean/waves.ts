@@ -50,6 +50,17 @@ const BREATH_RATE = 0.09;
 const BREATH_SPREAD = 0.036;
 const COS_WB = Math.cos(WARP_B);
 const SIN_WB = Math.sin(WARP_B);
+/**
+ * Regions: each wave is strong in some stretches of sea and faint in others,
+ * on a pattern hundreds of metres across that is laid in its own direction and
+ * drifts slowly. Sail a little way and a different set of trains dominates,
+ * so the sea never reads as one set of rows marching the same way.
+ */
+const REGION = 0.5;
+const REGION_K1 = (2 * Math.PI) / 190;
+const REGION_K2 = (2 * Math.PI) / 120;
+/** Directions of a wave's two region patterns, from its phase. */
+const regionDir = (ph: number, n: 1 | 2): [number, number] => (n === 1 ? [Math.cos(ph * 2 + 0.4), Math.sin(ph * 2 + 0.4)] : [Math.cos(ph * 3.1 - 1), Math.sin(ph * 3.1 - 1)]);
 
 export interface WaveParams {
   /** Direction of travel in degrees (0 = +X, 90 = +Z). */
@@ -189,8 +200,8 @@ export class WaveField {
    * (16 per wave), `timeCoef` the parts that depend only on the clock (6 per
    * wave), refreshed once per new wave time.
    */
-  private readonly coef = new Float64Array(MAX_WAVES * 16);
-  private readonly timeCoef = new Float64Array(MAX_WAVES * 6);
+  private readonly coef = new Float64Array(MAX_WAVES * 20);
+  private readonly timeCoef = new Float64Array(MAX_WAVES * 8);
   private coefTime = NaN;
 
   /** Rebuild the position constants from the uniforms (`syncUniforms` calls this). */
@@ -206,7 +217,14 @@ export class WaveField {
       const kg = k / GROUP_LENGTH;
       const kc = k / CREST_LENGTH;
       const kq = k / WARP_LENGTH;
-      const o = i * 16;
+      const o = i * 20;
+      const ph = b.z;
+      const [r1x, r1z] = regionDir(ph, 1);
+      const [r2x, r2z] = regionDir(ph, 2);
+      s[o + 15] = REGION_K1 * r1x;
+      s[o + 16] = REGION_K1 * r1z;
+      s[o + 17] = REGION_K2 * r2x;
+      s[o + 18] = REGION_K2 * r2z;
       s[o] = k * dx;
       s[o + 1] = k * dz;
       s[o + 2] = a.w;
@@ -239,7 +257,9 @@ export class WaveField {
       const c = b.x;
       const ph = b.z;
       const kq = k / WARP_LENGTH;
-      const o = i * 6;
+      const o = i * 8;
+      tc[o + 6] = ph * 2.3 + t * 0.021;
+      tc[o + 7] = ph * 1.1 - t * 0.017;
       tc[o] = -(k / GROUP_LENGTH) * c * 0.5 * t + ph * 1.7;
       tc[o + 1] = -(k / CREST_LENGTH) * c * 0.35 * t + ph * 2.9;
       tc[o + 2] = 1 + BREATH * Math.sin(t * (BREATH_RATE + BREATH_SPREAD * ph) + ph * 4.7);
@@ -257,12 +277,12 @@ export class WaveField {
   private evalWave(i: number, x: number, z: number, slope: boolean): void {
     const s = this.coef;
     const tc = this.timeCoef;
-    const o = i * 16;
-    const p = i * 6;
+    const o = i * 20;
+    const p = i * 8;
     const ev = this.ev;
     const g = s[o + 6];
-    // slow breathing on the wave's own clock
-    let env = tc[p + 2];
+    // slow breathing on the wave's own clock, and its strong and faint stretches of sea
+    let env = tc[p + 2] * (1 + REGION * Math.sin(s[o + 15] * x + s[o + 16] * z + tc[p + 6]) * (0.6 + 0.4 * Math.sin(s[o + 17] * x + s[o + 18] * z + tc[p + 7])));
     if (g > 0) {
       // wave groups (sets) travelling at half the phase speed
       const e1 = Math.sin(s[o + 7] * x + s[o + 8] * z + tc[p]);
@@ -297,7 +317,7 @@ export class WaveField {
     let oz = 0;
     for (let i = 0; i < n; i++) {
       this.evalWave(i, x, z, false);
-      const o = i * 16;
+      const o = i * 20;
       const amp = s[o + 2] * ev.env;
       const cf = Math.cos(ev.f);
       ox += s[o + 3] * amp * cf;
@@ -380,7 +400,7 @@ export class WaveField {
     const s = this.shore ? this.shore.waveScale(x, z) : 1;
     for (let i = 0; i < n; i++) {
       this.evalWave(i, x, z, true);
-      const o = i * 16;
+      const o = i * 20;
       const amp = c[o + 2] * ev.env * s;
       const cf = Math.cos(ev.f);
       const sf = Math.sin(ev.f);
@@ -434,6 +454,9 @@ export const GERSTNER_GLSL = /* glsl */ `
       env = (1.0 - g + g * 0.85 * (1.0 + e1)) * (1.0 + g * 0.7 * e2);
     }
     env *= 1.0 + ${BREATH.toFixed(3)} * sin(uTime * (${BREATH_RATE.toFixed(4)} + ${BREATH_SPREAD.toFixed(4)} * ph) + ph * 4.7);
+    vec2 r1 = vec2(cos(ph * 2.0 + 0.4), sin(ph * 2.0 + 0.4));
+    vec2 r2 = vec2(cos(ph * 3.1 - 1.0), sin(ph * 3.1 - 1.0));
+    env *= 1.0 + ${REGION.toFixed(3)} * sin(${REGION_K1.toFixed(6)} * dot(r1, p) + ph * 2.3 + uTime * 0.021) * (0.6 + 0.4 * sin(${REGION_K2.toFixed(6)} * dot(r2, p) + ph * 1.1 - uTime * 0.017));
     float kq = k / ${WARP_LENGTH.toFixed(1)};
     vec2 ra = rot(d, ${COS_WA.toFixed(6)}, ${SIN_WA.toFixed(6)});
     vec2 rb = rot(d, ${COS_WB.toFixed(6)}, ${SIN_WB.toFixed(6)});

@@ -25,14 +25,15 @@ export class Hud {
         <div class="help-head">Controls</div>
         <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost). S strikes the sail; keep holding it to back her</div>
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
-        <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire a gun deck (each press the next deck; a shell costs 1 metal)</div>
-        <div><kbd>C</kbd> fit / stow broadside cannons · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
+        <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire a gun deck (each press the next deck; reloading costs 1 metal per 3 guns)</div>
+        <div><kbd>C</kbd> fit / stow broadside cannons · <kbd>X</kbd> fire mode: <span data-firemode>in sequence</span></div>
         <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go)</div>
         <div><kbd>M</kbd> or <kbd>Tab</kbd> chart: right click on it to send a ship somewhere</div>
         <div><kbd>U</kbd> alongside an island: build an outpost or upgrade your stronghold</div>
-        <div>Lie off an island (at its pier if it has one) and the crew gather from it on their own</div>
+        <div><kbd>E</kbd> alongside an island that is not yours: plunder it (the crew strip it fast; it then lies bare for a while)</div>
+        <div><kbd>I</kbd> your upgrades · <kbd>R</kbd> when capsized: back to your home island</div>
         <div><kbd>Y</kbd> at your home dock: open the shipyard</div>
-        <div><kbd>Middle mouse drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
+        <div><kbd>Middle mouse drag</kbd> orbit camera (pans the chart) · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
         <div><kbd>P</kbd> mute · <kbd>H</kbd> or <kbd>?</kbd> show / hide this</div>
         <div class="help-dev"><kbd>B</kbd> barrage test · <kbd>G</kbd> tuning · <kbd>O</kbd> probes</div>
       </div>

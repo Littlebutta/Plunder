@@ -740,7 +740,7 @@ export class MapView {
       <canvas></canvas>
       <div class="chart-title">Chart</div>
       <div class="chart-fleets" data-fleets></div>
-      <div class="chart-help"><b>Click</b> a ship or island · <b>Shift click</b> pick several ships · <b>Right click</b> send them (<b>Shift</b> adds a waypoint, <b>Ctrl</b> attacks on the way, on your flagship: follow) · <b>Hold right and drag</b> a patrol zone · <b>Drag</b> pan · <b>Wheel</b> zoom</div>
+      <div class="chart-help"><b>Click</b> a ship or island · <b>Shift click</b> pick several ships · <b>Right click</b> send them (<b>Shift</b> adds a waypoint, <b>Ctrl</b> attacks on the way, on your flagship: follow) · <b>Hold right and drag</b> a patrol zone · <b>Drag</b> or <b>middle mouse</b> pan · <b>Wheel</b> zoom</div>
       <div class="chart-info hud-panel" data-info hidden></div>
       <button class="chart-close" data-close>Close</button>`;
     parent.append(this.root);
@@ -753,7 +753,19 @@ export class MapView {
     let moved = 0;
     /** Right button: where it went down (screen), to tell a click (an order) from a drag (a patrol zone). */
     let rightAt: { x: number; y: number } | null = null;
+    /** Middle button held: pan the chart. */
+    let panning = false;
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault(); // no autoscroll cursor
+    });
     this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        panning = true;
+        this.canvas.setPointerCapture(e.pointerId);
+        this.canvas.style.cursor = 'grabbing';
+        return;
+      }
       if (e.button === 2) {
         rightAt = { x: e.clientX, y: e.clientY };
         this.canvas.setPointerCapture(e.pointerId);
@@ -765,6 +777,12 @@ export class MapView {
       this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
+      if (panning) {
+        this.view.cx -= e.movementX / this.view.zoom;
+        this.view.cz -= e.movementY / this.view.zoom;
+        this.clampView();
+        return;
+      }
       if (rightAt) {
         const px = Math.hypot(e.clientX - rightAt.x, e.clientY - rightAt.y);
         const at = this.toWorld(rightAt.x, rightAt.y);
@@ -779,6 +797,12 @@ export class MapView {
       this.clampView();
     });
     this.canvas.addEventListener('pointerup', (e) => {
+      if (e.button === 1 && panning) {
+        panning = false;
+        this.canvas.releasePointerCapture(e.pointerId);
+        this.canvas.style.cursor = '';
+        return;
+      }
       if (e.button === 2 && rightAt) {
         this.canvas.releasePointerCapture(e.pointerId);
         const zone = this.zone;

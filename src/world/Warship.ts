@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shunRocks } from './Grounding';
+import { helm, islandReach, routeVia } from './navigation';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -128,6 +129,10 @@ export class Warship {
   private readonly fadeOutlines: THREE.Object3D[] = [];
   /** Which way she circles a target: chosen so the side that carries her guns faces it. */
   private circle = 1;
+  /** At the end of her orders, lying with her sail struck. */
+  private arrived = false;
+  /** Seconds she has lain keel-up. */
+  private capsized = 0;
   private retired = false;
 
   private readonly battery: Broadside;
@@ -156,6 +161,7 @@ export class Warship {
     this.ship.group.name = 'warship';
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
+    this.battery.payReload = (metal) => this.hooks.pay(this, 'salvage', metal);
     // guns on one side only: circle the other way round, so that side bears
     const starboard = this.battery.guns.filter((g) => g.side === 1).length;
     if (starboard === 0 && this.battery.guns.length > 0) this.circle = -1;
@@ -224,15 +230,23 @@ export class Warship {
     this.reveal = k;
     if (!this.fadeMats) {
       const mats = new Set<THREE.Material>();
-      group.traverse((o) => {
+      // The crew and the deck cargo share their materials with every other ship
+      // (the player's too), so fading them here would turn every sailor's head
+      // into a see-through ball. They are simply not drawn until she is solid.
+      const walk = (o: THREE.Object3D) => {
+        if (o.name === 'crew' || o.name === 'cargo') return;
         const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        if (o.name.endsWith('-outline')) this.fadeOutlines.push(o);
-        else for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
-      });
+        if (mesh.isMesh) {
+          if (o.name.endsWith('-outline')) this.fadeOutlines.push(o);
+          else for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(m);
+        }
+        for (const c of o.children) walk(c);
+      };
+      walk(group);
       this.fadeMats = [...mats];
     }
     const solid = k >= 1 && !this.ghostly;
+    this.ship.cargoGroup.visible = solid;
     for (const m of this.fadeMats) {
       m.transparent = !solid;
       m.opacity = solid ? 1 : k * (this.ghostly ? 0.62 : 1);
@@ -338,6 +352,17 @@ export class Warship {
 
     if (this.remote) return this.followNet(dt);
 
+    // keel-up for long enough: her crew right her where she lies (the player is offered a trip home instead)
+    const upright = _upv.set(0, 1, 0).applyQuaternion(ship.body.quaternion).y;
+    this.capsized = upright < 0.25 ? this.capsized + dt : 0;
+    if (this.capsized > 6) {
+      const fw = ship.body.forward(_fwd);
+      const hp = this.hp;
+      this.placeAt(this.position.x, this.position.z, Math.atan2(-fw.x, -fw.z));
+      this.hp = hp;
+      this.capsized = 0;
+    }
+
     // the crew patch the hull once the shooting stops
     this.sinceHit += dt;
     if (this.sinceHit > ENEMY.repairDelay && this.hp < this.maxHp) {
@@ -366,6 +391,7 @@ export class Warship {
 
     // Where to head.
     let cruise = 0.55;
+    let steady = false;
     const want = _want.set(0, 0, 0);
     if (this.state === 'fight' || raid) {
       // circle the player (or the stronghold) at standoff range, which keeps it on the beam
@@ -376,41 +402,52 @@ export class Warship {
       const k = THREE.MathUtils.clamp((fr - (raid ? ENEMY.raidStandoff : ENEMY.standoff)) / 40, -1, 1);
       want.set(-rz * this.circle - rx * k, 0, rx * this.circle - rz * k);
     } else if (this.order || zone || this.escort) {
-      // go where the chart says, round the patrol zone, or keep station on the flagship; loiter in a slow circle on arrival
+      // go where the chart says, round the patrol zone, or keep station on the flagship
       let to = this.order ?? this.escort!;
       if (!this.order && zone) {
         const a = (this.patrolLeg / 5) * Math.PI * 2;
         to = _leg.set(zone.x + Math.cos(a) * zone.r * 0.6, 0, zone.z + Math.sin(a) * zone.r * 0.6);
         if (Math.hypot(to.x - pos.x, to.z - pos.z) < 34) this.patrolLeg = (this.patrolLeg + 1) % 5;
       }
-      const dx = to.x - pos.x;
-      const dz = to.z - pos.z;
-      const left = Math.hypot(dx, dz) || 1;
-      const hold = this.order ? 30 : zone ? 6 : 42;
-      const k = THREE.MathUtils.clamp((left - hold) / 30, -0.4, 1);
-      want.set(dx / left, 0, dz / left).multiplyScalar(k).add(_v.set(-dz / left, 0, dx / left).multiplyScalar(1 - Math.abs(k)));
-      cruise = left > hold + 90 ? 0.9 : left > hold + 15 ? 0.6 : 0.22;
+      const left = Math.hypot(to.x - pos.x, to.z - pos.z);
+      const len = ship.length;
+      const hold = (this.order ? 22 : zone ? 6 : 34) + len * 0.6;
+      // arrived: strike sail and lie there, rather than circling the spot; under way again once she drifts well off it.
+      // A big ship that has come close and slid past counts too: turning back for the last few metres is what made them circle.
+      const fw = ship.body.forward(_fwd);
+      const past = (to.x - pos.x) * fw.x + (to.z - pos.z) * fw.z < 0;
+      if (left < hold || (this.order && past && left < hold + len * 2.5)) this.arrived = true;
+      else if (left > hold + (this.order ? 30 + len * 2.5 : 16)) this.arrived = false;
+      if (this.arrived && !zone) {
+        cruise = 0;
+        steady = true;
+      } else {
+        // the way there, round any island in the road
+        const via = routeVia(pos, to, this.islands, _via);
+        want.set(via.x - pos.x, 0, via.z - pos.z).normalize();
+        // ease off the sail on the approach, so she glides in rather than overshooting
+        cruise = THREE.MathUtils.clamp((left - hold) / 90, 0.25, 0.9);
+      }
     } else {
       const a = (this.waypoint / 6) * Math.PI * 2;
       this.dest.set(Math.cos(a) * ENEMY.patrolRadius, 0, Math.sin(a) * ENEMY.patrolRadius);
       if (Math.hypot(this.dest.x - pos.x, this.dest.z - pos.z) < 40) this.waypoint = (this.waypoint + 1) % 6;
-      want.set(this.dest.x - pos.x, 0, this.dest.z - pos.z).normalize();
+      const via = routeVia(pos, this.dest, this.islands, _via);
+      want.set(via.x - pos.x, 0, via.z - pos.z).normalize();
     }
-    // keep off the islands
+    // keep off the islands (the route already goes round them: this is only a last shove close in)
     for (const island of this.islands) {
       const dx = pos.x - island.center.x;
       const dz = pos.z - island.center.z;
       const d = Math.hypot(dx, dz);
-      const clear = d - island.radius;
-      const keepOff = raid || this.trader ? 38 : 70; // a raider has to come in close to shell the shore
-      if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 3);
+      const clear = d - islandReach(island);
+      const keepOff = raid || this.trader ? 10 : 18; // a raider has to come in close to shell the shore
+      if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 2.5);
     }
     const fwd = ship.body.forward(_fwd).setY(0).normalize();
     shunRocks(pos, fwd, want, this.islands);
-    want.normalize();
-    const turn = fwd.x * want.z - fwd.z * want.x;
-    const ahead = fwd.dot(want);
-    const steer = ahead < -0.2 ? Math.sign(turn || 1) : THREE.MathUtils.clamp(turn * 2.5, -1, 1);
+    // lying at her station: hold the heading she has unless something needs avoiding
+    const steer = steady && want.lengthSq() < 1e-6 ? 0 : helm(fwd, want.lengthSq() < 1e-6 ? fwd : want.normalize(), ship.body.angularVelocity.y);
     const sailTarget = this.state === 'fight' ? 0.7 : raid ? 0.5 : cruise;
     ship.control(dt, ship.sail < sailTarget - 0.03 ? 1 : ship.sail > sailTarget + 0.03 ? -1 : 0, steer);
     ship.syncVisuals(dt);
@@ -421,8 +458,8 @@ export class Warship {
       const mark = raid ?? player;
       const reach = Math.hypot(mark.x - pos.x, mark.z - pos.z);
       this.battery.aimAt(mark, dt);
-      // every shell is paid for in metal
-      if (!this.battery.outOfArc && !this.battery.outOfRange && reach < BROADSIDE.maxRange && this.battery.ready && this.hooks.pay(this, 'salvage', this.battery.loaded * ECONOMY.shotMetal)) this.battery.tryFire(true);
+      // firing is free; reloading costs metal (see Broadside.payReload)
+      if (!this.battery.outOfArc && !this.battery.outOfRange && reach < BROADSIDE.maxRange && this.battery.ready) this.battery.tryFire(true);
     }
     this.shots.length = 0;
     this.battery.update(dt, this.shots);
@@ -534,6 +571,8 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 const _q = new THREE.Quaternion();
 const _leg = new THREE.Vector3();
 const _want = new THREE.Vector3();
+const _via = new THREE.Vector3();
+const _upv = new THREE.Vector3();
 const _mark = new THREE.Vector3();
 const _vel = new THREE.Vector3();
 const _v = new THREE.Vector3();

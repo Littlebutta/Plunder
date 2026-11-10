@@ -503,3 +503,63 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 @media (prefers-reduced-motion: reduce) {
   .lobby, .settings, .endgame, .chart, .menu-side, .lobby-card, .settings-card, .endgame-card { animation: none !important; }
 }
+
+/* --- Batch 6: no scrolling menus, captain picker, upgrades panel ------------------- */
+.lobby-card { overflow: hidden; max-height: none; }
+.yard, .yard-left { overflow: hidden; }
+.lobby-picker { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 22, 34, .55); z-index: 2; padding: 16px; }
+.lobby-picker[hidden] { display: none; }
+.pick-box { width: min(1100px, 96vw); background: rgba(42, 23, 8, .97); border: 2px solid #ffd27a; border-radius: 16px; padding: 18px 22px; box-shadow: 0 6px 0 rgba(0, 0, 0, .3); animation: plunder-pop 0.2s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.lobby-picker:not([hidden]) { animation: plunder-fade 0.15s ease-out; }
+.pick-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+.pick-heading { font-family: 'Pirata One', serif; font-size: 36px; line-height: 1; }
+.pick-sub { font-size: 13px; opacity: .75; margin-right: auto; }
+.pick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.lobby .pick-card { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 10px 10px 12px; border-radius: 12px; background: rgba(255, 248, 230, .06); border: 2px solid rgba(192, 129, 74, .6); font-weight: 600; }
+.lobby .pick-card:hover:not(:disabled) { background: rgba(192, 129, 74, .3); color: #fff8e6; border-color: #ffd27a; }
+.lobby .pick-card.on { background: rgba(255, 210, 122, .18); color: #fff8e6; border-color: #ffd27a; box-shadow: inset 0 0 0 1px #ffd27a; }
+.pick-card img { width: 64px; height: 64px; image-rendering: pixelated; border: 2px solid #1a1012; border-radius: 8px; }
+.pick-body { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.pick-name { font-size: 16px; font-weight: 800; }
+.pick-title { font-size: 12px; color: #ffd27a; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+.pick-ups { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.pick-ups li { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; line-height: 1.3; }
+.pick-ups li .up-icon { flex: none; color: #ffd27a; margin-top: 1px; }
+.pick-ups b { font-weight: 800; }
+.pick-ups .pick-stock span { opacity: .8; font-style: italic; }
+
+.hud-upbtn {
+  position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 64px; height: 38px; min-width: 52px; padding: 0 10px 0 8px;
+  display: flex; align-items: center; gap: 5px; border-radius: 19px; border: 2px solid #c0814a; background: rgba(42, 23, 8, .78); color: #fff8e6;
+  font: 800 15px 'Nunito', sans-serif; cursor: pointer; pointer-events: auto; box-shadow: 0 3px 0 rgba(0, 0, 0, .25);
+}
+.hud-upbtn:hover, .hud-upbtn:focus-visible { background: #c0814a; color: #2a1708; outline: none; }
+.upgrades { position: fixed; inset: 0; z-index: 28; display: grid; place-items: center; background: rgba(12, 22, 34, .35); font-family: 'Nunito', system-ui, sans-serif; color: #fff8e6; padding: 16px; }
+.upgrades[hidden] { display: none; }
+.upgrades:not([hidden]) { animation: plunder-fade 0.15s ease-out; }
+.upgrades-card { width: min(860px, 96vw); background: rgba(42, 23, 8, .95); border: 2px solid #c0814a; border-radius: 16px; padding: 18px 22px 16px; box-shadow: 0 6px 0 rgba(0, 0, 0, .3); }
+.up-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+.up-title { font-family: 'Pirata One', serif; font-size: 38px; line-height: 1; }
+.up-count { margin-right: auto; color: #ffd27a; font-weight: 800; }
+.upgrades button { font: 800 14px 'Nunito', sans-serif; color: #fff8e6; cursor: pointer; background: rgba(192, 129, 74, .18); border: 2px solid #c0814a; border-radius: 8px; padding: 6px 12px; }
+.upgrades button:hover { background: #c0814a; color: #2a1708; }
+.up-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
+.up-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255, 248, 230, .04); border: 1px solid rgba(192, 129, 74, .3); opacity: .55; }
+.up-row.have { opacity: 1; background: rgba(255, 210, 122, .1); border-color: rgba(255, 210, 122, .6); }
+.up-row.max .up-badge { background: #ffd27a; color: #2a1708; }
+.up-badge { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 2px solid #c0814a; color: #ffd27a; background: rgba(0, 0, 0, .25); }
+.up-row:not(.have) .up-badge { color: #fff8e6; border-color: rgba(255, 248, 230, .35); }
+.up-text b { display: block; font-size: 14px; }
+.up-text small { display: block; font-size: 12px; opacity: .8; }
+.up-pips { display: flex; gap: 4px; }
+.up-pips i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #c0814a; }
+.up-pips i.on { background: #ffd27a; border-color: #ffd27a; }
+.up-foot { margin-top: 12px; font-size: 13px; opacity: .85; }
+.up-foot b { color: #ffd27a; }
+@media (max-width: 700px) { .up-grid { grid-template-columns: 1fr; } }
+.hud-capsize { left: 50%; top: 38%; transform: translateX(-50%); pointer-events: auto; cursor: pointer; color: #fff8e6; font: 700 17px 'Nunito', sans-serif; border-color: #ffb27a; padding: 12px 20px; }
+.hud-capsize[hidden] { display: none; }
+.hud-capsize b { color: #ffb27a; margin-right: 8px; }
+.hud-capsize kbd { display: inline-block; background: #fff8e6; color: #2a1708; border-radius: 4px; padding: 0 6px; margin: 0 4px; font-weight: 800; }
+.hud-capsize:hover { background: rgba(192, 129, 74, .9); }

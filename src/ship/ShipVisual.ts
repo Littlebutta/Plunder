@@ -30,6 +30,8 @@ export interface ShipVisual {
    * and rigging and is hinged at the deck, so a shot-away mast can topple.
    */
   masts: MastVisual[];
+  /** Where the helmsman stands, at the wheel (or at the tiller on a small boat), in ship space. */
+  helm: THREE.Vector3;
 }
 
 export interface MastVisual {
@@ -408,6 +410,8 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   }
 
   // --- Deck fittings ---------------------------------------------------------------
+  /** The helmsman's place: at the tiller unless a wheel is fitted below. */
+  const helm = new THREE.Vector3(0, 0, zAt(d, 0.9));
   const clearOfMasts = (t: number, gap: number) => d.masts.every((m) => Math.abs(m.t - t) * d.length > gap);
   if (big) {
     // cargo hatch with a grating
@@ -428,6 +432,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
       post.position.set(0, wy + 0.35, zAt(d, wt));
       const wheel = add(new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 6, 14), woodLight), 0.015);
       wheel.position.set(0, wy + 0.72, zAt(d, wt) + 0.12); // on the after side: the helmsman stands behind it, facing the bow
+      helm.set(0, 0, zAt(d, wt) + 0.5);
       for (let n = 0; n < 4; n++) {
         const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.84, 4), woodLight);
         spoke.rotation.z = (n * Math.PI) / 4;
@@ -499,7 +504,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   const gunMounts = d.cannons.map((c) => cannonMount(d, c));
   void hull;
 
-  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces, masts };
+  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces, masts, helm };
 }
 
 /** Free the GPU memory of a built ship (the shipyard rebuilds its preview on every edit). */

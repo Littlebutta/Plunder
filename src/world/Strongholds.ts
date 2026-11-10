@@ -104,6 +104,8 @@ export class Stronghold {
   sinceHit = 99;
   /** Stone owed for repairs under way. */
   stoneDue = 0;
+  /** Shots already paid for: one metal loads three. */
+  shotsPaid = 0;
   /** Running shares that decide which resource the next unit of income is. */
   readonly yieldAcc = emptyStock();
   private readonly gunTimers: number[] = [];
@@ -717,10 +719,14 @@ export class Territory {
       }
       s.update(dt, !mending);
 
-      // guns: every shot is paid for in metal
+      // guns: loading costs metal, one metal for three shots
       const ready = s.gunsReady(dt, !s.ruined && range < STRONGHOLD.gunRange);
       for (let g = 0; g < ready; g++) {
-        if (!this.hooks.pay(s.side, 'salvage', ECONOMY.shotMetal)) break;
+        if (s.shotsPaid <= 0) {
+          if (!this.hooks.pay(s.side, 'salvage', ECONOMY.shotMetal)) break;
+          s.shotsPaid += ECONOMY.shotsPerMetal;
+        }
+        s.shotsPaid--;
         s.muzzle(_from);
         const lead = range / STRONGHOLD.gunSpeed;
         const stray = range * STRONGHOLD.gunScatter;
