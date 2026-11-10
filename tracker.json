@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:12:30Z",
+  "updated": "2026-11-10T03:12:32Z",
   "categories": [
     {
       "key": "feature",
@@ -1811,13 +1811,15 @@
       "id": "F-84",
       "cat": "feature",
       "title": "Build and design ships from the Home base on the chart",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/20"
+      ],
       "created": "2026-11-10T02:34:03Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:34:03Z",
+      "updated": "2026-11-10T03:12:32Z",
       "by": "Claude"
     },
     {
