@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:12:48Z",
+  "updated": "2026-11-10T03:12:50Z",
   "categories": [
     {
       "key": "feature",
@@ -1867,15 +1867,15 @@
       "id": "F-88",
       "cat": "feature",
       "title": "Minimap: clearer whose ships are whose",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #19",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/19"
       ],
       "created": "2026-11-10T02:34:12Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:52:54Z",
+      "updated": "2026-11-10T03:12:50Z",
       "by": "Claude"
     }
   ],
