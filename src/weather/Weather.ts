@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { AtmosphereState, createAtmosphere, copyAtmosphere, lerpAtmosphere, luminance } from './Atmosphere';
 import { DayNight } from './DayNight';
-import { Rain, Lightning } from './Rain';
+import { Rain, Lightning, ASH } from './Rain';
+import { Volcano } from './Volcano';
+import type { Island } from '../world/Islands';
 import { Lurkers, LURKER_ID_BASE } from './Lurkers';
 import { CursedFleet, CURSED_ID_BASE } from './CursedFleet';
 import type { WaveField } from '../ocean/waves';
@@ -10,8 +12,8 @@ import type { Collider } from '../combat/ProjectileSystem';
 import type { Sky } from '../sky/Sky';
 import type { Ocean } from '../ocean/Ocean';
 
-export type WeatherKind = 'fog' | 'storm' | 'lurker' | 'armageddon';
-export const WEATHER_KINDS: WeatherKind[] = ['fog', 'storm', 'lurker', 'armageddon'];
+export type WeatherKind = 'fog' | 'storm' | 'lurker' | 'armageddon' | 'volcano';
+export const WEATHER_KINDS: WeatherKind[] = ['fog', 'storm', 'lurker', 'armageddon', 'volcano'];
 
 /** Names and one-line hints for the banner, per level 1..3. */
 export const WEATHER_INFO: Record<WeatherKind, { names: [string, string, string]; hint: [string, string, string] }> = {
@@ -27,6 +29,10 @@ export const WEATHER_INFO: Record<WeatherKind, { names: [string, string, string]
     names: ['Eyes in the Deep', 'The Lurkers Hunt', 'The Lurkers Swarm'],
     hint: ['Something is following you. Keep moving.', 'Two pairs of eyes below. Steer clear of the tentacles.', 'They are everywhere. Shoot the eyes to drive them off.'],
   },
+  volcano: {
+    names: ['The Mountain Rumbles', 'Eruption', 'Fire from the Sky'],
+    hint: ['Smoke and the odd fireball. Watch for red rings on the water.', 'Fireballs rain down. Steer out of the red rings.', 'The mountain tears itself open. Keep moving.'],
+  },
   armageddon: {
     names: ['Blood Tide', 'Armageddon', 'Armageddon Unleashed'],
     hint: ['The sea turns red. Cursed ships rise.', 'A cursed fleet climbs out of the deep.', 'The damned fleet hunts you. Sink them all.'],
@@ -39,6 +45,7 @@ const DURATION: Record<WeatherKind, [number, number]> = {
   storm: [80, 120],
   lurker: [90, 130],
   armageddon: [150, 200],
+  volcano: [80, 120],
 };
 const FADE_IN = 10;
 const FADE_OUT = 10;
@@ -60,6 +67,10 @@ export interface WeatherHooks {
   hitShip(damage: number, at: THREE.Vector3, shove: THREE.Vector3): void;
   /** A cursed ship fires a cannonball. */
   fire(from: THREE.Vector3, velocity: THREE.Vector3, owner: number, dir: THREE.Vector3): void;
+  /** Every island (a volcano wakes on a mountain one). */
+  islands: Island[];
+  /** A fireball came down: hurt whatever is within `radius`. */
+  blast(at: THREE.Vector3, radius: number, damage: number): void;
   /** Show a message banner. */
   announce(title: string, subtitle: string, tone: 'calm' | 'danger' | 'good'): void;
   thunder?(distance: number, strength: number): void;
@@ -88,21 +99,25 @@ interface ActiveEvent {
  * levels, and turns them into one atmosphere per frame for the sky, sea, fog
  * and lights.
  *
- * Events are meant to roll between rounds: `nextRound()` picks one. Until the
- * round loop exists, `auto` rolls one after a calm spell of a couple of
- * minutes. The debug panel (G) can start any event at any level.
+ * A match has no rounds: `auto` rolls an event after each calm spell, and
+ * both the calm and the pick follow `escalation`, so the sea gets angrier the
+ * longer a match runs. The debug panel (G) can start any event at any level.
  */
 export class Weather {
   readonly dayNight: DayNight;
   readonly atmosphere: AtmosphereState = createAtmosphere();
   readonly rain = new Rain();
   readonly lightning = new Lightning();
+  readonly ash = new Rain(ASH);
+  readonly volcano: Volcano;
+  /** 0..1: how far into the match we are. Events come sooner and hit harder as it rises. */
+  escalation = 0;
   readonly lurkers: Lurkers;
   readonly fleet: CursedFleet;
   readonly group = new THREE.Group();
 
   event: ActiveEvent | null = null;
-  /** Roll events on a timer (until rounds exist). */
+  /** Roll events on a timer. */
   auto = true;
   /** Seconds of calm left before the next automatic event. */
   calm = 120;
@@ -117,7 +132,9 @@ export class Weather {
   constructor(private readonly hooks: WeatherHooks) {
     this.group.name = 'weather';
     this.dayNight = hooks.dayNight;
-    this.group.add(this.rain.mesh, this.lightning.mesh);
+    this.group.add(this.rain.mesh, this.lightning.mesh, this.ash.mesh);
+    this.volcano = new Volcano(hooks.waves, { splash: hooks.splash, blast: hooks.blast });
+    this.group.add(this.volcano.group);
     this.lurkers = new Lurkers(hooks.waves, hooks.ocean.material.uniforms, {
       splash: hooks.splash,
       hitShip: hooks.hitShip,
@@ -164,6 +181,17 @@ export class Weather {
     this.event = { kind, level, time: 0, duration: lo + Math.random() * (hi - lo), ending: false, weight: this.event?.weight ?? 0 };
     if (kind === 'lurker') this.lurkers.start(level, ship);
     if (kind === 'armageddon') this.fleet.start(level);
+    if (kind === 'volcano') {
+      const mount = this.mountainNear(ship.position);
+      if (!mount) {
+        this.event = null;
+        this.start('storm', level, ship);
+        return;
+      }
+      this.volcano.start(mount, level);
+      this.hooks.announce(WEATHER_INFO.volcano.names[level - 1], `${mount.name} erupts! ${WEATHER_INFO.volcano.hint[level - 1]}`, 'danger');
+      return;
+    }
     this.nextStrike = 4;
     const info = WEATHER_INFO[kind];
     this.hooks.announce(info.names[level - 1], info.hint[level - 1], kind === 'fog' ? 'calm' : 'danger');
@@ -176,12 +204,42 @@ export class Weather {
     if (this.event.kind === 'armageddon') this.fleet.stop();
   }
 
-  /** Pick a random event for the coming round; level rises with the round number. */
-  nextRound(ship: ShipState, round = 1): void {
-    const kind = WEATHER_KINDS[Math.floor(Math.random() * WEATHER_KINDS.length)];
-    const maxLevel = THREE.MathUtils.clamp(1 + Math.floor(round / 2), 1, 3);
-    const level = 1 + Math.floor(Math.random() * maxLevel);
+  /**
+   * Pick a random event. Early in a match they are mild; as `escalation`
+   * climbs the strong levels and the worst kinds (the volcano, armageddon)
+   * come up more often.
+   */
+  nextEvent(ship: ShipState): void {
+    const e = this.escalation;
+    const weights: Record<WeatherKind, number> = { fog: 1.2 - e * 0.6, storm: 1, lurker: 0.8 + e * 0.2, volcano: 0.5 + e, armageddon: 0.2 + e * 1.2 };
+    let roll = Math.random() * WEATHER_KINDS.reduce((n, k) => n + weights[k], 0);
+    let kind: WeatherKind = 'fog';
+    for (const k of WEATHER_KINDS) {
+      roll -= weights[k];
+      if (roll <= 0) {
+        kind = k;
+        break;
+      }
+    }
+    // level 1 at the start; by half an hour in, mostly 2s and 3s
+    const level = THREE.MathUtils.clamp(1 + Math.round(e * 2 + (Math.random() - 0.5) * 1.2), 1, 3);
     this.start(kind, level, ship);
+  }
+
+  /** The mountain island nearest a point (peaks first, then ridges). */
+  private mountainNear(p: THREE.Vector3): Island | null {
+    const mounts = this.hooks.islands.filter((i) => i.type === 'peak');
+    const pool = mounts.length ? mounts : this.hooks.islands.filter((i) => i.type === 'ridge');
+    let best: Island | null = null;
+    let bestD = Infinity;
+    for (const i of pool) {
+      const d = Math.hypot(i.center.x - p.x, i.center.z - p.z) + Math.random() * 120;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
   }
 
   colliders(): Collider[] {
@@ -207,7 +265,7 @@ export class Weather {
     // --- event timeline ---
     if (!this.event && this.auto && playing) {
       this.calm -= dt;
-      if (this.calm <= 0) this.nextRound(ship, 3);
+      if (this.calm <= 0) this.nextEvent(ship);
     }
     const ev = this.event;
     if (ev) {
@@ -218,7 +276,8 @@ export class Weather {
       if (ev.ending && ev.weight <= 0 && !this.fleet.alive) {
         this.endEffects();
         this.event = null;
-        this.calm = this.calmRange[0] + Math.random() * (this.calmRange[1] - this.calmRange[0]);
+        // calm spells shorten as the match goes on
+        this.calm = (this.calmRange[0] + Math.random() * (this.calmRange[1] - this.calmRange[0])) * (1 - this.escalation * 0.55);
       }
     }
 
@@ -244,6 +303,11 @@ export class Weather {
       if (!ev || ev.kind !== 'lurker') this.lurkers.clear();
     }
     this.fleet.update(dt, ship, ev?.kind === 'armageddon' ? ev.weight : 0);
+    const erupting = ev?.kind === 'volcano' ? ev.weight : 0;
+    this.volcano.presence = erupting;
+    this.volcano.update(dt, ship);
+    this.ash.amount = erupting * [0.3, 0.55, 0.85][level - 1];
+    this.ash.update(dt, camera.position, this.hooks.wind.direction, this.hooks.wind.strength, luminance(a.horizon));
 
     this.hooks.rainSound?.(this.rain.amount);
     this.rain.update(dt, camera.position, this.hooks.wind.direction, this.hooks.wind.strength, luminance(a.horizon));
@@ -320,6 +384,31 @@ export class Weather {
         t.windScale = 0.8;
         break;
       }
+      case 'volcano': {
+        // a red, ash-choked sky: the light goes orange and the horizon closes in
+        const k = THREE.MathUtils.clamp(bright, 0.4, 1);
+        t.skyTop.set(0x2b1a17).multiplyScalar(k);
+        t.skyMid.set(0x6a2c1c).multiplyScalar(k);
+        t.horizon.set(0xb4502a).multiplyScalar(k);
+        t.sunGlow.set(0xff4a14);
+        t.sunVis *= 0.35;
+        t.moonVis *= 0.35;
+        t.stars = 0;
+        t.cloudColor.set(0x4a3a36).multiplyScalar(k);
+        t.cloudGlow.set(0x8a3a1a).multiplyScalar(k);
+        t.lightColor.set(0xff9a6a);
+        t.lightIntensity *= [0.75, 0.62, 0.5][lv];
+        t.hemiSky.set(0xc7744f).multiplyScalar(k);
+        t.hemiGround.set(0x2a1410);
+        t.fogColor.set(0x6e3a2a).multiplyScalar(k);
+        t.fogNear = 30;
+        t.fogFar = [700, 520, 380][lv];
+        t.skyFog = [0.35, 0.5, 0.65][lv];
+        t.waterTint.set(0x5a2a1a);
+        t.waterTintAmount = [0.3, 0.42, 0.55][lv];
+        t.windScale = 1.1;
+        break;
+      }
       case 'armageddon': {
         const k = THREE.MathUtils.clamp(bright, 0.45, 1);
         t.skyTop.set(0x2a0505).multiplyScalar(k);
@@ -369,6 +458,7 @@ export class Weather {
   }
 
   private endEffects(): void {
+    this.volcano.clear();
     this.lurkers.clear();
     this.fleet.clear();
   }

@@ -260,6 +260,22 @@ const weather = new Weather({
     effects.splinters(at, count);
     audio.woodHit(at);
   },
+  islands: world.islands,
+  blast: (at, radius, damage) => {
+    effects.splinters(at, 10);
+    audio.play('cannon', { volume: 1, rate: 0.55, rateJitter: 0.1, position: at });
+    if (sunkFor < 0 && Math.hypot(ship.body.position.x - at.x, ship.body.position.z - at.z) < radius + ship.length * 0.3) {
+      hull.damage(damage);
+      effects.splinters(ship.body.position, 18);
+      ship.body.velocity.add(_shove.set(ship.body.position.x - at.x, 0, ship.body.position.z - at.z).setLength(2.5));
+    }
+    if (!authority) return;
+    for (const w of ships) {
+      if (!w.alive || w.remote || Math.hypot(w.position.x - at.x, w.position.z - at.z) > radius + w.collider.radius) continue;
+      w.ship.crewHit(at, 1);
+      w.scrape(damage);
+    }
+  },
   hitShip: (damage, at, shove) => {
     hull.damage(damage);
     ship.body.velocity.add(shove);
@@ -1681,6 +1697,7 @@ hull.spend = (hp) => {
   return true;
 };
 const _flot = new THREE.Vector3();
+const _shove = new THREE.Vector3();
 const _playerSight: ShipSight = { position: ship.body.position, velocity: ship.body.velocity, alive: true, faction: ME };
 /** Every ship afloat this frame, as the territory rules and the AI see them. */
 const sights: ShipSight[] = [];
@@ -1909,6 +1926,7 @@ function step(rawDt: number): void {
   if (active && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
   if (playing) updateRaids(dt);
   if (running) matchTime += dt;
+  weather.escalation = Math.min(1, matchTime / 1800);
   applyMods();
   if (running && authority) updateGhosts(dt);
   if (running && authority) trade.update(dt);

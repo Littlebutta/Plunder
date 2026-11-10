@@ -30,6 +30,8 @@ export interface Island {
   shoreAt(angle: number): number;
   /** Highest point of the terrain (m). */
   topY: number;
+  /** Where that highest point is, in the island's own space (y = topY). */
+  summit: THREE.Vector3;
   name: string;
   /** Resources the island holds when untouched, and what is left right now. */
   capacity: Stock;
@@ -377,6 +379,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   const SHORE_STEPS = 72;
   const shoreTable = new Float32Array(SHORE_STEPS);
   let topY = 0;
+  const summit = new THREE.Vector3();
   for (let i = 0; i < SHORE_STEPS; i++) {
     const a = (i / SHORE_STEPS) * Math.PI * 2;
     const coast = coastAt(a);
@@ -384,8 +387,19 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     for (let k = 0; k <= 30; k++) {
       const r = coast * (1.05 - k * 0.03);
       const h = height(Math.cos(a) * r, Math.sin(a) * r);
-      topY = Math.max(topY, h);
+      if (h > topY) {
+        topY = h;
+        summit.set(Math.cos(a) * r, h, Math.sin(a) * r);
+      }
       if (h > 0 && shoreTable[i] === coast * 0.5) shoreTable[i] = r;
+    }
+  }
+  // the scan above runs in rings; a mountain's own top can sit between them
+  for (const p of [{ x: 0, z: 0 }, ...peaks]) {
+    const h = height(p.x, p.z);
+    if (h > topY) {
+      topY = h;
+      summit.set(p.x, h, p.z);
     }
   }
   const shoreAt = (angle: number) => {
@@ -395,7 +409,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   };
   const capacity = islandCapacity(type, radius);
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null, owner: -1, rocks };
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, summit, name: '', capacity, stock: { ...capacity }, port: null, owner: -1, rocks };
 }
 
 const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];

@@ -85,5 +85,5 @@ export function addWeatherControls(gui: GUI, weather: Weather, ship: () => ShipS
   f.add(ctl, 'level', 1, 3, 1).name('level');
   f.add({ start: () => weather.start(ctl.event, ctl.level, ship()) }, 'start').name('start event');
   f.add({ stop: () => weather.stop() }, 'stop').name('clear weather');
-  f.add({ next: () => weather.nextRound(ship(), 4) }, 'next').name('random event');
+  f.add({ next: () => weather.nextEvent(ship()) }, 'next').name('random event');
 }
