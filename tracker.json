@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:17Z",
+  "updated": "2026-11-10T05:32:19Z",
   "categories": [
     {
       "key": "feature",
@@ -1544,13 +1544,15 @@
       "id": "F-65",
       "cat": "feature",
       "title": "Shipyard: cannons drawn as cannons (not black squares) and reliable placement",
-      "status": "idea",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Shipped in PR #22",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/22"
+      ],
       "created": "2026-11-10T02:33:20Z",
       "priority": "high",
-      "updated": "2026-11-10T02:33:20Z",
+      "updated": "2026-11-10T05:32:19Z",
       "by": "Claude"
     },
     {
