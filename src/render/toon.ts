@@ -38,7 +38,10 @@ export function addOutline(mesh: THREE.Mesh, thickness = 0.04, color: THREE.Colo
         .replace('#include <common>', '#include <common>\nuniform float uThickness;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * uThickness;');
     };
-    mat.customProgramCacheKey = () => key;
+    // the thickness is a uniform, so every outline shares one shader: a new thickness never stalls a frame compiling
+    mat.customProgramCacheKey = () => 'ink-outline';
+    // read by `bakeMerged`, which pushes the shell out itself and draws it with `plainOutline`
+    mat.userData.outline = thickness;
     outlineMaterials.set(key, mat);
   }
   const outline = new THREE.Mesh(mesh.geometry, mat);
@@ -59,4 +62,17 @@ const _canvas = new THREE.Color(0xf3e6c8);
 /** An owner's colour as sailcloth: the colour, softened a little toward canvas so the cel bands still read. */
 export function sailTint(colour: THREE.ColorRepresentation): THREE.Color {
   return _tint.set(colour).lerp(_canvas, 0.22).clone();
+}
+
+const plainOutlines = new Map<string, THREE.MeshBasicMaterial>();
+
+/** The outline material for a shell that is already pushed out (merged static scenery). */
+export function plainOutline(color: THREE.Color): THREE.MeshBasicMaterial {
+  const key = color.getHexString();
+  let mat = plainOutlines.get(key);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({ color: color.clone(), side: THREE.BackSide });
+    plainOutlines.set(key, mat);
+  }
+  return mat;
 }

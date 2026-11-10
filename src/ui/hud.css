@@ -449,3 +449,57 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .chart-fleet button:hover { background: #c0814a; color: #2a1708; }
 .chart-fleet small { opacity: .75; margin-left: 4px; }
 .chart-help { max-width: calc(100vw - 60px); white-space: normal; text-align: center; }
+
+/* --- captains: pixel portraits ------------------------------------------------ */
+canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; display: block; border-radius: 4px; }
+.settings-captains { display: grid; grid-template-columns: repeat(8, auto); gap: 6px; justify-content: start; }
+.settings-captains button { padding: 3px; border-radius: 7px; border: 2px solid transparent; background: rgba(0, 0, 0, 0.25); cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease; }
+.settings-captains button:hover { transform: translateY(-2px); }
+.settings-captains button.on { border-color: #ffd27a; background: rgba(255, 210, 122, 0.18); }
+@media (max-width: 720px) { .settings-captains { grid-template-columns: repeat(4, auto); } }
+
+/* --- captain chatter ---------------------------------------------------------- */
+.chat { position: fixed; left: 18px; bottom: 132px; z-index: 6; pointer-events: none; display: flex; flex-direction: column; gap: 6px; max-width: min(460px, calc(100vw - 36px)); }
+.chat-card { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px 8px 8px; background: rgba(26, 16, 10, 0.86); border: 2px solid #8a5a2c; border-radius: 10px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); opacity: 0; transform: translateX(-24px); transition: opacity 0.22s ease, transform 0.22s ease; }
+.chat.show .chat-card { opacity: 1; transform: none; }
+.chat-face canvas { border: 2px solid #1a1012; border-radius: 4px; }
+.chat-body { min-width: 0; padding-top: 2px; }
+.chat-who { font-weight: 800; font-size: 13px; color: #ffd27a; letter-spacing: 0.4px; display: flex; align-items: center; gap: 6px; }
+.chat-who i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.chat-text { margin-top: 4px; font-size: 15px; line-height: 1.35; color: #fff4e0; min-height: 40px; word-wrap: break-word; }
+.chat-log { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #f3e6c8; text-shadow: 0 1px 2px #000; }
+.chat-log div { transition: opacity 1.5s ease; }
+.chat-log div.old { opacity: 0; }
+.chat-input { pointer-events: auto; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 2px solid #ffd27a; background: rgba(26, 16, 10, 0.92); color: #fff4e0; outline: none; }
+.in-menu .chat { display: none; }
+
+/* lobby: eight seats with captain portraits */
+.lobby .lobby-face { padding: 0; width: 40px; height: 40px; border-radius: 6px; border: 2px solid #1a1012; background: none; cursor: pointer; flex: none; overflow: hidden; }
+.lobby-face img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.lobby .lobby-face:disabled { cursor: default; opacity: 1; }
+.lobby .lobby-face:hover:not(:disabled) { background: none; border-color: #fff8e6; }
+.lobby .lobby-slot.closed .lobby-face { opacity: 0.35; filter: grayscale(1); }
+.lobby-name small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 11px; line-height: 1.25; font-weight: 600; opacity: 0.7; overflow: hidden; }
+.lobby-team { min-width: 70px; }
+.lobby-slot { grid-template-columns: 40px 34px minmax(0, 1fr) auto auto; padding: 5px 10px; margin-bottom: 5px; min-height: 44px; gap: 10px; }
+.chat-log div { width: fit-content; max-width: 100%; padding: 2px 8px; border-radius: 6px; background: rgba(26, 16, 10, 0.72); text-shadow: none; }
+.chat-log b { font-weight: 800; filter: brightness(1.25); }
+.settings-captains { grid-template-columns: repeat(8, 1fr); }
+.settings-captains button { display: flex; justify-content: center; }
+
+/* --- polish: panels ease in, buttons answer the hand ----------------------- */
+@keyframes plunder-pop { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes plunder-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes plunder-slide { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+.lobby:not([hidden]), .settings:not([hidden]), .endgame:not([hidden]) { animation: plunder-fade 0.18s ease-out; }
+.lobby:not([hidden]) .lobby-card, .settings:not([hidden]) .settings-card, .endgame:not([hidden]) .endgame-card { animation: plunder-pop 0.22s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.menu:not([hidden]) .menu-side { animation: plunder-slide 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.chart:not([hidden]) { animation: plunder-fade 0.16s ease-out; }
+.menu button, .lobby button, .settings button, .endgame-card button {
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+.menu button:active:not(:disabled), .lobby button:active:not(:disabled), .settings button:active:not(:disabled), .endgame-card button:active { transform: translateY(1px); }
+.menu button:hover:not(:disabled) { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .lobby, .settings, .endgame, .chart, .menu-side, .lobby-card, .settings-card, .endgame-card { animation: none !important; }
+}

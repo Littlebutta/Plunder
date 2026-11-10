@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
+import { bakeMerged, disposeMerged } from '../render/merge';
 import { RESOURCE_IDS, ResourceId, Stock } from '../world/Resources';
 
 const mats = {
@@ -53,9 +54,13 @@ function piece(id: ResourceId, n: number): THREE.Object3D {
  * what shows is what is in the hold (timber, stone, metals).
  */
 export class CargoPile {
+  /** What is drawn: the pieces on show, baked into a mesh per material. */
   readonly group = new THREE.Group();
+  /** Every piece for every place, kept out of the scene. */
+  private readonly parts = new THREE.Group();
   private readonly slots: Record<ResourceId, THREE.Object3D>[] = [];
   private key = '';
+  private shown = '';
 
   constructor(places: THREE.Vector3[]) {
     this.group.name = 'cargo';
@@ -65,7 +70,7 @@ export class CargoPile {
         const p = piece(id, n);
         p.position.copy(at);
         p.visible = false;
-        this.group.add(p);
+        this.parts.add(p);
         set[id] = p;
       }
       this.slots.push(set);
@@ -87,8 +92,15 @@ export class CargoPile {
       acc[pick] -= 1;
       order.push(pick);
     }
+    // a few crates are a few dozen meshes: bake what shows, and only when that changes
+    const shown = order.join(',');
+    if (shown === this.shown) return;
+    this.shown = shown;
     this.slots.forEach((set, i) => {
       for (const id of RESOURCE_IDS) set[id].visible = i < show && order[i] === id;
     });
+    disposeMerged(this.group.children);
+    this.group.clear();
+    for (const m of bakeMerged(this.parts)) this.group.add(m);
   }
 }

@@ -180,48 +180,107 @@ export class WaveField {
       a.set(Math.cos(rad), Math.sin(rad), k, q / k);
       b.set(c, q, w.phase ?? 0, THREE.MathUtils.clamp(w.grouping ?? 0, 0, 0.95));
     }
+    this.refreshCoef();
   }
 
   /**
-   * Phase, envelope and warp gradient of wave i at grid point (x, z).
+   * Per-wave constants for the CPU twin, so a sample is mostly a handful of
+   * multiply-adds and sines. `coef` holds the parts that depend on position
+   * (16 per wave), `timeCoef` the parts that depend only on the clock (6 per
+   * wave), refreshed once per new wave time.
+   */
+  private readonly coef = new Float64Array(MAX_WAVES * 16);
+  private readonly timeCoef = new Float64Array(MAX_WAVES * 6);
+  private coefTime = NaN;
+
+  /** Rebuild the position constants from the uniforms (`syncUniforms` calls this). */
+  private refreshCoef(): void {
+    const n = this.uniforms.uWaveCount.value;
+    const s = this.coef;
+    for (let i = 0; i < n; i++) {
+      const a = this.uniforms.uWaveA.value[i];
+      const b = this.uniforms.uWaveB.value[i];
+      const dx = a.x;
+      const dz = a.y;
+      const k = a.z;
+      const kg = k / GROUP_LENGTH;
+      const kc = k / CREST_LENGTH;
+      const kq = k / WARP_LENGTH;
+      const o = i * 16;
+      s[o] = k * dx;
+      s[o + 1] = k * dz;
+      s[o + 2] = a.w;
+      s[o + 3] = dx;
+      s[o + 4] = dz;
+      s[o + 5] = b.y;
+      s[o + 6] = b.w;
+      s[o + 7] = kg * (dx * COS_SKEW - dz * SIN_SKEW);
+      s[o + 8] = kg * (dx * SIN_SKEW + dz * COS_SKEW);
+      s[o + 9] = kc * (dx * COS_CREST - dz * SIN_CREST);
+      s[o + 10] = kc * (dx * SIN_CREST + dz * COS_CREST);
+      s[o + 11] = kq * (dx * COS_WA - dz * SIN_WA);
+      s[o + 12] = kq * (dx * SIN_WA + dz * COS_WA);
+      s[o + 13] = kq * 1.7 * (dx * COS_WB - dz * SIN_WB);
+      s[o + 14] = kq * 1.7 * (dx * SIN_WB + dz * COS_WB);
+    }
+    this.coefTime = NaN;
+  }
+
+  /** The clock-only parts of every wave at time t. */
+  private refreshTime(t: number): void {
+    if (t === this.coefTime) return;
+    this.coefTime = t;
+    const n = this.uniforms.uWaveCount.value;
+    const tc = this.timeCoef;
+    for (let i = 0; i < n; i++) {
+      const a = this.uniforms.uWaveA.value[i];
+      const b = this.uniforms.uWaveB.value[i];
+      const k = a.z;
+      const c = b.x;
+      const ph = b.z;
+      const kq = k / WARP_LENGTH;
+      const o = i * 6;
+      tc[o] = -(k / GROUP_LENGTH) * c * 0.5 * t + ph * 1.7;
+      tc[o + 1] = -(k / CREST_LENGTH) * c * 0.35 * t + ph * 2.9;
+      tc[o + 2] = 1 + BREATH * Math.sin(t * (BREATH_RATE + BREATH_SPREAD * ph) + ph * 4.7);
+      tc[o + 3] = -kq * c * 0.2 * t + ph * 3.1;
+      tc[o + 4] = kq * 1.7 * c * 0.15 * t + ph * 5.3;
+      tc[o + 5] = -k * c * t + ph;
+    }
+  }
+
+  /**
+   * Phase, envelope and (with `slope`) warp gradient of wave i at grid point
+   * (x, z), at the time `refreshTime` was last given.
    * GLSL twin: `waveEval()` in GERSTNER_GLSL.
    */
-  private evalWave(i: number, x: number, z: number, t: number): void {
-    const a = this.uniforms.uWaveA.value[i];
-    const b = this.uniforms.uWaveB.value[i];
+  private evalWave(i: number, x: number, z: number, slope: boolean): void {
+    const s = this.coef;
+    const tc = this.timeCoef;
+    const o = i * 16;
+    const p = i * 6;
     const ev = this.ev;
-    const dx = a.x;
-    const dz = a.y;
-    const k = a.z;
-    const c = b.x;
-    const ph = b.z;
-    const g = b.w;
-
-    let env = 1;
+    const g = s[o + 6];
+    // slow breathing on the wave's own clock
+    let env = tc[p + 2];
     if (g > 0) {
       // wave groups (sets) travelling at half the phase speed
-      const e1 = Math.sin((k / GROUP_LENGTH) * ((dx * COS_SKEW - dz * SIN_SKEW) * x + (dx * SIN_SKEW + dz * COS_SKEW) * z - c * 0.5 * t) + ph * 1.7);
+      const e1 = Math.sin(s[o + 7] * x + s[o + 8] * z + tc[p]);
       // along-crest modulation: breaks long crests into short humps
-      const e2 = Math.sin((k / CREST_LENGTH) * ((dx * COS_CREST - dz * SIN_CREST) * x + (dx * SIN_CREST + dz * COS_CREST) * z - c * 0.35 * t) + ph * 2.9);
-      env = (1 - g + g * 0.85 * (1 + e1)) * (1 + g * 0.7 * e2);
+      const e2 = Math.sin(s[o + 9] * x + s[o + 10] * z + tc[p + 1]);
+      env *= (1 - g + g * 0.85 * (1 + e1)) * (1 + g * 0.7 * e2);
     }
-    // slow breathing on the wave's own clock
-    env *= 1 + BREATH * Math.sin(t * (BREATH_RATE + BREATH_SPREAD * ph) + ph * 4.7);
     ev.env = env;
-
-    const kq = k / WARP_LENGTH;
-    const ax = dx * COS_WA - dz * SIN_WA;
-    const az = dx * SIN_WA + dz * COS_WA;
-    const bx = dx * COS_WB - dz * SIN_WB;
-    const bz = dx * SIN_WB + dz * COS_WB;
-    const u1 = kq * (ax * x + az * z - c * 0.2 * t) + ph * 3.1;
-    const u2 = kq * 1.7 * (bx * x + bz * z + c * 0.15 * t) + ph * 5.3;
+    const u1 = s[o + 11] * x + s[o + 12] * z + tc[p + 3];
+    const u2 = s[o + 13] * x + s[o + 14] * z + tc[p + 4];
     const wp = this.warp;
-    const c1 = Math.cos(u1) * wp * kq;
-    const c2 = Math.cos(u2) * wp * kq * 1.7;
-    ev.wx = ax * c1 + bx * c2;
-    ev.wz = az * c1 + bz * c2;
-    ev.f = k * (dx * x + dz * z - c * t) + ph + wp * (Math.sin(u1) + Math.sin(u2));
+    if (slope) {
+      const c1 = Math.cos(u1) * wp;
+      const c2 = Math.cos(u2) * wp;
+      ev.wx = s[o + 11] * c1 + s[o + 13] * c2;
+      ev.wz = s[o + 12] * c1 + s[o + 14] * c2;
+    }
+    ev.f = s[o] * x + s[o + 1] * z + tc[p + 5] + wp * (Math.sin(u1) + Math.sin(u2));
   }
 
   /**
@@ -229,19 +288,23 @@ export class WaveField {
    * Writes into `out` (dx, dy, dz) and returns it.
    */
   displacement(x: number, z: number, out: THREE.Vector3): THREE.Vector3 {
-    out.set(0, 0, 0);
-    const t = this.time;
+    this.refreshTime(this.time);
     const n = this.uniforms.uWaveCount.value;
+    const s = this.coef;
     const ev = this.ev;
+    let ox = 0;
+    let oy = 0;
+    let oz = 0;
     for (let i = 0; i < n; i++) {
-      const a = this.uniforms.uWaveA.value[i];
-      this.evalWave(i, x, z, t);
-      const amp = a.w * ev.env;
+      this.evalWave(i, x, z, false);
+      const o = i * 16;
+      const amp = s[o + 2] * ev.env;
       const cf = Math.cos(ev.f);
-      out.x += a.x * amp * cf;
-      out.y += amp * Math.sin(ev.f);
-      out.z += a.y * amp * cf;
+      ox += s[o + 3] * amp * cf;
+      oy += amp * Math.sin(ev.f);
+      oz += s[o + 4] * amp * cf;
     }
+    out.set(ox, oy, oz);
     if (this.shore) out.multiplyScalar(this.shore.waveScale(x, z));
     return out;
   }
@@ -283,27 +346,47 @@ export class WaveField {
   }
 
   /**
+   * Height at (x, z) for a point that moves only a little between calls, such
+   * as a buoyancy probe: `guess` keeps the sideways offset found last time, so
+   * one refinement is enough instead of four (pass {x: NaN, z: NaN} at first).
+   */
+  heightNear(x: number, z: number, guess: { x: number; z: number }): number {
+    if (Number.isNaN(guess.x)) {
+      const h = this.heightAt(x, z);
+      guess.x = _tmpD.x;
+      guess.z = _tmpD.z;
+      return h;
+    }
+    const d = _tmpD;
+    this.displacement(x - guess.x, z - guess.z, d);
+    this.displacement(x - d.x, z - d.z, d);
+    guess.x = d.x;
+    guess.z = d.z;
+    return d.y;
+  }
+
+  /**
    * Analytic Gerstner normal at undisplaced grid point (x, z). The envelopes
    * and the shore scale vary slowly, so their own slopes are ignored.
    */
   normalAt(x: number, z: number, out: THREE.Vector3): THREE.Vector3 {
+    this.refreshTime(this.time);
     let nx = 0;
     let ny = 1;
     let nz = 0;
-    const t = this.time;
     const n = this.uniforms.uWaveCount.value;
+    const c = this.coef;
     const ev = this.ev;
     const s = this.shore ? this.shore.waveScale(x, z) : 1;
     for (let i = 0; i < n; i++) {
-      const a = this.uniforms.uWaveA.value[i];
-      const b = this.uniforms.uWaveB.value[i];
-      this.evalWave(i, x, z, t);
-      const amp = a.w * ev.env * s;
+      this.evalWave(i, x, z, true);
+      const o = i * 16;
+      const amp = c[o + 2] * ev.env * s;
       const cf = Math.cos(ev.f);
       const sf = Math.sin(ev.f);
-      nx -= (a.z * a.x + ev.wx) * amp * cf;
-      nz -= (a.z * a.y + ev.wz) * amp * cf;
-      ny -= b.y * ev.env * s * sf;
+      nx -= (c[o] + ev.wx) * amp * cf;
+      nz -= (c[o + 1] + ev.wz) * amp * cf;
+      ny -= c[o + 5] * ev.env * s * sf;
     }
     return out.set(nx, ny, nz).normalize();
   }

@@ -129,6 +129,11 @@ export class Weather {
   private windBase: number;
   private windSet: number;
 
+  /** Props for every effect that only appears mid-game, so main can compile their shaders up front. */
+  warmup(): THREE.Object3D[] {
+    return this.volcano.warmup();
+  }
+
   constructor(private readonly hooks: WeatherHooks) {
     this.group.name = 'weather';
     this.dayNight = hooks.dayNight;

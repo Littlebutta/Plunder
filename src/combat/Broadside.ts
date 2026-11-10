@@ -333,7 +333,7 @@ export class Broadside {
       out.push(shot);
     }
 
-    if (this.visible) this.updateRibbon(dt);
+    if (this.visible && this.ribbon.visible) this.updateRibbon(dt);
   }
 
   /**

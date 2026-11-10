@@ -44,6 +44,8 @@ import { FlotsamField, FLOTSAM, wreckValue } from './world/Flotsam';
 const knocks = new KnockTimer();
 import { rollWorldSeed } from './world/worldConfig';
 import { NPC_COLOUR } from './ui/Settings';
+import { Chat } from './ui/Chat';
+import { captainById, pickLine, Captain } from './world/Captains';
 import { UpgradeSet, upgradeById, UPGRADES, Upgrade } from './world/Upgrades';
 import { WORLD_RADIUS } from './world/worldConfig';
 import { TradeRoutes, TRADE, MERCHANT } from './world/Trade';
@@ -562,6 +564,7 @@ const territory = new Territory(world.islands, {
     if (wasHome) {
       // a captain is out: their ships go down with their flag
       for (const w of ships) if (w.faction === from) w.scuttle();
+      if (factions.get(from)?.kind === 'ai') say(from, pickLine(captainOf(from).lines.lost));
     }
     if (from === ME && wasHome) {
       if (online) sinkPlayer(); // out of the match: her flag comes down for everyone
@@ -724,6 +727,10 @@ for (const f of factions.list) {
       match.ai,
     ),
   );
+  captains[captains.length - 1].onAttack = (target) => {
+    // a taunt when they come for something of yours (now and then, not every time)
+    if (target.side === ME && Math.random() < 0.7) say(f.id, pickLine(captainOf(f.id).lines.attack));
+  };
 }
 
 // --- Online play ----------------------------------------------------------------------
@@ -820,6 +827,10 @@ if (link) {
       effects.muzzle(muzzlePos, muzzleDir.copy(shotVel).normalize(), _zero, kind ? 1.5 : 0.8);
       audio.play('cannon', { volume: kind ? 0.9 : 0.55, rate: kind ? 1 : 1.4, rateJitter: 0.06, position: muzzlePos });
     }
+  });
+  on.set('chat', (from, m) => {
+    const text = String(m[1] ?? '').slice(0, 120).trim();
+    if (text) say(from, text);
   });
   on.set('ready', (from) => {
     tellDesign(from);
@@ -974,11 +985,60 @@ function buildTrader(faction = ME, free = false): string {
   return '';
 }
 
+// --- Captains and their chatter -----------------------------------------------------
+/** Who sails for each faction: the lobby's pick, or the player's own from Settings. */
+function captainOf(f: number): Captain {
+  if (f === ME && !online) return captainById(settings.settings.captain);
+  return captainById(captainSlots[f]?.captain);
+}
+const chat = new Chat(hudRoot);
+chat.canType = online;
+chat.onSend = (text) => {
+  say(ME, text);
+  link?.send(['chat', text]);
+};
+/** A captain speaks, in their own colour, with their portrait's mouth going. */
+function say(f: number, text: string): void {
+  const human = factions.get(f)?.kind === 'human';
+  const name = f === ME || !human ? captainOf(f).name : `${captainSlots[f]?.name ?? 'Captain'} (${captainOf(f).name})`;
+  chat.say(captainOf(f), factions.colour(f), name, text);
+}
+/** The match begins: your captain says their piece, and the AI captains answer. */
+function greet(): void {
+  say(ME, pickLine(captainOf(ME).lines.hello));
+  let delay = 2500;
+  for (const f of factions.list) {
+    if (f.kind !== 'ai') continue;
+    setTimeout(() => say(f.id, pickLine(captainOf(f.id).lines.hello)), delay);
+    delay += 1800;
+  }
+}
+
 // --- Upgrades and ghost ships ------------------------------------------------------
 /** Seconds the match has been running: events and ghosts come thicker as it goes on. */
 let matchTime = 0;
 /** This captain's upgrades (each copy keeps its own player's). */
 const upgrades = new UpgradeSet();
+
+// each captain starts with their two upgrades and any extra stores
+{
+  const me = captainOf(ME);
+  for (const id of me.upgrades) {
+    const u = upgradeById(id);
+    if (u) upgrades.take(u);
+  }
+  for (const f of factions.list) {
+    if (f.kind !== 'human' && f.kind !== 'ai') continue;
+    const c = captainOf(f.id);
+    if (f.id === ME || f.kind === 'ai') {
+      f.stores.wood += c.stock?.wood ?? 0;
+      f.stores.stone += c.stock?.stone ?? 0;
+      f.stores.salvage += c.stock?.salvage ?? 0;
+    }
+    // the AI only feels the income upgrades (the rest are about steering a ship by hand)
+    if (f.kind === 'ai') territory.incomeMul.set(f.id, 1 + 0.08 * c.upgrades.filter((u) => u === 'tax').length);
+  }
+}
 
 /** Push the upgrade multipliers into the flagship, her guns and the islands. */
 function applyMods(): void {
@@ -1199,6 +1259,7 @@ function endGame(won: boolean): void {
   const leave = !link ? '' : link.host ? 'End the match for everyone' : 'Leave the match';
   if (won) territoryUi.showVictory(vs ? null : territory.enemyHome, leave);
   else territoryUi.showDefeat(territory.home, leave);
+  if (won) say(ME, pickLine(captainOf(ME).lines.win));
 }
 
 /** Push the player's settings (colour, fire mode) into the game. */
@@ -1276,6 +1337,8 @@ const lobby = new Lobby(document.body, {
     openMenu();
   },
   colour: () => settings.settings.colour,
+  captain: () => settings.settings.captain,
+  setCaptain: (id) => settings.setCaptain(id),
   summon: () => {
     if (voyageStarted && online) return false;
     menu.hide();
@@ -1378,6 +1441,7 @@ function seaPlaylist(): ('fog' | 'calm' | 'log')[] {
 }
 
 function startPlay(): void {
+  if (!voyageStarted) greet();
   mode = 'play';
   audio.setPlaylist(seaPlaylist());
   if (!voyageStarted) berthFlagship(); // the voyage begins at the home dock
@@ -1439,6 +1503,7 @@ Object.assign(window, {
     openMenu,
     setShip,
     scene,
+    renderer,
     camera,
     waves,
     ocean,
@@ -1717,6 +1782,10 @@ const fwd = new THREE.Vector3();
 
 /** Tests: the game is being run ahead by `fastForward`, so the frame loop stands by. */
 let fastForwarding = false;
+/** Ships further than this from the camera sample the sea under half their hull each step. */
+const FAR_PHYSICS = 180;
+/** Crews and villagers further than this from the camera are too small to see, so they are not drawn. */
+const CREW_SEEN = 240;
 function frame(): void {
   timer.update();
   if (fastForwarding) {
@@ -1757,6 +1826,7 @@ function step(rawDt: number): void {
     if (input.wasPressed('KeyP')) settings.toggleMute();
     if (input.wasPressed('Slash')) hud.toggleHelp();
     if (input.wasPressed('KeyY')) openYard();
+    if (online && input.wasPressed('Enter')) chat.openInput();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
   }
 
@@ -1765,6 +1835,8 @@ function step(rawDt: number): void {
     if (!followCourse(dt)) ship.control(dt, input.throttle, input.steer);
   } else if (!playing && mode !== 'over' && !voyageStarted && !vs) autopilot(dt);
   else ship.control(dt, ship.sail > 0.02 ? -1 : 0, 0); // nobody at the helm: the sail comes in
+  // ships far from the camera sample the sea more sparsely: nobody can see the difference out there
+  for (const w of ships) w.ship.body.coarse = w.position.distanceToSquared(follow.focusPoint) > FAR_PHYSICS * FAR_PHYSICS;
   sim.advance(dt, (h) => {
     waves.update(h);
     if (sunkFor < 0) ship.physicsStep(h);
@@ -1896,6 +1968,9 @@ function step(rawDt: number): void {
       }
     }
   }
+  // crews and villagers are hundreds of tiny meshes: only those near enough to make out are drawn
+  for (const w of ships) w.ship.crew.group.visible = w.ship.group.position.distanceToSquared(camera.position) < CREW_SEEN * CREW_SEEN;
+  for (const s of territory.strongholds) s.crew.group.visible = s.site.distanceToSquared(camera.position) < CREW_SEEN * CREW_SEEN;
   flotsam.update(dt, running ? sights : [], authority, (item, by) => {
     if (by >= 0) credit(by, item.stock);
     if (by === ME) weatherUi.announce('Salvage hauled aboard', stockLabel(item.stock), 'good');
@@ -1925,6 +2000,7 @@ function step(rawDt: number): void {
   buildIsland = active ? territory.islandInReach(ship.body.position) : null;
   if (active && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
   if (playing) updateRaids(dt);
+  chat.update(dt);
   if (running) matchTime += dt;
   weather.escalation = Math.min(1, matchTime / 1800);
   applyMods();
@@ -2004,4 +2080,31 @@ if (vs && match.autostart) {
 }
 follow.yaw = 2.3;
 follow.pitch = 0.2;
+warmShaders();
 requestAnimationFrame(frame);
+
+/**
+ * Compile every shader the game will need now, while it loads, instead of the
+ * first time something new comes into view: an eruption, rain, a ghost ship or
+ * a ship sliding out of the fog each cost a stall of a frame or more (worst on
+ * Windows, where shaders are translated for Direct3D). Hidden things are shown
+ * for the moment of the call, and effects that only exist mid-game lend a prop.
+ */
+function warmShaders(): void {
+  const hidden: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  const props = new THREE.Group();
+  props.add(...weather.warmup());
+  scene.add(props);
+  try {
+    void renderer.compileAsync(scene, camera);
+  } finally {
+    scene.remove(props);
+    for (const o of hidden) o.visible = false;
+  }
+}
