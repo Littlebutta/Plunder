@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:31Z",
+  "updated": "2026-11-10T17:03:35Z",
   "categories": [
     {
       "key": "feature",
@@ -2074,6 +2074,19 @@
       "created": "2026-11-10T17:03:31Z",
       "priority": "medium",
       "updated": "2026-11-10T17:03:31Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-96",
+      "cat": "feature",
+      "title": "Tsunami weather event: a huge swell that wanders the map",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-10T17:03:35Z",
+      "priority": "medium",
+      "updated": "2026-11-10T17:03:35Z",
       "by": "Claude"
     }
   ],
