@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:46:01Z",
+  "updated": "2026-11-10T01:46:03Z",
   "categories": [
     {
       "key": "feature",
@@ -1482,13 +1482,15 @@
       "id": "F-61",
       "cat": "feature",
       "title": "Shipyard only at the home dock; build escorts from stock or own designs",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 4. PR #16.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/16"
+      ],
       "created": "2026-11-10T01:45:39Z",
       "priority": "high",
-      "updated": "2026-11-10T01:45:39Z",
+      "updated": "2026-11-10T01:46:03Z",
       "by": "Claude"
     },
     {
