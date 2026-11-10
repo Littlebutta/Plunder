@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T08:49:44Z",
+  "updated": "2026-11-10T08:49:48Z",
   "categories": [
     {
       "key": "feature",
@@ -2003,6 +2003,21 @@
       "created": "2026-11-10T08:49:44Z",
       "priority": "high",
       "updated": "2026-11-10T08:49:44Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-11",
+      "cat": "bug",
+      "title": "Crew heads turn into see-through black balls",
+      "status": "fixed",
+      "tags": [],
+      "notes": "Ghosting other ships changed shared crew materials; showAs now skips crew/cargo.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/24"
+      ],
+      "created": "2026-11-10T08:49:48Z",
+      "priority": "medium",
+      "updated": "2026-11-10T08:49:48Z",
       "by": "Claude"
     }
   ],
