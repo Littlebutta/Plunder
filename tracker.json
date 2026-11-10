@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:39Z",
+  "updated": "2026-11-10T17:03:43Z",
   "categories": [
     {
       "key": "feature",
@@ -2100,6 +2100,19 @@
       "created": "2026-11-10T17:03:39Z",
       "priority": "medium",
       "updated": "2026-11-10T17:03:39Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-98",
+      "cat": "feature",
+      "title": "Seagulls that fly around and land on your ship out of combat",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
+      "links": [],
+      "created": "2026-11-10T17:03:43Z",
+      "priority": "low",
+      "updated": "2026-11-10T17:03:43Z",
       "by": "Claude"
     }
   ],
