@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:06Z",
+  "updated": "2026-11-10T17:04:09Z",
   "categories": [
     {
       "key": "feature",
@@ -2069,13 +2069,15 @@
       "id": "F-95",
       "cat": "feature",
       "title": "Contested captures: no taking an island while an enemy ship is there",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:31Z",
       "priority": "medium",
-      "updated": "2026-11-10T17:03:31Z",
+      "updated": "2026-11-10T17:04:09Z",
       "by": "Claude"
     },
     {
