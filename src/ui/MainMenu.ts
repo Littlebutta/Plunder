@@ -3,6 +3,8 @@ export interface MenuActions {
   shipyard(): void;
   settings(): void;
   newMap(): void;
+  /** Open the Vs lobby. */
+  versus(): void;
 }
 
 /**
@@ -24,7 +26,8 @@ export class MainMenu {
         <div class="menu-sub">Build a ship. Take the islands.</div>
         <button data-act="play">Set sail</button>
         <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
-        <button data-act="multi" disabled>Multiplayer <small>with Steam friends, later</small></button>
+        <button data-act="versus">Vs match <small>teams, AI captains and map settings</small></button>
+        <button data-act="multi" disabled>Multiplayer <small>with Steam friends, in the next update</small></button>
         <button data-act="newmap">New map <small>generate a fresh set of islands</small></button>
         <button data-act="settings">Settings <small>sound and music volume</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
@@ -43,6 +46,9 @@ export class MainMenu {
         case 'shipyard':
           actions.shipyard();
           break;
+        case 'versus':
+          actions.versus();
+          break;
         case 'newmap':
           actions.newMap();
           break;
@@ -58,8 +64,10 @@ export class MainMenu {
   }
 
   /** @param resumable true once a voyage is under way, so the button reads "Resume" */
-  show(resumable: boolean, atDock = true): void {
-    this.playBtn.textContent = resumable ? 'Resume voyage' : 'Set sail';
+  show(resumable: boolean, atDock = true, inMatch = false): void {
+    this.playBtn.textContent = resumable ? (inMatch ? 'Resume match' : 'Resume voyage') : 'Set sail';
+    const map = this.root.querySelector('[data-act="newmap"]') as HTMLButtonElement;
+    map.innerHTML = inMatch ? 'Leave match <small>back to the solo voyage</small>' : 'New map <small>generate a fresh set of islands</small>';
     this.yardBtn.disabled = !atDock;
     this.yardBtn.innerHTML = `Shipyard <small>${atDock ? 'draw and launch your own ship' : 'only at your home dock: sail her alongside'}</small>`;
     this.root.hidden = false;

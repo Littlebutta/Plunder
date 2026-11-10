@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
+import { ballisticVelocity } from '../combat/ballistics';
 import { WaveField } from '../ocean/waves';
 import { DesignedShip } from '../ship/DesignedShip';
 import { cloneDesign, HullDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
@@ -8,10 +9,14 @@ import { MAST } from '../ship/Masts';
 import type { Island } from './Islands';
 import { Wind } from './Wind';
 
-/** Collider ids: the raiders' ship is 50, the player's fleet 60 to 89 (the player is 0, barrels 100+, strongholds 300+, weather 700+). */
-export const ENEMY_ID = 50;
-export const FLEET_ID_BASE = 60;
-export const FLEET_ID_END = 90;
+/** Collider ids of warships: 1000 up (the player's flagship is 0, barrels 100+, strongholds 300+, weather 700+, masts 2000+). */
+export const WARSHIP_ID_BASE = 1000;
+export const WARSHIP_ID_END = 2000;
+let nextId = 0;
+/** A fresh collider id for a new warship. */
+export function warshipId(): number {
+  return WARSHIP_ID_BASE + (nextId++ % (WARSHIP_ID_END - WARSHIP_ID_BASE));
+}
 
 export const ENEMY = {
   hp: 100,
@@ -29,6 +34,9 @@ export const ENEMY = {
   /** Seconds a wreck takes to go down, and until the next one sails in. */
   sinkTime: 7,
   respawnTime: 25,
+  /** Hull repairs start this long after the last hit (s), at this rate (hp/s). */
+  repairDelay: 12,
+  repairRate: 1.5,
   /** Patrol circle (m) around the map centre. */
   patrolRadius: 190,
 };
@@ -44,10 +52,15 @@ export interface WarshipOptions {
   /** Collider id, also the owner id of its shots. */
   id: number;
   name: string;
-  side: 'player' | 'npc';
+  /** Whose ship she is (a faction id). */
+  faction: number;
   colour: THREE.ColorRepresentation;
-  /** Raiders are replaced after a while; the player's ships are gone for good. */
+  /** Raiders and captains' flagships are replaced after a while; escorts are gone for good. */
   respawn: boolean;
+  /** Where a replacement appears (a captain's home berth). Without it: out on the patrol circle. */
+  berth?: () => { x: number; z: number; heading: number } | null;
+  /** A captain's own ship, rather than an escort. */
+  flagship?: boolean;
   /** Index into the shipyard presets. */
   preset?: number;
   /** Or a design of the player's own. */
@@ -66,7 +79,8 @@ export class Warship {
   readonly ship: DesignedShip;
   readonly name: string;
   readonly id: number;
-  readonly side: 'player' | 'npc';
+  readonly faction: number;
+  readonly flagship: boolean;
   /** Chart order: sail here and hold. */
   order: THREE.Vector3 | null = null;
   /** With no order: keep station on this point (the flagship). */
@@ -78,6 +92,8 @@ export class Warship {
   /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
   raidTarget: THREE.Vector3 | null = null;
   sunkCount = 0;
+  private sinceHit = 99;
+  private retired = false;
 
   private readonly battery: Broadside;
   private readonly shots: BroadsideShot[] = [];
@@ -95,7 +111,8 @@ export class Warship {
   ) {
     this.name = opts.name;
     this.id = opts.id;
-    this.side = opts.side;
+    this.faction = opts.faction;
+    this.flagship = !!opts.flagship;
     const design = sanitizeDesign({ ...cloneDesign(opts.design ?? PRESETS[opts.preset ?? 1]), name: this.name });
     this.ship = new DesignedShip(design, waves, wind, opts.colour, opts.id);
     // bigger hulls take more sinking
@@ -105,7 +122,7 @@ export class Warship {
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
     this.collider = { id: opts.id, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
-    if (opts.respawn) this.spawn();
+    if (opts.respawn && !opts.berth) this.spawn();
   }
 
   /** Put it on the water somewhere, ready to sail. */
@@ -134,6 +151,20 @@ export class Warship {
     return this.state === 'patrol' || this.state === 'fight' || this.state === 'raid';
   }
 
+  /** Go down for good: her captain is out of the game. */
+  scuttle(): void {
+    this.retired = true;
+    if (!this.alive) return;
+    this.hp = 0;
+    this.state = 'sinking';
+    this.timer = 0;
+  }
+
+  /** True once she is gone and will not be replaced. */
+  get lost(): boolean {
+    return this.state === 'gone' && (this.retired || !this.opts.respawn);
+  }
+
   /** Colliders for the projectile sim: nothing while it is sinking or gone. */
   colliders(): Collider[] {
     return this.alive ? this.ship.rig.colliders([this.collider]) : [];
@@ -147,6 +178,7 @@ export class Warship {
   /** A projectile of `kind` hit it. Returns true if that sank it. */
   hit(kind: number): boolean {
     if (!this.alive) return false;
+    this.sinceHit = 0;
     // a shell through the hull sometimes carries rigging away with it
     if (kind === 1 && Math.random() < MAST.hullHitChance) {
       const m = this.ship.rig.nearest((Math.random() - 0.5) * this.ship.length);
@@ -177,7 +209,12 @@ export class Warship {
     const ship = this.ship;
     if (this.state === 'gone') {
       this.timer += dt;
-      if (this.opts.respawn && this.timer > ENEMY.respawnTime) this.spawn(foe ?? undefined);
+      if (this.opts.respawn && !this.retired && this.timer > ENEMY.respawnTime) {
+        const berth = this.opts.berth?.();
+        if (berth) this.placeAt(berth.x, berth.z, berth.heading);
+        else if (!this.opts.berth) this.spawn(foe ?? undefined);
+        else this.timer = ENEMY.respawnTime - 5; // no home to come back to yet: look again shortly
+      }
       return;
     }
     if (this.state === 'sinking') {
@@ -194,6 +231,10 @@ export class Warship {
       }
       return;
     }
+
+    // the crew patch the hull once the shooting stops
+    this.sinceHit += dt;
+    if (this.sinceHit > ENEMY.repairDelay) this.hp = Math.min(this.maxHp, this.hp + ENEMY.repairRate * dt);
 
     const pos = this.position;
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
@@ -261,6 +302,11 @@ export class Warship {
     this.shots.length = 0;
     this.battery.update(dt, this.shots);
     for (const shot of this.shots) {
+      // shelling a stronghold: lob each shot at the walls themselves, over the beach in front of them
+      if (raid) {
+        _mark.copy(raid).setY(raid.y + 2.5);
+        shot.direction.copy(ballisticVelocity(shot.position, _mark, BROADSIDE.muzzleSpeed, _vel)).normalize();
+      }
       // NPC gunnery is honest but not perfect
       const yaw = (Math.random() - 0.5) * 2 * ENEMY.scatter;
       shot.direction.applyAxisAngle(_up, yaw);
@@ -299,6 +345,8 @@ export class Warship {
 }
 
 const _want = new THREE.Vector3();
+const _mark = new THREE.Vector3();
+const _vel = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);

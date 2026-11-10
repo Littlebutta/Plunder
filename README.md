@@ -54,6 +54,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
 | U | Alongside an island: found an outpost on an unclaimed island, or upgrade your stronghold there. |
 | Y | At your home dock: open the shipyard. |
+| T | Mark the nearest hostile ship, or let go of the one you have marked. |
 | M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships, right click sends the selected ship there (the flagship if none; touch the helm to cancel), drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | P | Mute (also in Settings: the gear button top right, or the main menu) |
@@ -115,6 +116,23 @@ The raiders have a **home of their own**: a watchtower on the port island furthe
 
 Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
+## Vs match
+
+**Vs match** on the main menu opens a lobby (`src/ui/Lobby.ts`): four captain slots (you, and AI captains until Steam multiplayer lands), each with a team and a colour, and the map and rules on the right. Start reloads the game into that match (`src/world/Match.ts` keeps the config in session storage; "Leave match" on the menu goes back to the solo voyage).
+
+| Setting | What it does |
+| --- | --- |
+| Islands | 8, 12, 16 or 20 |
+| Placement | **Fair**: the map is one wedge of islands repeated round the centre, so every captain has the same islands at the same distances, with one contested port island in the middle. **Random**: islands fall where they fall and homes are spread as far apart as the map allows. |
+| Neutral forts | Raider stockades on the port islands, there for the taking |
+| Map seed | Same seed, same map |
+| Starting stores | Lean 15/4/0, Standard 40/12/8, Rich 120/50/40 (wood/stone/metals) |
+| AI captains | Easy, Normal, Hard: how well supplied and how aggressive they are (`AI` in `src/world/AiCaptain.ts`) |
+
+Every captain starts with a hut on a home island and a flagship in its berth. A captain whose home is taken is **out**: their ships go down and whatever else they held passes to the captor. The last team with a home wins. Teammates share vision, do not hurt each other, and show on the chart in their own colours. A scoreboard under the home chip lists who is still in and how many islands each holds.
+
+Sides are **factions** (`src/world/Factions.ts`): an id, a colour, a team and a pool of stores. Strongholds, islands, warships and shots all carry a faction id, and `factions.hostile(a, b)` decides who may hurt whom, so the solo voyage is simply you against a "Raiders" faction. **AI captains** (`src/world/AiCaptain.ts`) play by the same rules as you: they settle the free islands near home, upgrade the home, build escorts, then take everything they have to the nearest hostile stronghold, and come home if theirs is attacked. Instead of gathering by hand they get a stipend of resources a minute. A sunk AI flagship is replaced at its home berth after 25 s.
+
 ## Sinking, masts and crew
 
 **Sinking.** The flagship has 100 hull. Raider shells, stronghold guns and weather hazards wear it down, and it mends itself after 8 s out of trouble. At zero she goes down; seven seconds later a fresh ship is waiting in your berth at the home island (`sinkPlayer` / `berthFlagship` in `src/main.ts`).
@@ -125,7 +143,7 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
 ## Enemy ship
 
-A white-sailed NPC sloop, the *Marauder* (`src/world/EnemyShip.ts`), patrols a circle around the middle of the map. It is built from a shipyard design and sails on the same physics as the player. Come within 150 m and it closes to about 60 m, keeps you on its beam and trades broadsides (its shots scatter a little); its hits take points off your hull. It has 100 hull points (a swivel shot takes 7, a cannon shell 16), sinks when they are gone, and a fresh one sails in 25 s later. Numbers are in `ENEMY`.
+A white-sailed NPC sloop, the *Marauder* (`src/world/Warship.ts`), patrols a circle around the middle of the map. It is built from a shipyard design and sails on the same physics as the player. Come within 150 m and it closes to about 60 m, keeps you on its beam and trades broadsides (its shots scatter a little); its hits take points off your hull. It has 100 hull points (a swivel shot takes 7, a cannon shell 16), sinks when they are gone, and a fresh one sails in 25 s later. Numbers are in `ENEMY`.
 
 ## Shipyard
 

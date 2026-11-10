@@ -19,7 +19,7 @@ export const MAST = {
 
 /** Collider ids for mast hitboxes: MAST_ID_BASE + ship id * 16 + mast * 2 + part. */
 export const MAST_ID_BASE = 2000;
-export const MAST_ID_END = MAST_ID_BASE + 16 * 1024;
+export const MAST_ID_END = MAST_ID_BASE + 16 * 2048;
 
 export function mastOwner(colliderId: number): { ship: number; mast: number } | null {
   if (colliderId < MAST_ID_BASE || colliderId >= MAST_ID_END) return null;

@@ -14,6 +14,8 @@ export interface MapShip {
   colour: string;
   name: string;
   hostile: boolean;
+  /** False for an ally's ship: it shows on the chart but takes no orders from you. */
+  mine?: boolean;
   /** 0..1 hull left. */
   health: number;
   /** Where it has been ordered to sail, if anywhere. */
@@ -26,7 +28,8 @@ export interface MapStronghold {
   site: THREE.Vector3;
   level: number;
   home: boolean;
-  side: 'player' | 'npc';
+  /** Faction id of whoever holds it. */
+  side: number;
   ruined: boolean;
   island: Island;
 }
@@ -35,8 +38,9 @@ export interface MapState {
   islands: Island[];
   /** Every ship afloat; the flagship first. */
   ships: MapShip[];
-  playerColour: string;
-  npcColour: string;
+  /** Colour and name of a faction (the owner of an island or stronghold). */
+  colourOf(faction: number): string;
+  nameOf(faction: number): string;
   strongholds: MapStronghold[];
   fog: FogOfWar;
 }
@@ -334,8 +338,8 @@ export class MapPainter {
       c.lineWidth = mini ? 1 : 1.8;
       c.stroke();
       if (mini) {
-        if (island.owner !== 'none') {
-          c.fillStyle = island.owner === 'player' ? state.playerColour : state.npcColour;
+        if (island.owner >= 0) {
+          c.fillStyle = state.colourOf(island.owner);
           c.strokeStyle = INK;
           c.lineWidth = 1;
           c.beginPath();
@@ -449,7 +453,7 @@ export class MapPainter {
         c.lineTo(x + 13, top + 4.5);
         c.lineTo(x, top + 9);
         c.closePath();
-        c.fillStyle = s.side === 'player' ? state.playerColour : state.npcColour;
+        c.fillStyle = state.colourOf(s.side);
         c.fill();
         c.stroke();
         if (s.home) {
@@ -764,7 +768,7 @@ export class MapView {
     const state = this.state;
     this.infoKey = '';
     // one of your own ships first, then an island you have found
-    const ship = state?.ships.find((s) => !s.hostile && Math.hypot(w.x - s.position.x, w.z - s.position.z) * this.view.zoom < 20);
+    const ship = state?.ships.find((s) => s.mine !== false && !s.hostile && Math.hypot(w.x - s.position.x, w.z - s.position.z) * this.view.zoom < 20);
     if (ship) {
       this.selectedShip = ship.id;
       this.selected = null;
@@ -812,7 +816,7 @@ export class MapView {
       return;
     }
     if (!sel) return;
-    const owner = sel.owner === 'player' ? `<span style="color:${state.playerColour}">Yours</span>` : sel.owner === 'npc' ? 'Held by the raiders' : 'Unclaimed';
+    const owner = sel.owner === 0 ? `<span style="color:${state.colourOf(0)}">Yours</span>` : sel.owner > 0 ? `Held by ${state.nameOf(sel.owner)}` : 'Unclaimed';
     const res = RESOURCE_IDS.filter((id) => sel.capacity[id] > 0)
       .map((id) => `<div class="row"><span>${RESOURCES[id].label}</span><b>${sel.stock[id]} / ${sel.capacity[id]}</b></div>`)
       .join('');

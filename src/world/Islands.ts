@@ -36,11 +36,11 @@ export interface Island {
   stock: Stock;
   /** World position of the end of the island's pier, if it has a port. */
   port: THREE.Vector3 | null;
-  /** Who holds the island. NPC islands fly white; the player's fly the player's colour. */
-  owner: IslandOwner;
+  /** Who holds the island: a faction id, or -1 for nobody. */
+  owner: number;
+  /** Fair maps: this island is the home of the n-th captain. */
+  start?: number;
 }
-
-export type IslandOwner = 'none' | 'player' | 'npc';
 
 export interface IslandWorld {
   group: THREE.Group;
@@ -52,13 +52,62 @@ export interface IslandWorld {
 /** Order islands are dealt in; cycled if more are requested. Nearest-first. */
 const TYPE_DECK: IslandType[] = ['peak', 'wreck', 'cay', 'mesa', 'hills', 'ridge', 'stacks', 'cay', 'wreck', 'hills', 'peak', 'ridge'];
 
-export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWorld {
+/**
+ * @param fairPlayers 2 or more: deal every captain the same islands. The map is
+ *   one wedge repeated around the centre, so each home has the same neighbours
+ *   at the same distances, with one contested island in the middle.
+ */
+export function createIslands(seed = 3, count = 11, worldRadius = 640, fairPlayers = 0): IslandWorld {
   const group = new THREE.Group();
   group.name = 'islands';
   const rand = mulberry32(seed);
   // names and ports draw from their own stream so they never disturb the island layout
   const extraRand = mulberry32(seed * 7919 + 17);
   const islands: Island[] = [];
+  const place = (type: IslandType, radius: number, shapeSeed: number, center: THREE.Vector3, portJitter: number): Island => {
+    const island = buildIsland(type, radius, mulberry32(shapeSeed));
+    island.center.copy(center);
+    island.group.position.copy(center);
+    island.name = islandName(type, extraRand);
+    // Trading-post islands get a pier on the side facing the middle of the map.
+    if (type === 'hills' || type === 'mesa') addPort(island, (center.lengthSq() > 1 ? Math.atan2(-center.z, -center.x) : 0) + portJitter);
+    group.add(island.group);
+    islands.push(island);
+    return island;
+  };
+
+  if (fairPlayers >= 2) {
+    const n = fairPlayers;
+    const wedge = (Math.PI * 2) / n;
+    const turn = rand() * Math.PI * 2;
+    const per = Math.max(2, Math.round((count - 1) / n));
+    const clear = (c: THREE.Vector3, radius: number) => !islands.some((o) => o.center.distanceTo(c) < o.radius + radius + 60);
+    // the prize in the middle: a port island everyone can reach
+    place('mesa', 38, Math.floor(rand() * 1e9), new THREE.Vector3(), rand() * Math.PI * 2);
+    // one wedge's worth of islands, each copied round to every captain: home first, a port, then the rest
+    const deck: IslandType[] = ['ridge', 'hills', 'cay', 'wreck', 'stacks', 'peak', 'cay', 'mesa', 'wreck'];
+    for (let k = 0; k < per; k++) {
+      const type = deck[k % deck.length];
+      const radius = k === 0 ? 36 : radiusFor(type, rand);
+      const shapeSeed = Math.floor(rand() * 1e9);
+      const jitter = (rand() - 0.5) * 0.8;
+      for (let tries = 0; tries < 120; tries++) {
+        const a = k === 0 ? wedge / 2 : rand() * wedge;
+        const d = k === 0 ? worldRadius * 0.6 : 130 + rand() * (worldRadius - 190);
+        const spots = Array.from({ length: n }, (_, c) => new THREE.Vector3(Math.cos(turn + a + c * wedge) * d, 0, Math.sin(turn + a + c * wedge) * d));
+        // clear of everything already down, and of its own copies
+        if (!spots.every((c) => clear(c, radius)) || spots[0].distanceTo(spots[1]) < radius * 2 + 60) continue;
+        spots.forEach((c, i) => {
+          const island = place(type, radius, shapeSeed, c, jitter);
+          if (k === 0) island.start = i;
+        });
+        break;
+      }
+    }
+    const shore = new ShoreField();
+    for (const island of islands) shore.stamp(island.center.x, island.center.z, island.radius * 2, island.heightAt);
+    return { group, islands, shore };
+  }
 
   for (let n = 0; n < count; n++) {
     const type = TYPE_DECK[n % TYPE_DECK.length];
@@ -71,14 +120,7 @@ export function createIslands(seed = 3, count = 11, worldRadius = 640): IslandWo
       const d = near + rand() * 150;
       const center = new THREE.Vector3(Math.cos(a) * d, 0, Math.sin(a) * d);
       if (islands.some((o) => o.center.distanceTo(center) < o.radius + radius + 60)) continue;
-      const island = buildIsland(type, radius, mulberry32(Math.floor(rand() * 1e9)));
-      island.center.copy(center);
-      island.group.position.copy(center);
-      island.name = islandName(type, extraRand);
-      // Trading-post islands get a pier on the side facing the middle of the map.
-      if (type === 'hills' || type === 'mesa') addPort(island, Math.atan2(-center.z, -center.x) + (extraRand() - 0.5) * 0.8);
-      group.add(island.group);
-      islands.push(island);
+      place(type, radius, Math.floor(rand() * 1e9), center, (extraRand() - 0.5) * 0.8);
       break;
     }
   }
@@ -339,7 +381,7 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   };
   const capacity = islandCapacity(type, radius);
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null, owner: 'none' };
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, name: '', capacity, stock: { ...capacity }, port: null, owner: -1 };
 }
 
 const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];
@@ -431,7 +473,6 @@ function addPort(island: Island, angle: number): void {
   door.position.set(hx + 2.12, ground + 0.85, 3.5);
 
   island.group.add(port);
-  island.owner = 'npc'; // a settled island: someone built this port
   island.port = new THREE.Vector3(PIER, DECK_Y, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), -angle).add(port.position).add(island.center);
 }
 
