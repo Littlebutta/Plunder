@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T08:49:52Z",
+  "updated": "2026-11-10T08:49:55Z",
   "categories": [
     {
       "key": "feature",
@@ -2033,6 +2033,21 @@
       "created": "2026-11-10T08:49:52Z",
       "priority": "medium",
       "updated": "2026-11-10T08:49:52Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-13",
+      "cat": "bug",
+      "title": "Volcano cone left floating in the ocean",
+      "status": "fixed",
+      "tags": [],
+      "notes": "",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/24"
+      ],
+      "created": "2026-11-10T08:49:55Z",
+      "priority": "medium",
+      "updated": "2026-11-10T08:49:55Z",
       "by": "Claude"
     }
   ],
