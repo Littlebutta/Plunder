@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:54:04Z",
+  "updated": "2026-11-10T05:54:11Z",
   "categories": [
     {
       "key": "feature",
@@ -1979,13 +1979,15 @@
       "id": "B-10",
       "cat": "bug",
       "title": "Launcher re-downloads the same full update every launch",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
-      "notes": "Shell id changed at v0.2.37, so the old launcher fetched the full app zip each launch and the swap never completed. New updater installs the game first, stages the shell in the background, applies on quit, logs to data/updater.log.",
-      "links": [],
+      "notes": "Shell id changed at v0.2.37, so the old launcher fetched the full app zip each launch and the swap never completed. New updater installs the game first, stages the shell in the background, applies on quit, logs to data/updater.log.\n\n2026-11-10 (Claude): Fixed in PR #23",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/23"
+      ],
       "created": "2026-11-10T05:54:04Z",
       "priority": "high",
-      "updated": "2026-11-10T05:54:04Z",
+      "updated": "2026-11-10T05:54:11Z",
       "by": "Claude"
     }
   ],
