@@ -21,6 +21,12 @@ export interface MapShip {
   health: number;
   /** Where it has been ordered to sail, if anywhere. */
   course: THREE.Vector3 | null;
+  /** The waypoints after `course`, in order (chained move orders). */
+  route?: THREE.Vector3[];
+  /** True when the order is to attack whatever comes in range on the way. */
+  attack?: boolean;
+  /** A zone she has been told to patrol. */
+  patrol?: { x: number; z: number; r: number } | null;
   /** Shown in its panel, e.g. "Following the flagship". */
   note: string;
 }
@@ -47,10 +53,16 @@ export interface MapState {
 }
 
 export interface MapActions {
-  /** Right click on open water: the selected ship (the flagship if none) sails there. */
-  order(shipId: number, x: number, z: number): void;
-  /** An escort is told to fall in behind the flagship again. */
-  follow(shipId: number): void;
+  /**
+   * Right click on open water: the selected ships (the flagship if none) sail there.
+   * @param append add it after the orders they already have (a chained move)
+   * @param attack fight whatever comes in range on the way, rather than sailing past it
+   */
+  order(shipIds: number[], x: number, z: number, append: boolean, attack: boolean): void;
+  /** Right button held and dragged: the selected escorts patrol that circle. */
+  patrol(shipIds: number[], x: number, z: number, r: number): void;
+  /** Escorts are told to fall in behind the flagship again. */
+  follow(shipIds: number[]): void;
   close(): void;
 }
 
@@ -217,7 +229,7 @@ export class MapPainter {
     h: number,
     view: View,
     state: MapState,
-    opts: { mini: boolean; selectedIsland: Island | null; selectedShip: number | null },
+    opts: { mini: boolean; selectedIsland: Island | null; selectedShips: Set<number> | null; fleetOf?: (id: number) => number; zone?: { x: number; z: number; r: number } | null },
   ): void {
     const S = (x: number, z: number): [number, number] => [w / 2 + (x - view.cx) * view.zoom, h / 2 + (z - view.cz) * view.zoom];
     const mini = opts.mini;
@@ -487,26 +499,55 @@ export class MapPainter {
     }
 
     // --- courses: a dashed line to a red cross, as on any good treasure map -------------
+    // patrol zones: a dashed ring
+    const ring = (z: { x: number; z: number; r: number }, strong: boolean) => {
+      const [zx, zy] = S(z.x, z.z);
+      c.strokeStyle = strong ? '#8f1d1d' : 'rgba(143,29,29,.6)';
+      c.fillStyle = 'rgba(143,29,29,.07)';
+      c.lineWidth = mini ? 1 : strong ? 2.5 : 1.6;
+      c.setLineDash(mini ? [3, 3] : [10, 6]);
+      c.beginPath();
+      c.arc(zx, zy, z.r * view.zoom, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.setLineDash([]);
+    };
+    for (const ship of state.ships) if (!ship.hostile && ship.patrol && ship.mine !== false) ring(ship.patrol, false);
+    if (opts.zone) ring(opts.zone, true);
     for (const ship of state.ships) {
       if (ship.hostile || !ship.course) continue;
       const [ax, ay] = S(ship.position.x, ship.position.z);
       const [bx, by] = S(ship.course.x, ship.course.z);
-      c.strokeStyle = '#8f1d1d';
+      c.strokeStyle = ship.attack ? '#c22a2a' : '#8f1d1d';
       c.lineWidth = mini ? 1 : 2;
-      c.setLineDash(mini ? [3, 3] : [9, 7]);
+      c.setLineDash(mini ? [3, 3] : ship.attack ? [3, 5] : [9, 7]);
       c.beginPath();
       c.moveTo(ax, ay);
       c.lineTo(bx, by);
+      // chained orders: on through each waypoint in turn
+      for (const p of ship.route ?? []) c.lineTo(...S(p.x, p.z));
       c.stroke();
       c.setLineDash([]);
+      if (!mini) {
+        for (const p of (ship.route ?? []).slice(0, -1).concat(ship.route?.length ? [ship.course] : [])) {
+          const [px, py] = S(p.x, p.z);
+          c.fillStyle = '#8f1d1d';
+          c.beginPath();
+          c.arc(px, py, 3.5, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+      // the cross marks where she ends up
+      const end = ship.route?.length ? ship.route[ship.route.length - 1] : ship.course;
+      const [ex, ey] = S(end.x, end.z);
       const k = mini ? 3 : 8;
       c.lineWidth = mini ? 1.5 : 3.5;
       c.lineCap = 'round';
       c.beginPath();
-      c.moveTo(bx - k, by - k);
-      c.lineTo(bx + k, by + k);
-      c.moveTo(bx + k, by - k);
-      c.lineTo(bx - k, by + k);
+      c.moveTo(ex - k, ey - k);
+      c.lineTo(ex + k, ey + k);
+      c.moveTo(ex + k, ey - k);
+      c.lineTo(ex - k, ey + k);
       c.stroke();
       c.lineCap = 'butt';
     }
@@ -517,7 +558,7 @@ export class MapPainter {
       if (ship.hostile && !state.fog.canSee(ship.position.x, ship.position.z)) continue;
       const [x, y] = S(ship.position.x, ship.position.z);
       const size = mini ? (ship.id === 0 ? 6.5 : 5) : ship.id === 0 ? 15 : 12;
-      if (ship.id === opts.selectedShip && !mini) {
+      if (opts.selectedShips?.has(ship.id) && !mini) {
         c.strokeStyle = '#8f1d1d';
         c.lineWidth = 2;
         c.setLineDash([5, 4]);
@@ -547,6 +588,17 @@ export class MapPainter {
         c.strokeText(ship.name, x, y + size * 1.5 + 12);
         c.fillStyle = ship.hostile ? '#8f1d1d' : INK;
         c.fillText(ship.name, x, y + size * 1.5 + 12);
+        // which fleet she sails with
+        const fleet = opts.fleetOf?.(ship.id) ?? 0;
+        if (fleet > 0) {
+          c.fillStyle = '#8f1d1d';
+          c.beginPath();
+          c.arc(x + size * 1.3, y - size * 1.3, 8, 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = '#fff8e6';
+          c.font = '800 11px Nunito, sans-serif';
+          c.fillText(String(fleet), x + size * 1.3, y - size * 1.3 + 4);
+        }
       }
     }
     c.restore();
@@ -662,7 +714,14 @@ export class MapView {
   private readonly painter = new MapPainter();
   private readonly view: View = { cx: 0, cz: 0, zoom: 0.4 };
   private selected: Island | null = null;
-  private selectedShip: number | null = null;
+  /** Your ships picked on the chart: click one, shift-click to add or drop more. */
+  private readonly selectedShips = new Set<number>();
+  /** Fleets: groups of escorts picked together with one click. Index 0 is fleet 1. */
+  private readonly fleets: number[][] = [];
+  /** The patrol circle being drawn with the right button held. */
+  private zone: { x: number; z: number; r: number } | null = null;
+  private readonly bar: HTMLElement;
+  private barKey = '';
   private state: MapState | null = null;
   private infoKey = '';
   /** Extra HTML for the selected island's panel (territory actions), set by the game. */
@@ -680,23 +739,38 @@ export class MapView {
     this.root.innerHTML = `
       <canvas></canvas>
       <div class="chart-title">Chart</div>
-      <div class="chart-help"><b>Left click</b> select an island or ship · <b>Right click</b> send the selected ship there · <b>Drag</b> pan · <b>Wheel</b> zoom · <b>Tab</b> close</div>
+      <div class="chart-fleets" data-fleets></div>
+      <div class="chart-help"><b>Click</b> a ship or island · <b>Shift click</b> pick several ships · <b>Right click</b> send them (<b>Shift</b> adds a waypoint, <b>Ctrl</b> attacks on the way, on your flagship: follow) · <b>Hold right and drag</b> a patrol zone · <b>Drag</b> pan · <b>Wheel</b> zoom</div>
       <div class="chart-info hud-panel" data-info hidden></div>
       <button class="chart-close" data-close>Close</button>`;
     parent.append(this.root);
     this.canvas = this.root.querySelector('canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
     this.info = this.root.querySelector('[data-info]') as HTMLElement;
+    this.bar = this.root.querySelector('[data-fleets]') as HTMLElement;
 
     let dragging = false;
     let moved = 0;
+    /** Right button: where it went down (screen), to tell a click (an order) from a drag (a patrol zone). */
+    let rightAt: { x: number; y: number } | null = null;
     this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) {
+        rightAt = { x: e.clientX, y: e.clientY };
+        this.canvas.setPointerCapture(e.pointerId);
+        return;
+      }
       if (e.button !== 0) return;
       dragging = true;
       moved = 0;
       this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
+      if (rightAt) {
+        const px = Math.hypot(e.clientX - rightAt.x, e.clientY - rightAt.y);
+        const at = this.toWorld(rightAt.x, rightAt.y);
+        this.zone = px > 12 ? { x: at.x, z: at.z, r: Math.max(40, px / this.view.zoom) } : null;
+        return;
+      }
       if (!dragging) return;
       moved += Math.abs(e.movementX) + Math.abs(e.movementY);
       if (moved < 5) return;
@@ -705,16 +779,32 @@ export class MapView {
       this.clampView();
     });
     this.canvas.addEventListener('pointerup', (e) => {
+      if (e.button === 2 && rightAt) {
+        this.canvas.releasePointerCapture(e.pointerId);
+        const zone = this.zone;
+        const at = this.toWorld(rightAt.x, rightAt.y);
+        rightAt = null;
+        this.zone = null;
+        this.infoKey = '';
+        const ids = [...this.selectedShips];
+        const escorts = ids.filter((id) => id !== 0);
+        if (Math.hypot(at.x, at.z) >= WORLD_RADIUS - 20) return;
+        if (zone) {
+          if (escorts.length) this.actions.patrol(escorts, zone.x, zone.z, zone.r);
+          return;
+        }
+        // an order dropped on the flagship means "fall in behind her"
+        const flag = this.state?.ships.find((s) => s.id === 0);
+        if (escorts.length && flag && Math.hypot(at.x - flag.position.x, at.z - flag.position.z) * this.view.zoom < 22) this.actions.follow(escorts);
+        else this.actions.order(ids.length ? ids : [0], at.x, at.z, e.shiftKey, e.ctrlKey || e.metaKey);
+        return;
+      }
       if (e.button !== 0) return;
       dragging = false;
       this.canvas.releasePointerCapture(e.pointerId);
-      if (moved < 5) this.select(e.clientX, e.clientY);
+      if (moved < 5) this.select(e.clientX, e.clientY, e.shiftKey);
     });
-    this.canvas.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const w = this.toWorld(e.clientX, e.clientY);
-      if (Math.hypot(w.x, w.z) < WORLD_RADIUS - 20) this.actions.order(this.selectedShip ?? 0, w.x, w.z);
-    });
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener(
       'wheel',
       (e) => {
@@ -733,7 +823,14 @@ export class MapView {
       if (!btn) return;
       if ('close' in btn.dataset) this.actions.close();
       else if (btn.dataset.islandAct && this.selected) this.onIslandAction?.(this.selected, btn.dataset.islandAct);
-      else if (btn.dataset.shipAct === 'follow' && this.selectedShip !== null) this.actions.follow(this.selectedShip);
+      else if (btn.dataset.shipAct === 'follow') this.actions.follow([...this.selectedShips].filter((id) => id !== 0));
+      else if (btn.dataset.shipAct === 'group') this.group();
+      else if (btn.dataset.fleet) this.pickFleet(Number(btn.dataset.fleet));
+      else if (btn.dataset.disband) {
+        this.fleets[Number(btn.dataset.disband)] = [];
+        this.barKey = '';
+      }
+      this.infoKey = '';
       btn.blur();
     });
   }
@@ -756,8 +853,30 @@ export class MapView {
   /** Show an island's panel (used when the game wants to point at one). */
   selectIsland(island: Island | null): void {
     this.selected = island;
-    this.selectedShip = null;
+    this.selectedShips.clear();
     this.infoKey = '';
+  }
+
+  /** Which fleet a ship sails with (1 up), or 0. */
+  private fleetOf(id: number): number {
+    return this.fleets.findIndex((f) => f.includes(id)) + 1;
+  }
+
+  /** Make a fleet of the escorts picked now (they leave any fleet they were in). */
+  private group(): void {
+    const ids = [...this.selectedShips].filter((id) => id !== 0);
+    if (ids.length === 0) return;
+    for (const f of this.fleets) for (const id of ids) if (f.includes(id)) f.splice(f.indexOf(id), 1);
+    const free = this.fleets.findIndex((f) => f.length === 0);
+    if (free >= 0) this.fleets[free] = ids;
+    else this.fleets.push(ids);
+    this.barKey = '';
+  }
+
+  private pickFleet(n: number): void {
+    this.selected = null;
+    this.selectedShips.clear();
+    for (const id of this.fleets[n] ?? []) this.selectedShips.add(id);
   }
 
   private minZoom(): number {
@@ -776,25 +895,32 @@ export class MapView {
     return { x: this.view.cx + (clientX - window.innerWidth / 2) / this.view.zoom, z: this.view.cz + (clientY - window.innerHeight / 2) / this.view.zoom };
   }
 
-  private select(clientX: number, clientY: number): void {
+  private select(clientX: number, clientY: number, add = false): void {
     const w = this.toWorld(clientX, clientY);
     const state = this.state;
     this.infoKey = '';
     // one of your own ships first, then an island you have found
     const ship = state?.ships.find((s) => s.mine !== false && !s.hostile && Math.hypot(w.x - s.position.x, w.z - s.position.z) * this.view.zoom < 20);
     if (ship) {
-      this.selectedShip = ship.id;
+      // shift adds her to the ships already picked, or drops her from them
+      if (!add) this.selectedShips.clear();
+      if (add && this.selectedShips.has(ship.id)) this.selectedShips.delete(ship.id);
+      else this.selectedShips.add(ship.id);
       this.selected = null;
       return;
     }
-    this.selectedShip = null;
+    if (add) return;
+    this.selectedShips.clear();
     this.selected = state?.islands.find((i) => state.fog.found.has(i) && Math.hypot(w.x - i.center.x, w.z - i.center.z) < Math.max(i.radius, 14 / this.view.zoom)) ?? null;
   }
 
   /** Redraw. Call every frame while the chart is open. */
   draw(state: MapState): void {
     this.state = state;
-    if (this.selectedShip !== null && !state.ships.some((s) => s.id === this.selectedShip)) this.selectedShip = null;
+    const afloat = new Set(state.ships.filter((s) => s.mine !== false && !s.hostile).map((s) => s.id));
+    for (const id of [...this.selectedShips]) if (!afloat.has(id)) this.selectedShips.delete(id);
+    for (const f of this.fleets) for (let i = f.length - 1; i >= 0; i--) if (!afloat.has(f[i])) f.splice(i, 1);
+    this.refreshBar();
     const dpr = Math.min(window.devicePixelRatio, 2);
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -803,29 +929,49 @@ export class MapView {
       this.canvas.height = Math.floor(h * dpr);
     }
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.painter.paint(this.ctx, w, h, this.view, state, { mini: false, selectedIsland: this.selected, selectedShip: this.selectedShip });
+    this.painter.paint(this.ctx, w, h, this.view, state, { mini: false, selectedIsland: this.selected, selectedShips: this.selectedShips, fleetOf: (id) => this.fleetOf(id), zone: this.zone });
     this.refreshInfo(state);
+  }
+
+  /** The row of fleet chips along the top. */
+  private refreshBar(): void {
+    const key = this.fleets.map((f) => f.length).join();
+    if (key === this.barKey) return;
+    this.barKey = key;
+    this.bar.innerHTML = this.fleets
+      .map((f, n) => (f.length ? `<span class="chart-fleet"><button data-fleet="${n}" title="Pick every ship in this fleet">Fleet ${n + 1} <small>${f.length}</small></button><button data-disband="${n}" title="Disband this fleet">×</button></span>` : ''))
+      .join('');
   }
 
   private refreshInfo(state: MapState): void {
     const sel = this.selected;
-    const ship = this.selectedShip === null ? null : (state.ships.find((s) => s.id === this.selectedShip) ?? null);
+    const picked = state.ships.filter((s) => this.selectedShips.has(s.id));
+    const ship = picked.length === 1 ? picked[0] : null;
     const extra = sel && this.islandActions ? this.islandActions(sel) : '';
     const key = sel
       ? [sel.name, sel.owner, ...RESOURCE_IDS.map((id) => sel.stock[id]), extra].join('|')
       : ship
-        ? [ship.id, Math.round(ship.health * 100), ship.note, !!ship.course].join('|')
-        : '';
+        ? [ship.id, Math.round(ship.health * 100), ship.note, !!ship.course, this.fleetOf(ship.id)].join('|')
+        : picked.map((s) => s.id).join();
     if (key === this.infoKey) return;
     this.infoKey = key;
-    this.info.hidden = !sel && !ship;
+    this.info.hidden = !sel && picked.length === 0;
+    if (picked.length > 1) {
+      const escorts = picked.filter((s) => s.id !== 0).length;
+      this.info.innerHTML = `
+        <div class="island-name">${picked.length} ships</div>
+        <div class="island-type">${picked.map((s) => s.name).join(', ')}</div>
+        <div class="chart-hint">Right click sends them all. Hold right and drag for a patrol zone.</div>
+        ${escorts ? '<button data-ship-act="group">Make them a fleet</button><button data-ship-act="follow">Follow the flagship</button>' : ''}`;
+      return;
+    }
     if (ship) {
       this.info.innerHTML = `
         <div class="island-name">${ship.name}</div>
-        <div class="island-type">${ship.id === 0 ? 'Your flagship' : 'Escort'} · ${ship.note}</div>
+        <div class="island-type">${ship.id === 0 ? 'Your flagship' : this.fleetOf(ship.id) ? `Fleet ${this.fleetOf(ship.id)}` : 'Escort'} · ${ship.note}</div>
         <div class="row"><span>Hull</span><b>${Math.round(ship.health * 100)}%</b></div>
         <div class="chart-hint">Right click the chart to send her there.</div>
-        ${ship.id !== 0 ? '<button data-ship-act="follow">Follow the flagship</button>' : ''}`;
+        ${ship.id !== 0 ? '<button data-ship-act="group">Start a fleet with her</button><button data-ship-act="follow">Follow the flagship</button>' : ''}`;
       return;
     }
     if (!sel) return;
@@ -869,6 +1015,6 @@ export class MiniMap {
     const size = MiniMap.SIZE;
     if (this.canvas.width !== size * dpr) this.canvas.width = this.canvas.height = size * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.painter.paint(this.ctx, size, size, { cx: 0, cz: 0, zoom: (size * 0.47) / WORLD_RADIUS }, state, { mini: true, selectedIsland: null, selectedShip: null });
+    this.painter.paint(this.ctx, size, size, { cx: 0, cz: 0, zoom: (size * 0.47) / WORLD_RADIUS }, state, { mini: true, selectedIsland: null, selectedShips: null });
   }
 }

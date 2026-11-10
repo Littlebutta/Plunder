@@ -1,3 +1,4 @@
+import { ECONOMY } from '../world/Resources';
 import { ME } from '../world/Factions';
 import { Hold, RESOURCE_IDS } from '../world/Resources';
 import { canAfford, costLabel, STRONGHOLD, Stronghold, Territory } from '../world/Strongholds';
@@ -94,8 +95,8 @@ export class TerritoryUi {
       const who = `${whose} ${isHome ? 'home' : 'outpost'}${s.side !== ME && f.allied(ME, s.side) ? ' (ally)' : ''}`;
       html += `<div class="row"><span>${who}: ${s.levelName}</span><b>${Math.ceil(s.hp)} / ${s.maxHp}</b></div>`;
       if (territory.factions.hostile(ME, s.side)) html += '<div class="chart-hint">Shoot it to ruins, then hold a ship close to take the island.</div>';
-      else if (s.side !== 0) html += '<div class="chart-hint">Held by your ally.</div>';
-      else html += `<div class="chart-hint">Sends ${1 + s.level} unit${s.level ? 's' : ''} to your stores every ${STRONGHOLD.incomeEvery}s.</div>`;
+      else if (s.side !== ME) html += '<div class="chart-hint">Held by your ally.</div>';
+      else html += `<div class="chart-hint">Sends ${ECONOMY.incomeBase + ECONOMY.incomeMetal + ECONOMY.incomePerLevel * s.level} units to your stores every ${STRONGHOLD.incomeEvery}s.</div>`;
     }
     if (offer) {
       const needsShip = offer.act === 'build';
@@ -105,15 +106,14 @@ export class TerritoryUi {
       else if (!can) html += `<div class="chart-hint">Not enough in your stores.</div>`;
     }
     if (s && s === territory.home && s.side === ME) {
-      const full = fleet >= STRONGHOLD.fleetMax;
-      html += `<div class="chart-sub">Build an escort (${fleet} of ${STRONGHOLD.fleetMax})</div><div class="chart-ships">`;
+      html += `<button data-island-act="yard">Shipyard <small>design a ship, then build her here</small></button>`;
+      html += `<div class="chart-sub">Build an escort (${fleet} afloat)</div><div class="chart-ships">`;
       designs.forEach((d, n) => {
         const cost = escortCost(d);
-        const can = !full && canAfford(cost, territory.stores, null);
+        const can = canAfford(cost, territory.stores, null);
         html += `<button data-island-act="ship:${n}" ${can ? '' : 'disabled'}><b>${d.name}</b><small>${costLabel(cost)}</small></button>`;
       });
       html += '</div>';
-      if (full) html += `<div class="chart-hint">Your fleet is full (${STRONGHOLD.fleetMax} escorts).</div>`;
     }
     return html;
   }

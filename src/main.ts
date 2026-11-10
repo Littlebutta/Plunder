@@ -33,7 +33,7 @@ import { FogOfWar, Lookout } from './world/FogOfWar';
 import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS, sanitizeDesign } from './ship/HullDesign';
 import { MAST, mastOwner } from './ship/Masts';
 import { TargetUi } from './ui/TargetUi';
-import { Territory, STRONGHOLD, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
+import { Territory, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
 import { TerritoryUi } from './ui/TerritoryUi';
 import { ballisticVelocity } from './combat/ballistics';
 import { MapView, MiniMap, MapState, MapShip } from './ui/MapView';
@@ -349,7 +349,9 @@ const marauder = vs ? null : addShip(new Warship(waves, wind, world.islands, war
 /** The player's escorts: built at home, ordered about from the chart. */
 const fleet: Warship[] = [];
 const fleetBuilt = new Map<number, number>();
-const FLEET_NAMES = ['Swift', 'Gannet', 'Petrel', 'Osprey', 'Heron', 'Kestrel', 'Curlew', 'Tern'];
+const FLEET_NAMES = ['Swift', 'Gannet', 'Petrel', 'Osprey', 'Heron', 'Kestrel', 'Curlew', 'Tern', 'Fulmar', 'Shrike', 'Dunlin', 'Merlin', 'Plover', 'Skua', 'Avocet', 'Harrier'];
+/** A name for the nth ship a captain builds; past the end of the list they take a number. */
+const fleetName = (n: number) => FLEET_NAMES[n % FLEET_NAMES.length] + (n >= FLEET_NAMES.length ? ` ${1 + Math.floor(n / FLEET_NAMES.length)}` : '');
 const escortsOf = (faction: number) => ships.filter((w) => w.faction === faction && !w.flagship && w.state !== 'gone');
 const hostileShips = () => ships.filter((w) => w.alive && w.reveal > 0.3 && factions.hostile(ME, w.faction));
 const targetUi = new TargetUi(hudRoot);
@@ -410,20 +412,52 @@ hudRoot.append(edgeWarning);
 
 /** Where the flagship has been told to sail from the chart; any touch of the helm cancels it. */
 let course: THREE.Vector3 | null = null;
-const chart = new MapView(document.body, {
-  order: (id, x, z) => {
-    if (id === 0) course = new THREE.Vector3(x, 0, z);
+/** Chained orders for the flagship: where to sail after `course`. */
+let courseQueue: THREE.Vector3[] = [];
+type OrderKind = 0 | 1 | 2; // follow the flagship, move, patrol a zone
+/** Give one of a captain's ships a chart order (on the host this is also how a guest's orders land). */
+function applyOrder(w: Warship, kind: OrderKind, x = 0, z = 0, r = 0, append = false, attack = false): void {
+  if (kind === 1) {
+    const to = new THREE.Vector3(x, 0, z);
+    if (append && w.order) w.queue.push(to);
     else {
-      const w = fleet.find((f) => f.id === id);
-      if (w) w.order = new THREE.Vector3(x, 0, z);
-      if (w && !authority) link!.toHost(['o', id, r1(x), r1(z)]);
+      w.order = to;
+      w.queue = [];
     }
+    w.attackMove = attack;
+    w.patrol = null;
+  } else {
+    w.order = null;
+    w.queue = [];
+    w.patrol = kind === 2 ? { x, z, r: Math.min(Math.max(r, 40), 400) } : null;
+  }
+}
+function orderShips(ids: number[], kind: OrderKind, x = 0, z = 0, r = 0, append = false, attack = false): void {
+  const mine = ids.map((id) => fleet.find((f) => f.id === id)).filter((w): w is Warship => !!w);
+  // several ships sent to one spot take station around it rather than piling up on it
+  const spread = kind === 1 && mine.length + (ids.includes(0) ? 1 : 0) > 1 ? 26 + mine.length * 4 : 0;
+  mine.forEach((w, i) => {
+    const a = (i / mine.length) * Math.PI * 2;
+    const tx = x + Math.cos(a) * spread;
+    const tz = z + Math.sin(a) * spread;
+    applyOrder(w, kind, tx, tz, r, append, attack);
+    if (!authority) link!.toHost(['o', w.id, kind, r1(tx), r1(tz), r1(r), append ? 1 : 0, attack ? 1 : 0]);
+  });
+}
+const chart = new MapView(document.body, {
+  order: (ids, x, z, append, attack) => {
+    if (ids.includes(0)) {
+      const to = new THREE.Vector3(x, 0, z);
+      if (append && course) courseQueue.push(to);
+      else {
+        course = to;
+        courseQueue = [];
+      }
+    }
+    orderShips(ids, 1, x, z, 0, append, attack);
   },
-  follow: (id) => {
-    const w = fleet.find((f) => f.id === id);
-    if (w) w.order = null;
-    if (w && !authority) link!.toHost(['o', id]);
-  },
+  patrol: (ids, x, z, r) => orderShips(ids, 2, x, z, r),
+  follow: (ids) => orderShips(ids, 0),
   close: () => {
     chart.close();
     canvas.focus();
@@ -436,13 +470,14 @@ function followCourse(dt: number): boolean {
   if (!course) return false;
   if (input.throttle !== 0 || input.steer !== 0) {
     course = null; // the player took the helm
+    courseQueue = [];
     return false;
   }
   const p = ship.body.position;
   const left = Math.hypot(course.x - p.x, course.z - p.z);
   if (left < Math.max(18, ship.length * 1.5)) {
-    course = null;
-    return false;
+    course = courseQueue.shift() ?? null;
+    if (!course) return false;
   }
   ship.body.forward(fwd).setY(0).normalize();
   // ease the sail off on the approach so she does not overshoot
@@ -533,6 +568,7 @@ function tryBuild(island: Island): void {
 }
 chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length, escortDesigns());
 chart.onIslandAction = (island, act) => {
+  if (act === 'yard') return openYard(true);
   if (!act.startsWith('ship:')) return tryBuild(island);
   const why = buildEscort(escortDesigns()[Number(act.slice(5))]);
   if (why) weatherUi.announce('Cannot build her yet', why, 'danger');
@@ -564,9 +600,8 @@ function buildEscort(design: HullDesign = PRESETS[1], faction = ME, free = false
   const owner = factions.get(faction)!;
   const cost = escortCost(design);
   const n = fleetBuilt.get(faction) ?? 0;
-  const berth = homeBerth(1 + (n % 4), faction);
+  const berth = homeBerth(1 + (n % 8), faction);
   if (!berth) return 'Your home island is lost.';
-  if (escortsOf(faction).length >= STRONGHOLD.fleetMax) return `Your fleet is full (${STRONGHOLD.fleetMax} escorts).`;
   if (!free && !canAfford(cost, owner.stores, null)) return `An escort ${design.name} needs ${costLabel(cost)}.`;
   if (!free) pay(cost, owner.stores, null);
   if (!authority) {
@@ -579,7 +614,7 @@ function buildEscort(design: HullDesign = PRESETS[1], faction = ME, free = false
   const w = addShip(
     new Warship(waves, wind, world.islands, warshipHooks, {
       id: warshipId(),
-      name: FLEET_NAMES[(n + faction * 3) % FLEET_NAMES.length],
+      name: fleetName(n + faction * 3),
       faction,
       colour: owner.colour,
       respawn: false,
@@ -739,7 +774,9 @@ if (link) {
     on.set('e', (from, m) => void buildEscort(sanitizeDesign(m[1] as HullDesign), from, true));
     on.set('o', (from, m) => {
       const w = ships.find((x) => x.id === m[1] && x.faction === from && !x.flagship);
-      if (w) w.order = m.length >= 4 ? new THREE.Vector3(Number(m[2]), 0, Number(m[3])) : null;
+      const kind = Number(m[2]);
+      const n = (i: number) => (Number.isFinite(Number(m[i])) ? Number(m[i]) : 0);
+      if (w && (kind === 0 || kind === 1 || kind === 2) && w.queue.length < 24) applyOrder(w, kind, n(3), n(4), n(5), !!m[6], !!m[7]);
     });
   } else {
     on.set('c', (from, m) => {
@@ -825,6 +862,7 @@ function sinkPlayer(): void {
   if (sunkFor >= 0) return;
   sunkFor = 0;
   course = null;
+  courseQueue = [];
   ship.sail = 0;
   gathering.select(null);
   effects.splinters(ship.body.position, 40);
@@ -864,14 +902,14 @@ const _hd = new THREE.Vector3();
 function mapState(): MapState {
   const colour = myColour();
   const ships_: MapShip[] = [
-    { id: 0, position: ship.body.position, heading: compass(ship.body.forward(_hd)), colour, name: ship.displayName, hostile: false, health: hull.fraction, course, note: course ? 'Under orders' : 'At your command' },
+    { id: 0, position: ship.body.position, heading: compass(ship.body.forward(_hd)), colour, name: ship.displayName, hostile: false, health: hull.fraction, course, route: courseQueue, note: course ? 'Under orders' : 'At your command' },
   ];
   for (const w of ships) {
     if (!w.alive) continue;
     const mine = w.faction === ME;
     const hostile = factions.hostile(ME, w.faction);
-    const note = hostile ? '' : w.state === 'fight' ? 'Engaging the enemy' : w.state === 'raid' ? 'Shelling a stronghold' : !mine ? `${factions.name(w.faction)}, your ally` : w.order ? 'Under orders' : 'Following the flagship';
-    ships_.push({ id: w.id, position: w.position, heading: compass(w.ship.body.forward(_hd)), colour: factions.colour(w.faction), name: w.name, hostile, mine, health: w.hp / w.maxHp, course: mine ? w.order : null, note });
+    const note = hostile ? '' : w.state === 'fight' ? 'Engaging the enemy' : w.state === 'raid' ? 'Shelling a stronghold' : !mine ? `${factions.name(w.faction)}, your ally` : w.order ? (w.attackMove ? 'Attack-moving' : 'Under orders') : w.patrol ? 'Patrolling her zone' : 'Following the flagship';
+    ships_.push({ id: w.id, position: w.position, heading: compass(w.ship.body.forward(_hd)), colour: factions.colour(w.faction), name: w.name, hostile, mine, health: w.hp / w.maxHp, course: mine ? w.order : null, route: mine ? w.queue : undefined, attack: mine && w.attackMove, patrol: mine ? w.patrol : null, note });
   }
   return { islands: world.islands, ships: ships_, colourOf: (f) => factions.colour(f), nameOf: (f) => factions.name(f), strongholds: territory.strongholds, fog };
 }
@@ -1024,8 +1062,8 @@ function updateScoreboard(): void {
 
 
 /** The shipyard works only at the home dock (or before the voyage has begun, when the ship is still there). */
-function openYard(): void {
-  if (voyageStarted && !atHomeDock()) {
+function openYard(fromChart = false): void {
+  if (voyageStarted && !atHomeDock() && !(fromChart && territory.home.side === ME)) {
     weatherUi.announce('No shipyard here', `Bring your ship alongside your home at ${territory.home.island.name}`, 'danger');
     return;
   }
@@ -1050,6 +1088,10 @@ function leaveYard(): void {
 let cannonsPaid = 0;
 const yard = new Shipyard(document.body, {
   launch: (design) => {
+    if (voyageStarted && !atHomeDock()) {
+      yard.warn('Your flagship can only be refitted alongside your home. You can still build this design as an escort from here.');
+      return;
+    }
     // cannons beyond the first few are paid for in metals, once each
     const extra = Math.max(0, computeStats(design).guns - FREE_CANNONS);
     const due = { wood: 0, stone: 0, salvage: Math.max(0, extra - cannonsPaid) * METALS_PER_CANNON };
@@ -1064,13 +1106,17 @@ const yard = new Shipyard(document.body, {
     startPlay();
   },
   useRaft: () => {
+    if (voyageStarted && !atHomeDock()) {
+      yard.warn('Your flagship can only be changed alongside your home.');
+      return;
+    }
     if (!(ship instanceof Raft)) setShip(new Raft(waves, wind));
     yard.close();
     startPlay();
   },
   back: () => leaveYard(),
   escort: (design) => buildEscort(design),
-  fleet: () => `${fleet.length} of ${STRONGHOLD.fleetMax}`,
+  fleet: () => `${fleet.length}`,
   stock: () => hold.stock,
   cannonsPaid: () => cannonsPaid,
 });

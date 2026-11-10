@@ -78,7 +78,7 @@ export class AiCaptain {
     const afford = (cost: Stock) => canAfford(plus(cost, reserve), f.stores, null);
     if (home.level < LEVELS.length - 1 && afford(LEVELS[home.level + 1].cost) && (home.level === 0 || escorts.length >= Math.min(1, cfg.escorts))) {
       territory.build(home.island, false, f.id);
-    } else if (escorts.length < (f.stores.wood > 160 ? STRONGHOLD.fleetMax : cfg.escorts) && home.level >= 1) {
+    } else if (escorts.length < (f.stores.wood > 160 ? cfg.escorts + 2 : cfg.escorts) && home.level >= 1) {
       this.world.launchEscort(f.id);
     } else if (this.level !== 'easy') {
       const outpost = held.find((s) => s !== home && s.level < 1 && afford(LEVELS[1].cost));

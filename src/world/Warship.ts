@@ -90,6 +90,13 @@ export class Warship {
   readonly flagship: boolean;
   /** Chart order: sail here and hold. */
   order: THREE.Vector3 | null = null;
+  /** Chained orders: where to go after `order`, in turn. */
+  queue: THREE.Vector3[] = [];
+  /** With an order: fight whatever comes in range on the way (true), or sail past it, firing only as the guns bear (false). */
+  attackMove = true;
+  /** A zone to patrol when there is no order: she sails round inside it and fights what enters. */
+  patrol: { x: number; z: number; r: number } | null = null;
+  private patrolLeg = 0;
   /** With no order: keep station on this point (the flagship). */
   escort: THREE.Vector3 | null = null;
   hp = ENEMY.hp;
@@ -306,8 +313,13 @@ export class Warship {
 
     const pos = this.position;
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
-    if (this.state === 'patrol' && hostile && foe && range < ENEMY.engageRange) this.state = 'fight';
-    else if (this.state === 'fight' && (!hostile || !foe || range > ENEMY.loseRange)) this.state = 'patrol';
+    // on to the next waypoint of a chained order
+    if (this.order && this.queue.length && Math.hypot(this.order.x - pos.x, this.order.z - pos.z) < 36) this.order = this.queue.shift()!;
+    // under a plain move order she does not stop to fight; on patrol she fights what comes into her zone
+    const zone = this.order ? null : this.patrol;
+    const mayEngage = this.order ? this.attackMove : !zone || Math.hypot(player.x - zone.x, player.z - zone.z) < zone.r + 50;
+    if (this.state === 'patrol' && hostile && foe && mayEngage && range < ENEMY.engageRange) this.state = 'fight';
+    else if (this.state === 'fight' && (!hostile || !foe || !mayEngage || range > ENEMY.loseRange)) this.state = 'patrol';
     // A raid goes ahead until the player comes close enough to fight instead.
     if (this.state === 'patrol' && hostile && this.raidTarget) this.state = 'raid';
     else if (this.state === 'raid' && (!hostile || !this.raidTarget)) this.state = 'patrol';
@@ -325,13 +337,18 @@ export class Warship {
       const rz = (pos.z - focus.z) / fr;
       const k = THREE.MathUtils.clamp((fr - (raid ? ENEMY.raidStandoff : ENEMY.standoff)) / 40, -1, 1);
       want.set(-rz * this.circle - rx * k, 0, rx * this.circle - rz * k);
-    } else if (this.order || this.escort) {
-      // go where the chart says, or keep station on the flagship; loiter in a slow circle on arrival
-      const to = this.order ?? this.escort!;
+    } else if (this.order || zone || this.escort) {
+      // go where the chart says, round the patrol zone, or keep station on the flagship; loiter in a slow circle on arrival
+      let to = this.order ?? this.escort!;
+      if (!this.order && zone) {
+        const a = (this.patrolLeg / 5) * Math.PI * 2;
+        to = _leg.set(zone.x + Math.cos(a) * zone.r * 0.6, 0, zone.z + Math.sin(a) * zone.r * 0.6);
+        if (Math.hypot(to.x - pos.x, to.z - pos.z) < 34) this.patrolLeg = (this.patrolLeg + 1) % 5;
+      }
       const dx = to.x - pos.x;
       const dz = to.z - pos.z;
       const left = Math.hypot(dx, dz) || 1;
-      const hold = this.order ? 30 : 42;
+      const hold = this.order ? 30 : zone ? 6 : 42;
       const k = THREE.MathUtils.clamp((left - hold) / 30, -0.4, 1);
       want.set(dx / left, 0, dz / left).multiplyScalar(k).add(_v.set(-dz / left, 0, dx / left).multiplyScalar(1 - Math.abs(k)));
       cruise = left > hold + 90 ? 0.9 : left > hold + 15 ? 0.6 : 0.22;
@@ -360,8 +377,8 @@ export class Warship {
     ship.syncVisuals(dt);
     ship.group.updateMatrixWorld();
 
-    // Guns.
-    if (this.state === 'fight' || raid) {
+    // Guns: in a fight or a raid, and at any enemy she passes within range of.
+    if (this.state === 'fight' || raid || (hostile && foe && range < BROADSIDE.maxRange)) {
       const mark = raid ?? player;
       const reach = Math.hypot(mark.x - pos.x, mark.z - pos.z);
       this.battery.aimAt(mark, dt);
@@ -475,6 +492,7 @@ const NET_STATES: Warship['state'][] = ['patrol', 'fight', 'raid', 'sinking', 'g
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const _q = new THREE.Quaternion();
+const _leg = new THREE.Vector3();
 const _want = new THREE.Vector3();
 const _mark = new THREE.Vector3();
 const _vel = new THREE.Vector3();

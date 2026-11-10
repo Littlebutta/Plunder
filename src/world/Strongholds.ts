@@ -57,7 +57,6 @@ export const STRONGHOLD = {
   incomeEvery: ECONOMY.incomeEvery,
   /** A new escort ship, and how many the fleet can hold. */
   shipCost: { wood: 30, stone: 0, salvage: 8 } as Stock,
-  fleetMax: 4,
 };
 
 /** Who holds a stronghold: a faction id (see Factions). */

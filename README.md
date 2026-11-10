@@ -55,7 +55,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | U | Alongside an island: found an outpost on an unclaimed island, or upgrade your stronghold there. |
 | Y | At your home dock: open the shipyard. |
 | T | Mark the nearest hostile ship, or let go of the one you have marked. |
-| M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships, right click sends the selected ship there (the flagship if none; touch the helm to cancel), drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
+| M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships (Shift click adds more), right click sends the selection there (the flagship if none; touch the helm to cancel). Shift right click adds a waypoint, Ctrl right click is an attack move (they fight whatever comes in range on the way), right click on your flagship makes them follow it, and holding right and dragging draws a patrol zone. Selected ships can be made into a fleet, picked again from the bar at the top. Drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
 | V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | P | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
@@ -122,7 +122,7 @@ The raiders have a **home of their own**: a watchtower on the port island furthe
 
 **Capturing islands.** The raiders also keep a stockade on every other port island. Shoot one to ruins and hold a ship within 110 m for 10 s and the island, its flag and its income are yours. They can take a port back the same way.
 
-**Fleet.** From your home island's panel on the chart, or from the shipyard, build escorts (up to 4) from any of the stock designs or your own saved design. An escort costs half the design's hull wood plus 2 metals a cannon (`escortCost`), and bigger hulls take more sinking. An escort follows the flagship, fights the raiders' ship when it comes within 150 m, and shells any raider stronghold it is near. Select one on the chart and right click to send it somewhere; "Follow the flagship" calls it back. Escorts and the *Marauder* are the same class (`src/world/Warship.ts`).
+**Fleet.** From your home island's panel on the chart, or from the shipyard, build escorts (as many as you can pay for) from any of the stock designs or your own saved design. An escort costs half the design's hull wood plus 2 metals a cannon (`escortCost`), and bigger hulls take more sinking. An escort follows the flagship, fights the raiders' ship when it comes within 150 m, and shells any raider stronghold it is near. Select them on the chart and right click to send them somewhere (plain moves sail past fights, attack moves stop for them); "Follow the flagship" calls them back. The home island's chart panel also opens the shipyard from anywhere: designs can be built as escorts there, but the flagship itself is only refitted alongside home. Escorts and the *Marauder* are the same class (`src/world/Warship.ts`).
 
 Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 

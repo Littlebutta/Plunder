@@ -439,3 +439,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .lobby-notice { margin-top: 8px; font-size: 13px; font-weight: 700; color: #ffd27a; }
 .hud-net { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: rgba(42, 23, 8, .85); border: 2px solid #c0814a; color: #fff8e6; font: 800 14px 'Nunito', sans-serif; pointer-events: none; }
 .hud-net[hidden] { display: none; }
+
+/* --- Chart: fleets ------------------------------------------------------------------------ */
+.chart-fleets { position: absolute; left: calc(180px + var(--ui-side, 0px)); top: 22px; display: flex; gap: 8px; flex-wrap: wrap; max-width: 50vw; }
+.chart-fleet { display: inline-flex; }
+.chart-fleet button { font: 800 13px 'Nunito', sans-serif; color: #fff8e6; cursor: pointer; background: rgba(42, 23, 8, .85); border: 2px solid #c0814a; padding: 5px 10px; }
+.chart-fleet button:first-child { border-radius: 8px 0 0 8px; }
+.chart-fleet button:last-child { border-radius: 0 8px 8px 0; margin-left: -2px; padding: 5px 8px; }
+.chart-fleet button:hover { background: #c0814a; color: #2a1708; }
+.chart-fleet small { opacity: .75; margin-left: 4px; }
+.chart-help { max-width: calc(100vw - 60px); white-space: normal; text-align: center; }
