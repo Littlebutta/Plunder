@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:41Z",
+  "updated": "2026-11-10T01:45:43Z",
   "categories": [
     {
       "key": "feature",
@@ -1496,6 +1496,19 @@
       "created": "2026-11-10T01:45:41Z",
       "priority": "medium",
       "updated": "2026-11-10T01:45:41Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-63",
+      "cat": "feature",
+      "title": "Vs mode: lobby, teams, AI captains, fair island placement",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #17. Factions, Match, AiCaptain, Lobby.",
+      "links": [],
+      "created": "2026-11-10T01:45:43Z",
+      "priority": "high",
+      "updated": "2026-11-10T01:45:43Z",
       "by": "Claude"
     }
   ],
