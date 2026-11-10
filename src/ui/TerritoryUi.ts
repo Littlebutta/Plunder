@@ -83,7 +83,7 @@ export class TerritoryUi {
   }
 
   /** Extra rows for the chart's island panel. */
-  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number, designs: HullDesign[] = [], hq?: { price: Stock; summary: string; count: number }): string {
+  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number, designs: HullDesign[] = [], hq?: { price: Stock; summary: string; count: number; traders: number; traderCost: Stock }): string {
     const s = territory.at(island);
     const offer = territory.offer(island);
     const here = near === island;
@@ -111,6 +111,9 @@ export class TerritoryUi {
         const can = canAfford(hq.price, territory.stores, null);
         html += `<button data-island-act="upgrade" ${can ? '' : 'disabled'}>Buy a random upgrade <small>${costLabel(hq.price)}</small></button>`;
         html += `<div class="chart-hint">${hq.count ? `Upgrades (${hq.count}): ${hq.summary}` : 'No upgrades yet. Sink a ghost ship for a free one.'}</div>`;
+        const trade = canAfford(hq.traderCost, territory.stores, null) && territory.held(ME).length > 1;
+        html += `<button data-island-act="trader" ${trade ? '' : 'disabled'}>Build a trade ship <small>${costLabel(hq.traderCost)} · ${hq.traders} afloat</small></button>`;
+        html += `<div class="chart-hint">${territory.held(ME).length > 1 ? 'Sails between your islands and brings back their goods. Unarmed, so guard her.' : 'Hold a second island to trade with.'}</div>`;
       }
       html += `<div class="chart-sub">Build an escort (${fleet} afloat)</div><div class="chart-ships">`;
       designs.forEach((d, n) => {

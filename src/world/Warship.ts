@@ -100,6 +100,8 @@ export class Warship {
   private patrolLeg = 0;
   /** With no order: keep station on this point (the flagship). */
   escort: THREE.Vector3 | null = null;
+  /** A trade ship: she never stops to fight. */
+  trader = false;
   hp = ENEMY.hp;
   readonly maxHp: number;
   /** 'patrol' | 'fight' | 'raid' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
@@ -353,7 +355,7 @@ export class Warship {
     if (this.order && this.queue.length && Math.hypot(this.order.x - pos.x, this.order.z - pos.z) < 36) this.order = this.queue.shift()!;
     // under a plain move order she does not stop to fight; on patrol she fights what comes into her zone
     const zone = this.order ? null : this.patrol;
-    const mayEngage = this.order ? this.attackMove : !zone || Math.hypot(player.x - zone.x, player.z - zone.z) < zone.r + 50;
+    const mayEngage = this.trader ? false : this.order ? this.attackMove : !zone || Math.hypot(player.x - zone.x, player.z - zone.z) < zone.r + 50;
     if (this.state === 'patrol' && hostile && foe && mayEngage && range < ENEMY.engageRange) this.state = 'fight';
     else if (this.state === 'fight' && (!hostile || !foe || !mayEngage || range > ENEMY.loseRange)) this.state = 'patrol';
     // A raid goes ahead until the player comes close enough to fight instead.
@@ -400,7 +402,7 @@ export class Warship {
       const dz = pos.z - island.center.z;
       const d = Math.hypot(dx, dz);
       const clear = d - island.radius;
-      const keepOff = raid ? 38 : 70; // a raider has to come in close to shell the shore
+      const keepOff = raid || this.trader ? 38 : 70; // a raider has to come in close to shell the shore
       if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 3);
     }
     const fwd = ship.body.forward(_fwd).setY(0).normalize();

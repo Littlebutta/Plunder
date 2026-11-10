@@ -46,6 +46,7 @@ import { rollWorldSeed } from './world/worldConfig';
 import { NPC_COLOUR } from './ui/Settings';
 import { UpgradeSet, upgradeById, UPGRADES, Upgrade } from './world/Upgrades';
 import { WORLD_RADIUS } from './world/worldConfig';
+import { TradeRoutes, TRADE, MERCHANT } from './world/Trade';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
@@ -311,14 +312,14 @@ const warshipHooks: WarshipHooks = {
  * Add resources to a faction's stores (salvage, bounties). Online, a guest's
  * stores live on their own copy, so the host sends them the takings ('k').
  */
-function credit(faction: number, stock: Stock): void {
+function credit(faction: number, stock: Stock, kind: 'salvage' | 'trade' = 'salvage'): void {
   const f = factions.get(faction);
   if (!f || f.kind === 'raiders' || f.kind === 'ghosts') return;
   if (link?.host && f.kind === 'human' && faction !== ME) {
-    link.send(['k', stock.wood, stock.stone, stock.salvage], true, faction);
+    link.send(['k', stock.wood, stock.stone, stock.salvage, kind], true, faction);
     return;
   }
-  const k = faction === ME ? upgrades.mods.salvage : 1;
+  const k = faction === ME ? upgrades.mods[kind] : 1;
   f.stores.wood += Math.round(stock.wood * k);
   f.stores.stone += Math.round(stock.stone * k);
   f.stores.salvage += Math.round(stock.salvage * k);
@@ -602,10 +603,15 @@ function tryBuild(island: Island): void {
   const s = territory.at(island)!;
   weatherUi.announce(s.levelName, s.home ? `Your home at ${island.name} grows stronger` : `${island.name} flies your colours`, 'good');
 }
-chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length, escortDesigns(), { price: upgrades.price(), summary: upgrades.summary(), count: upgrades.count });
+chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length, escortDesigns(), { price: upgrades.price(), summary: upgrades.summary(), count: upgrades.count, traders: tradersOf(ME), traderCost: TRADE.cost });
 chart.onIslandAction = (island, act) => {
   if (act === 'yard') return openYard(true);
   if (act === 'upgrade') return buyUpgrade();
+  if (act === 'trader') {
+    const why = buildTrader(ME);
+    if (why) weatherUi.announce('Cannot build her yet', why, 'danger');
+    return;
+  }
   if (!act.startsWith('ship:')) return tryBuild(island);
   const why = buildEscort(escortDesigns()[Number(act.slice(5))]);
   if (why) weatherUi.announce('Cannot build her yet', why, 'danger');
@@ -809,6 +815,7 @@ if (link) {
       if (island) territory.build(island, true, from, true);
     });
     on.set('e', (from, m) => void buildEscort(sanitizeDesign(m[1] as HullDesign), from, true));
+    on.set('t', (from) => void buildTrader(from, true));
     on.set('o', (from, m) => {
       const w = ships.find((x) => x.id === m[1] && x.faction === from && !x.flagship);
       const kind = Number(m[2]);
@@ -819,7 +826,8 @@ if (link) {
     on.set('k', (from, m) => {
       // the host paid us: salvage hauled or a bounty
       if (from !== 0) return;
-      const n = (i: number) => Math.round(Math.max(0, Math.min(500, Number(m[i]) || 0)) * upgrades.mods.salvage);
+      const k = m[4] === 'trade' ? upgrades.mods.trade : upgrades.mods.salvage;
+      const n = (i: number) => Math.round(Math.max(0, Math.min(500, Number(m[i]) || 0)) * k);
       hold.stock.wood += n(1);
       hold.stock.stone += n(2);
       hold.stock.salvage += n(3);
@@ -910,6 +918,44 @@ function netTick(dt: number): void {
   const quiet = hostGone || sinceWorld > 15;
   netEl.hidden = !quiet && gotRoster;
   if (!netEl.hidden) netEl.textContent = quiet ? 'The host has gone. Leave the match from the menu (Esc).' : 'Waiting for the host...';
+}
+
+// --- Trade ships ---------------------------------------------------------------------
+const trade = new TradeRoutes({
+  home: (f) => {
+    const h = territory.homes.get(f);
+    return h && h.side === f ? h : null;
+  },
+  held: (f) => territory.held(f),
+  deliver: (f, cargo, from) => {
+    credit(f, cargo, 'trade');
+    if (f === ME) weatherUi.announce(`Trade from ${from.name}`, stockLabel(cargo), 'calm');
+  },
+});
+/** Trade ships are named for what they are; that is how a guest's copy tells them apart. */
+const TRADER_NAME = 'Merchant';
+const tradersOf = (f: number) => ships.filter((w) => w.faction === f && w.alive && w.name.startsWith(TRADER_NAME)).length;
+let tradersBuilt = 0;
+
+/** Build a trade ship at a captain's home, paid from their stores. Returns why not, or ''. */
+function buildTrader(faction = ME, free = false): string {
+  const owner = factions.get(faction)!;
+  const berth = homeBerth(2 + (tradersBuilt % 6), faction);
+  if (!berth) return 'Your home island is lost.';
+  if (territory.held(faction).length < 2) return 'Hold a second island first: trade ships need somewhere to trade with.';
+  if (!free && !canAfford(TRADE.cost, owner.stores, null)) return `A trade ship needs ${costLabel(TRADE.cost)}.`;
+  if (!free) pay(TRADE.cost, owner.stores, null);
+  if (!authority) {
+    link!.toHost(['t']);
+    weatherUi.announce('Trade ship ordered', 'She will sail between your islands. Keep her guarded', 'good');
+    return '';
+  }
+  tradersBuilt++;
+  const w = addShip(new Warship(waves, wind, world.islands, warshipHooks, { id: warshipId(), name: `${TRADER_NAME} ${tradersBuilt}`, faction, colour: owner.colour, respawn: false, design: MERCHANT }));
+  w.placeAt(berth.x, berth.z, berth.heading);
+  trade.add(w);
+  if (faction === ME) weatherUi.announce('Trade ship launched', 'She will sail between your islands. Keep her guarded', 'good');
+  return '';
 }
 
 // --- Upgrades and ghost ships ------------------------------------------------------
@@ -1087,7 +1133,7 @@ function mapState(): MapState {
     if (!w.alive) continue;
     const mine = w.faction === ME;
     const hostile = factions.hostile(ME, w.faction);
-    const note = hostile ? '' : w.state === 'fight' ? 'Engaging the enemy' : w.state === 'raid' ? 'Shelling a stronghold' : !mine ? `${factions.name(w.faction)}, your ally` : w.order ? (w.attackMove ? 'Attack-moving' : 'Under orders') : w.patrol ? 'Patrolling her zone' : 'Following the flagship';
+    const note = hostile ? '' : w.trader ? trade.note(w) : w.state === 'fight' ? 'Engaging the enemy' : w.state === 'raid' ? 'Shelling a stronghold' : !mine ? `${factions.name(w.faction)}, your ally` : w.order ? (w.attackMove ? 'Attack-moving' : 'Under orders') : w.patrol ? 'Patrolling her zone' : 'Following the flagship';
     ships_.push({ id: w.id, position: w.position, heading: compass(w.ship.body.forward(_hd)), colour: factions.colour(w.faction), name: w.name, hostile, mine, health: w.hp / w.maxHp, course: mine ? w.order : null, route: mine ? w.queue : undefined, attack: mine && w.attackMove, patrol: mine ? w.patrol : null, note });
   }
   return { islands: world.islands, ships: ships_, colourOf: (f) => factions.colour(f), nameOf: (f) => factions.name(f), strongholds: territory.strongholds, fog };
@@ -1799,7 +1845,7 @@ function step(rawDt: number): void {
       if (at >= 0) fleet.splice(at, 1);
       continue;
     }
-    if (!w.remote && !w.flagship && factions.get(w.faction)?.kind === 'human') {
+    if (!w.remote && !w.flagship && !w.trader && factions.get(w.faction)?.kind === 'human') {
       // a player's escort keeps station on their flagship
       w.escort = w.faction === ME ? ship.body.position : (humanShips.get(w.faction)?.position ?? null);
       // an escort shells any hostile stronghold it finds itself near
@@ -1865,6 +1911,7 @@ function step(rawDt: number): void {
   if (running) matchTime += dt;
   applyMods();
   if (running && authority) updateGhosts(dt);
+  if (running && authority) trade.update(dt);
   buildWait -= dt;
   territory.update(dt, sights, running);
   territoryUi.update(territory, buildIsland, hold, fleet.length, active && atHomeDock());
