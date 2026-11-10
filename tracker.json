@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:44Z",
+  "updated": "2026-11-10T05:32:46Z",
   "categories": [
     {
       "key": "feature",
@@ -1958,6 +1958,21 @@
       "created": "2026-11-10T03:27:17Z",
       "priority": "high",
       "updated": "2026-11-10T05:32:17Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-92",
+      "cat": "feature",
+      "title": "Reload slows with more guns",
+      "status": "good-enough",
+      "tags": [],
+      "notes": "Each gun past 4 adds 2.5% to deck reload, max +60%",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/22"
+      ],
+      "created": "2026-11-10T05:32:46Z",
+      "priority": "medium",
+      "updated": "2026-11-10T05:32:46Z",
       "by": "Claude"
     }
   ],
