@@ -12,6 +12,7 @@ export interface MenuActions {
 export class MainMenu {
   private readonly root: HTMLElement;
   private readonly playBtn: HTMLButtonElement;
+  private readonly yardBtn: HTMLButtonElement;
 
   constructor(parent: HTMLElement, actions: MenuActions) {
     this.root = document.createElement('div');
@@ -31,6 +32,7 @@ export class MainMenu {
       </div>`;
     parent.append(this.root);
     this.playBtn = this.root.querySelector('[data-act="play"]') as HTMLButtonElement;
+    this.yardBtn = this.root.querySelector('[data-act="shipyard"]') as HTMLButtonElement;
     this.root.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('button');
       if (!btn || btn.disabled) return;
@@ -56,8 +58,10 @@ export class MainMenu {
   }
 
   /** @param resumable true once a voyage is under way, so the button reads "Resume" */
-  show(resumable: boolean): void {
+  show(resumable: boolean, atDock = true): void {
     this.playBtn.textContent = resumable ? 'Resume voyage' : 'Set sail';
+    this.yardBtn.disabled = !atDock;
+    this.yardBtn.innerHTML = `Shipyard <small>${atDock ? 'draw and launch your own ship' : 'only at your home dock: sail her alongside'}</small>`;
     this.root.hidden = false;
   }
 

@@ -1,5 +1,6 @@
-import { Hold, RESOURCE_IDS, RESOURCES } from '../world/Resources';
+import { Hold, RESOURCE_IDS } from '../world/Resources';
 import { canAfford, costLabel, STRONGHOLD, Stronghold, Territory } from '../world/Strongholds';
+import { escortCost, HullDesign } from '../ship/HullDesign';
 import type { Island } from '../world/Islands';
 
 export interface EndActions {
@@ -41,14 +42,14 @@ export class TerritoryUi {
     });
   }
 
-  update(territory: Territory, near: Island | null, hold: Hold, fleet: number): void {
+  update(territory: Territory, near: Island | null, hold: Hold, fleet: number, dock = false): void {
     const home = territory.home;
     const offer = near ? territory.offer(near) : null;
     const can = offer ? canAfford(offer.cost, territory.stores, hold) : false;
     const stores = territory.stores;
     const held = territory.strongholds.filter((s) => s.side === 'player').length;
     const taking = territory.strongholds.find((s) => s.side === 'npc' && s.capture > 0);
-    const key = [fleet, ...RESOURCE_IDS.map((id) => stores[id]), home.level, Math.ceil(home.hp), Math.ceil(home.capture), held, near?.name, offer?.label, can, taking ? Math.ceil(taking.capture) : ''].join('|');
+    const key = [fleet, ...RESOURCE_IDS.map((id) => stores[id]), home.level, Math.ceil(home.hp), Math.ceil(home.capture), held, near?.name, offer?.label, can, dock, taking ? Math.ceil(taking.capture) : ''].join('|');
     if (key === this.last) return;
     this.last = key;
 
@@ -59,7 +60,6 @@ export class TerritoryUi {
       <div class="home-title">Home · ${home.island.name}</div>
       <div class="home-row"><b>${home.levelName}</b><span>${held} island${held === 1 ? '' : 's'} held</span></div>
       <div class="home-bar"><i style="width:${Math.round(f * 100)}%"></i></div>
-      <div class="home-stores"><span>Stores</span>${RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i><b>${stores[id]}</b></span>`).join('')}<span class="income">+${Math.round(territory.incomePerMinute)}/min</span></div>
       ${fleet > 0 ? `<div class="home-fleet">Fleet: ${fleet} escort${fleet === 1 ? '' : 's'}</div>` : ''}
       ${losing ? `<div class="home-warn">Being taken! ${Math.max(0, Math.ceil(STRONGHOLD.captureTime - home.capture))}s</div>` : home.ruined ? '<div class="home-warn">In ruins</div>' : ''}`;
 
@@ -72,11 +72,16 @@ export class TerritoryUi {
         ? `<kbd>U</kbd> ${offer.label} at <b>${near.name}</b> · ${costLabel(offer.cost)}`
         : `${offer.label} at <b>${near.name}</b> needs ${costLabel(offer.cost)}`;
       this.prompt.dataset.can = String(can);
+      if (dock) this.prompt.innerHTML += ' · <kbd>Y</kbd> shipyard';
+    } else if (dock) {
+      this.prompt.hidden = false;
+      this.prompt.dataset.can = 'true';
+      this.prompt.innerHTML = '<kbd>Y</kbd> Shipyard: refit your ship or build escorts';
     } else this.prompt.hidden = true;
   }
 
   /** Extra rows for the chart's island panel. */
-  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number): string {
+  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number, designs: HullDesign[] = []): string {
     const s = territory.at(island);
     const offer = territory.offer(island);
     const here = near === island;
@@ -92,12 +97,17 @@ export class TerritoryUi {
       const can = (!needsShip || here) && canAfford(offer.cost, territory.stores, here ? hold : null);
       html += `<button data-island-act="${offer.act}" ${can ? '' : 'disabled'}>${offer.label} · ${costLabel(offer.cost)}</button>`;
       if (needsShip && !here) html += '<div class="chart-hint">Sail your flagship alongside to found an outpost.</div>';
-      else if (!can) html += `<div class="chart-hint">Not enough in your stores${here ? ' and hold' : ''}.</div>`;
+      else if (!can) html += `<div class="chart-hint">Not enough in your stores.</div>`;
     }
     if (s && s === territory.home && s.side === 'player') {
       const full = fleet >= STRONGHOLD.fleetMax;
-      const can = !full && canAfford(STRONGHOLD.shipCost, territory.stores, here ? hold : null);
-      html += `<button data-island-act="ship" ${can ? '' : 'disabled'}>Build an escort sloop · ${costLabel(STRONGHOLD.shipCost)}</button>`;
+      html += `<div class="chart-sub">Build an escort (${fleet} of ${STRONGHOLD.fleetMax})</div><div class="chart-ships">`;
+      designs.forEach((d, n) => {
+        const cost = escortCost(d);
+        const can = !full && canAfford(cost, territory.stores, null);
+        html += `<button data-island-act="ship:${n}" ${can ? '' : 'disabled'}><b>${d.name}</b><small>${costLabel(cost)}</small></button>`;
+      });
+      html += '</div>';
       if (full) html += `<div class="chart-hint">Your fleet is full (${STRONGHOLD.fleetMax} escorts).</div>`;
     }
     return html;

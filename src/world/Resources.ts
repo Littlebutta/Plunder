@@ -36,10 +36,15 @@ export function islandCapacity(type: IslandType, radius: number): Stock {
   return out;
 }
 
-/** The ship's cargo hold. */
+/**
+ * A store of resources. The player has one pool for everything (gathered,
+ * captured or sent in by islands); it is not kept aboard any one ship.
+ */
 export class Hold {
-  readonly stock = emptyStock();
-  constructor(public capacity = 40) {}
+  constructor(
+    public capacity = Infinity,
+    readonly stock: Stock = emptyStock(),
+  ) {}
 
   get used(): number {
     return RESOURCE_IDS.reduce((n, id) => n + this.stock[id], 0);

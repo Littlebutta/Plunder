@@ -3,11 +3,39 @@ import { WaveField } from '../ocean/waves';
 import { PALETTE } from '../render/palette';
 import { sailTint, setToonColour } from '../render/toon';
 import { Wind } from '../world/Wind';
-import { computeStats, designToDrive, designToHullSpec, HullDesign, rigBoost, ShipStats } from './HullDesign';
+import { computeStats, deckAt, designToDrive, designToHullSpec, halfBeamAt, HullDesign, mastSize, rigBoost, ShipStats, zAt } from './HullDesign';
+import { Crew, CrewSurface } from '../crew/Crew';
+import { MastRig } from './Masts';
 import { buildShipVisual, ShipVisual } from './ShipVisual';
 import { Vessel } from './Vessel';
 import { CargoPile } from './Cargo';
 import type { Stock } from '../world/Resources';
+
+/** The deck of a design as somewhere for a crew to walk: guns, wheel, masts and cargo to visit. */
+function deckSurface(d: HullDesign, visual: ShipVisual): CrewSurface {
+  const tOf = (z: number) => THREE.MathUtils.clamp(z / d.length + 0.5, 0, 1);
+  const stations: CrewSurface['stations'] = [];
+  d.cannons.forEach((c, i) => {
+    if (c.level !== 0) return;
+    const m = visual.gunMounts[i];
+    stations.push({ at: new THREE.Vector3(m.x - Math.sign(m.x) * 0.6, 0, m.z + 0.1), work: true });
+  });
+  if (d.length >= 9) stations.push({ at: new THREE.Vector3(0, 0, zAt(d, 0.87) + 0.45), work: true }); // the helm
+  for (const m of visual.masts) stations.push({ at: new THREE.Vector3(0.4, 0, m.foot.z + 0.2), work: true });
+  visual.cargoPlaces.slice(0, 4).forEach((c) => stations.push({ at: new THREE.Vector3(c.x + 0.45, 0, c.z), work: false }));
+  stations.push({ at: new THREE.Vector3(0, 0, zAt(d, 0.16)), work: false }, { at: new THREE.Vector3(0.3, 0, zAt(d, 0.9)), work: false });
+  return {
+    stations,
+    height: (_x, z) => deckAt(d, tOf(z)) + 0.02,
+    clamp: (p) => {
+      const t = THREE.MathUtils.clamp(tOf(p.z), 0.11, 0.92);
+      const half = Math.max(0.05, halfBeamAt(d, t) * 0.92 - 0.32);
+      p.z = zAt(d, t);
+      p.x = THREE.MathUtils.clamp(p.x, -half, half);
+    },
+    floor: -0.5,
+  };
+}
 
 /** A ship built from a shipyard design: lofted hull, derived physics and handling. */
 export class DesignedShip extends Vessel {
@@ -19,7 +47,16 @@ export class DesignedShip extends Vessel {
   readonly displayName: string;
   readonly stats: ShipStats;
 
-  private readonly visual: ShipVisual;
+  /** Her masts: they can be shot away and are stepped again by the crew. */
+  readonly rig: MastRig;
+  /** Pays for a replacement mast (the player's stores); null = free (NPC ships). */
+  spendWood: ((wood: number) => boolean) | null = null;
+
+  readonly visual: ShipVisual;
+  /** The hands on deck. */
+  readonly crew: Crew;
+  /** Someone was thrown overboard and has hit the water (world position). */
+  static onOverboard: ((at: THREE.Vector3) => void) | null = null;
   private readonly cargo: CargoPile;
   private time = 0;
   /** Which side the fore-and-aft sails are bellied out to (-1 / 1), eased. */
@@ -30,6 +67,8 @@ export class DesignedShip extends Vessel {
     waves: WaveField,
     wind: Wind,
     colour: THREE.ColorRepresentation = PALETTE.sail,
+    /** Collider id of the ship, which numbers her mast hitboxes. */
+    shipId = 0,
   ) {
     const stats = computeStats(design);
     const hull = designToHullSpec(design, stats);
@@ -40,6 +79,17 @@ export class DesignedShip extends Vessel {
     this.cargo = new CargoPile(this.visual.cargoPlaces);
     this.visual.group.add(this.cargo.group);
     this.group.name = 'designed-ship';
+    this.crew = new Crew(THREE.MathUtils.clamp(Math.round(design.length / 2.3), 2, 9), colour, deckSurface(design, this.visual));
+    this.crew.onLanded = (at) => DesignedShip.onOverboard?.(this.group.localToWorld(_w.copy(at)));
+    this.visual.group.add(this.crew.group);
+    this.rig = new MastRig(
+      this.visual.masts,
+      design.masts.map((_, i) => {
+        const m = mastSize(design, i);
+        return m.sailW * m.sailH;
+      }),
+      shipId,
+    );
     this.swivelMount = this.visual.swivelMount;
     this.swivelFacing = this.visual.swivelFacing;
     this.gunMounts = this.visual.gunMounts;
@@ -59,6 +109,13 @@ export class DesignedShip extends Vessel {
   setColour(colour: THREE.ColorRepresentation): void {
     setToonColour(this.visual.sailMaterial, sailTint(colour));
     setToonColour(this.visual.flagMaterial, colour);
+    this.crew.setColour(colour);
+  }
+
+  /** A shell burst aboard at a world position: the hands nearby are thrown about. */
+  crewHit(at: THREE.Vector3, kind: number): void {
+    this.group.updateMatrixWorld();
+    this.crew.blast(this.group.worldToLocal(_w.copy(at)), kind === 1 ? 1 : 0.6);
   }
 
   syncVisuals(dt: number): void {
@@ -66,6 +123,9 @@ export class DesignedShip extends Vessel {
     const b = this.body;
     this.group.position.copy(b.position);
     this.group.quaternion.copy(b.quaternion);
+    this.rig.update(dt, b.position, b.quaternion, this.spendWood);
+    this.driveFactor = this.rig.drive;
+    this.crew.update(dt);
 
     const unfurl = Math.max(this.sail, 0);
     const aw = this.apparentLocal;
@@ -96,3 +156,5 @@ export class DesignedShip extends Vessel {
     }
   }
 }
+
+const _w = new THREE.Vector3();

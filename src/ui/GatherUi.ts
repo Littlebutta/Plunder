@@ -12,7 +12,7 @@ const TYPE_LABEL: Record<Island['type'], string> = {
   wreck: 'Shipwreck island',
 };
 
-/** Hold readout, "press E" prompt and the island panel shown while gathering. */
+/** Stores readout (the player's one pool), "press E" prompt and the island panel shown while gathering. */
 export class GatherUi {
   private readonly holdEl: HTMLElement;
   private readonly prompt: HTMLElement;
@@ -31,21 +31,22 @@ export class GatherUi {
     root.append(this.holdEl, this.prompt, this.panel);
   }
 
-  update(g: Gathering): void {
+  update(g: Gathering, income = 0): void {
     const hold = g.hold;
     const sel = g.selected;
     const near = g.inRange;
     // Rebuild only when something visible changed.
     const key = [
-      hold.capacity + ':' + RESOURCE_IDS.map((id) => hold.stock[id]).join(','),
+      Math.round(income) + ':' + RESOURCE_IDS.map((id) => hold.stock[id]).join(','),
       sel ? sel.name + RESOURCE_IDS.map((id) => sel.stock[id]).join(',') + g.status : '',
       near?.name ?? '',
     ].join('|');
     if (key !== this.last) {
       this.last = key;
       this.holdEl.innerHTML =
-        `<span class="hold-title">Hold ${hold.used}/${hold.capacity}</span>` +
-        RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i>${RESOURCES[id].label} <b>${hold.stock[id]}</b></span>`).join('');
+        `<span class="hold-title">Stores</span>` +
+        RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i>${RESOURCES[id].label} <b>${hold.stock[id]}</b></span>`).join('') +
+        (income > 0 ? `<span class="income" title="Sent in by the islands you hold">+${Math.round(income)}/min</span>` : '');
 
       this.prompt.hidden = !!sel || !near;
       if (near && !sel) {
