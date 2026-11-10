@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeMerged, replaceWithMerged } from '../render/merge';
 import { Crew, CrewSurface } from '../crew/Crew';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -284,8 +285,11 @@ export class Stronghold {
   }
 
   private rebuild(): void {
+    disposeMerged(this.body.children);
     for (const child of [...this.body.children]) this.body.remove(child);
     this.top = buildStronghold(this.body, this.level, this.flagMat) * this.scale;
+    // a hundred little parts become one mesh per material: far fewer draw calls
+    replaceWithMerged(this.body, true);
     this.body.scale.setScalar(1);
     this.group.scale.setScalar(this.scale);
     this.crew.group.scale.setScalar(1 / this.scale);

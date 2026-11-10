@@ -69,6 +69,18 @@ export class Volcano {
     this.smokeMat = new THREE.SpriteMaterial({ map: puffTexture(), color: 0x3a3330, transparent: true, depthWrite: false, opacity: 0.8 });
   }
 
+  /** One of each thing an eruption throws up, for compiling their shaders before the first one. */
+  warmup(): THREE.Object3D[] {
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+    return [
+      new THREE.Mesh(this.ballGeo, this.ballMat),
+      new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xff3b1f, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide })),
+      new THREE.Points(tg, _trailMat),
+      new THREE.Sprite(this.smokeMat),
+    ];
+  }
+
   get active(): boolean {
     return !!this.island && (this.presence > 0 || this.balls.length > 0 || this.puffs.length > 0);
   }

@@ -414,7 +414,7 @@ export class Warship {
     const sailTarget = this.state === 'fight' ? 0.7 : raid ? 0.5 : cruise;
     ship.control(dt, ship.sail < sailTarget - 0.03 ? 1 : ship.sail > sailTarget + 0.03 ? -1 : 0, steer);
     ship.syncVisuals(dt);
-    ship.group.updateMatrixWorld();
+    ship.group.updateWorldMatrix(false, false); // the root only: the guns update their own matrices when they fire
 
     // Guns: in a fight or a raid, and at any enemy she passes within range of.
     if (this.state === 'fight' || raid || (hostile && foe && range < BROADSIDE.maxRange)) {
@@ -495,7 +495,7 @@ export class Warship {
     }
     ship.control(dt, 0, n.rudder);
     ship.syncVisuals(dt);
-    ship.group.updateMatrixWorld();
+    ship.group.updateWorldMatrix(false, false); // the root only: the guns update their own matrices when they fire
   }
 
   /** Bring a fresh ship in on the patrol circle, on the far side from the player if there is one. */

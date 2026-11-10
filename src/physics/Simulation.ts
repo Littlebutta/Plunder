@@ -1,25 +1,26 @@
 /**
- * Fixed-timestep driver. Waves and every floating body advance together in
- * lockstep, so buoyancy always sees the water at the same moment the hull is
- * at, regardless of render frame rate.
+ * Physics stepping. Each frame's time is split into equal substeps of at most
+ * `DT`, and waves and every floating body advance together through them, so
+ * buoyancy always sees the water at the same moment the hull is at.
+ *
+ * The substeps follow the frame exactly (no leftover carried to the next
+ * frame), so the ships move smoothly at any refresh rate: a fixed step without
+ * interpolation made frames alternate between one and two steps (or two and
+ * three) and the whole view judder, most of all on 75, 144 or 165 Hz screens.
  */
 export class Simulation {
   static readonly DT = 1 / 120;
-  private accumulator = 0;
 
   constructor(
     private readonly maxSteps = 10,
   ) {}
 
-  /** Runs `step(h)` as many times as needed for this frame's `dt`. */
+  /** Runs `step(h)` enough times, with equal `h`, to cover this frame's `dt`. */
   advance(dt: number, step: (h: number) => void): void {
-    this.accumulator += Math.min(dt, 0.1);
-    let n = 0;
-    while (this.accumulator >= Simulation.DT && n < this.maxSteps) {
-      step(Simulation.DT);
-      this.accumulator -= Simulation.DT;
-      n++;
-    }
-    if (n === this.maxSteps) this.accumulator = 0; // drop time rather than spiral
+    const t = Math.min(dt, 0.1);
+    if (!(t > 0)) return;
+    const n = Math.min(this.maxSteps, Math.ceil(t / Simulation.DT - 1e-6));
+    const h = t / n;
+    for (let i = 0; i < n; i++) step(h);
   }
 }

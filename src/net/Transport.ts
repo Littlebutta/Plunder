@@ -168,12 +168,17 @@ export class LocalTransport implements Transport {
       }
     };
     this.hello();
+    let lastBeat = Date.now();
     this.beat = window.setInterval(() => {
       this.hello();
       const now = Date.now();
+      // if this window was the one that stalled (loading, a long frame, minimised), the others
+      // only look quiet because their messages are still queued: give them the benefit of the doubt
+      if (now - lastBeat > 2500) for (const p of this.seen.values()) p.at = now;
+      lastBeat = now;
       let gone = false;
       for (const [id, p] of this.seen) {
-        if (now - p.at > 6000) {
+        if (now - p.at > 10000) {
           this.seen.delete(id);
           gone = true;
         }
@@ -223,7 +228,7 @@ export class SteamTransport implements Transport {
   }
 
   async create(): Promise<string> {
-    const r = await this.bridge.create(4);
+    const r = await this.bridge.create(8);
     if (!r.ok) throw new Error(r.error || 'Steam could not make a lobby.');
     this.take(await this.bridge.state());
     return this.room;

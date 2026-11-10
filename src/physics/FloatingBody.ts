@@ -59,6 +59,12 @@ export class FloatingBody {
   private readonly stiffness: number;
   /** Water height under each probe last step, for water vertical velocity. */
   private readonly prevWater: (number | null)[];
+  /** Per probe: the sideways wave offset found last step, so the next height needs one refinement. */
+  private readonly waterGuess: { x: number; z: number }[];
+  private readonly waterVel: number[];
+  private tick = 0;
+  /** Far from the camera: each step samples the sea under only half the probes, alternating. */
+  coarse = false;
 
   constructor(
     public spec: HullSpec,
@@ -73,6 +79,8 @@ export class FloatingBody {
     this.probeWorld = spec.probes.map(() => new THREE.Vector3());
     this.probeDepth = spec.probes.map(() => 0);
     this.prevWater = spec.probes.map(() => null);
+    this.waterGuess = spec.probes.map(() => ({ x: NaN, z: NaN }));
+    this.waterVel = spec.probes.map(() => 0);
   }
 
   /** Forward direction in world space (body -Z). */
@@ -92,6 +100,7 @@ export class FloatingBody {
     this.velocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
     this.prevWater.fill(null);
+    for (const g of this.waterGuess) g.x = NaN;
   }
 
   /**
@@ -105,11 +114,21 @@ export class FloatingBody {
 
     // --- Buoyancy + heave damping per probe ---------------------------------
     let wet = 0;
+    this.tick++;
     for (let i = 0; i < s.probes.length; i++) {
       const pw = this.probeWorld[i].copy(s.probes[i]).applyQuaternion(this.quaternion).add(this.position);
-      const water = this.waves.heightAt(pw.x, pw.z);
       const prev = this.prevWater[i];
-      const waterVy = prev === null ? 0 : (water - prev) / dt;
+      let water: number;
+      let waterVy: number;
+      if (this.coarse && prev !== null && ((i + this.tick) & 1) === 1) {
+        // far away: half the probes carry the water on from last step's rise and fall
+        waterVy = this.waterVel[i];
+        water = prev + waterVy * dt;
+      } else {
+        water = this.waves.heightNear(pw.x, pw.z, this.waterGuess[i]);
+        waterVy = prev === null ? 0 : (water - prev) / dt;
+        this.waterVel[i] = waterVy;
+      }
       this.prevWater[i] = water;
       const depth = water - pw.y;
       this.probeDepth[i] = depth;

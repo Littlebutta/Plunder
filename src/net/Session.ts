@@ -13,7 +13,7 @@ import { LocalTransport, Message, Peer, steamTransport, Transport } from './Tran
 export class LobbySession {
   transport: Transport | null = null;
   /** What the players are called, by peer id (from their hello). */
-  readonly names = new Map<string, { name: string; colour: string }>();
+  readonly names = new Map<string, { name: string; colour: string; captain: string }>();
   hosting = false;
   private hostAtJoin = '';
   /** Something for the lobby to redraw. */
@@ -27,7 +27,7 @@ export class LobbySession {
   /** The room is gone (the host left). */
   onClosed: (why: string) => void = () => {};
 
-  constructor(private readonly me: () => { colour: string }) {}
+  constructor(private readonly me: () => { colour: string; captain: string }) {}
 
   get online(): boolean {
     return !!this.transport?.room;
@@ -91,8 +91,12 @@ export class LobbySession {
         if (wants && !m.slots.some((x) => x !== s && x.kind !== 'closed' && x.colour === wants)) s.colour = wants;
       }
       s.name = p.name;
+      // each player sails the captain they picked (the same one as someone else is fine)
+      const captain = this.names.get(p.id)?.captain;
+      if (captain) s.captain = captain;
     }
     m.slots[0].name = this.names.get(t.self.id)?.name ?? t.self.name;
+    m.slots[0].captain = this.me().captain;
     t.send(null, ['lobby', m], true);
   }
 
@@ -133,16 +137,16 @@ export class LobbySession {
   private hello(): void {
     const t = this.transport;
     if (!t) return;
-    const mine = { name: t.self.name, colour: this.me().colour };
+    const mine = { name: t.self.name, colour: this.me().colour, captain: this.me().captain };
     this.names.set(t.self.id, mine);
-    t.send(null, ['hi', mine.name, mine.colour], true);
+    t.send(null, ['hi', mine.name, mine.colour, mine.captain], true);
   }
 
   private take(from: string, msg: Message): void {
     const t = this.transport;
     if (!t) return;
     if (msg[0] === 'hi') {
-      this.names.set(from, { name: String(msg[1]).slice(0, 24), colour: String(msg[2]) });
+      this.names.set(from, { name: String(msg[1]).slice(0, 24), colour: String(msg[2]), captain: String(msg[3] ?? '').slice(0, 24) });
       this.onChange();
     } else if (from === t.hostId && msg[0] === 'lobby') {
       this.onLobby(msg[1] as MatchConfig);

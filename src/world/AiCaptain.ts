@@ -34,6 +34,9 @@ export interface AiWorld {
  * its own island is attacked.
  */
 export class AiCaptain {
+  /** It has picked a new stronghold to attack (for the captain's taunt). */
+  onAttack: (target: Stronghold) => void = () => {};
+  private lastRaid: Stronghold | null = null;
   /** What it is doing, for the chart and for tests. */
   goal = 'idle';
   private think = 1 + Math.random() * 2;
@@ -108,6 +111,8 @@ export class AiCaptain {
       this.goal = 'gather strength';
       ship.order = this.offShore(home.island, pos);
     }
+    if (raid && raid !== this.lastRaid) this.onAttack(raid);
+    this.lastRaid = raid;
     ship.raidTarget = raid ? raid.site : null;
     if (raid) ship.order = null;
     for (const e of escorts) {

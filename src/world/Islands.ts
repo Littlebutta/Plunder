@@ -5,6 +5,7 @@ import { mulberry32 } from '../util/random';
 import { Noise2D } from '../util/noise';
 import { buildWreck } from './Wreck';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { bakeMerged, disposeMerged } from '../render/merge';
 import { ShoreField } from '../ocean/shore';
 import { islandCapacity, Stock } from './Resources';
 
@@ -44,6 +45,13 @@ export interface Island {
   start?: number;
   /** Rocks standing out of the sea (sea stacks, reefs), in the island's own space: hulls that hit them are holed. */
   rocks: { x: number; z: number; r: number; mesh?: THREE.Object3D }[];
+  /**
+   * Palms, boulders, rocks, wreck and pier, kept out of the scene: what is drawn
+   * is `decorMerged`, the same things baked into one mesh per material (see
+   * `bakeDecor`). `clearGround` takes things out of here and bakes again.
+   */
+  decor?: THREE.Group;
+  decorMerged?: THREE.Group;
 }
 
 export interface IslandWorld {
@@ -75,6 +83,7 @@ export function createIslands(seed = 3, count = 11, worldRadius = 640, fairPlaye
     island.name = islandName(type, extraRand);
     // Trading-post islands get a pier on the side facing the middle of the map.
     if (type === 'hills' || type === 'mesa') addPort(island, (center.lengthSq() > 1 ? Math.atan2(-center.z, -center.x) : 0) + portJitter);
+    bakeDecor(island);
     group.add(island.group);
     islands.push(island);
     return island;
@@ -554,8 +563,9 @@ const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
 export function clearGround(island: Island, x: number, z: number, radius: number): void {
   const lx = x - island.center.x;
   const lz = z - island.center.z;
-  for (const o of [...island.group.children]) {
-    if (o.name === 'terrain' || o.name === 'port' || o.userData.rock) continue;
+  let cleared = false;
+  for (const o of [...island.group.children, ...(island.decor?.children ?? [])]) {
+    if (o.name === 'terrain' || o.name === 'port' || o.name === 'decor' || o.userData.rock) continue;
     if ((o as THREE.InstancedMesh).isInstancedMesh) {
       const inst = o as THREE.InstancedMesh;
       let changed = false;
@@ -572,8 +582,35 @@ export function clearGround(island: Island, x: number, z: number, radius: number
     }
     // how far the thing spreads: a wreck is a whole ship, a palm's crown a few metres
     const reach = o.name === 'wreck' ? 9 : o.type === 'Group' ? 3 : 2.5 * Math.max(o.scale.x, o.scale.z);
-    if (Math.hypot(o.position.x - lx, o.position.z - lz) < radius + reach) o.removeFromParent();
+    if (Math.hypot(o.position.x - lx, o.position.z - lz) < radius + reach) {
+      cleared ||= o.parent === island.decor;
+      o.removeFromParent();
+    }
   }
+  if (cleared) bakeDecor(island);
+}
+
+/**
+ * Draw an island's dressing as a few merged meshes: palms, boulders, rocks,
+ * wreck and pier are hundreds of small parts, and each would be its own draw
+ * call. The first call moves them out of the scene into `island.decor`; later
+ * calls (after `clearGround`) bake that again.
+ */
+function bakeDecor(island: Island): void {
+  if (!island.decor) {
+    island.decor = new THREE.Group();
+    island.decorMerged = new THREE.Group();
+    island.decorMerged.name = 'decor';
+    for (const o of [...island.group.children]) {
+      if (o.name === 'terrain' || (o as THREE.InstancedMesh).isInstancedMesh) continue;
+      island.decor.add(o);
+    }
+    island.group.add(island.decorMerged);
+  }
+  const target = island.decorMerged!;
+  disposeMerged(target.children);
+  target.clear();
+  for (const m of bakeMerged(island.decor)) target.add(m);
 }
 
 /** Clusters of low rocks off the beach, wet and dark, the kind a careless helmsman finds. */

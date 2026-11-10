@@ -1,7 +1,9 @@
 import { LobbySession } from '../net/Session';
 import { desktop, steamTransport } from '../net/Transport';
-import { AI_NAMES, defaultVsMatch, loadLobby, MatchConfig, MatchSlot, saveLobby, TEAM_NAMES } from '../world/Match';
+import { defaultVsMatch, loadLobby, MatchConfig, MatchSlot, saveLobby, TEAM_NAMES } from '../world/Match';
 import { PLAYER_COLOURS } from './Settings';
+import { CAPTAINS, captainById } from '../world/Captains';
+import { portraitUrl } from './Portrait';
 
 export interface LobbyActions {
   /** Start the match that was set up. */
@@ -9,6 +11,9 @@ export interface LobbyActions {
   back(): void;
   /** The local player's colour (from Settings). */
   colour(): string;
+  /** The local player's captain (from Settings), and changing it. */
+  captain(): string;
+  setCaptain(id: string): void;
   /** A Steam invite was accepted: bring the lobby up (false if a match is under way and it cannot). */
   summon(): boolean;
 }
@@ -45,7 +50,7 @@ export class Lobby {
     this.root.hidden = true;
     parent.append(this.root);
 
-    this.session = new LobbySession(() => ({ colour: actions.colour() }));
+    this.session = new LobbySession(() => ({ colour: actions.colour(), captain: actions.captain() }));
     this.session.onChange = () => this.sync();
     this.session.onLobby = (m) => {
       this.match = m;
@@ -80,7 +85,13 @@ export class Lobby {
       if (slot && btn.dataset.kind) {
         slot.kind = btn.dataset.kind as MatchSlot['kind'];
         delete slot.peer; // an AI or closed seat sends its player back to the next open one
-      } else if (slot && btn.dataset.team) slot.team = Number(btn.dataset.team);
+      } else if (slot && btn.dataset.team) slot.team = (slot.team + 1) % TEAM_NAMES.length;
+      else if (slot && btn.dataset.captain !== undefined) {
+        const next = CAPTAINS[(CAPTAINS.findIndex((c) => c.id === slot.captain) + 1) % CAPTAINS.length];
+        slot.captain = next.id;
+        if (slot === m.slots[0]) actions.setCaptain(next.id);
+        else if (slot.kind === 'ai' || slot.kind === 'closed') slot.name = next.name;
+      }
       else if (slot && 'colour' in btn.dataset) slot.colour = this.nextColour(slot);
       else if (btn.dataset.islands) m.islands = Number(btn.dataset.islands);
       else if (btn.dataset.stock) m.stock = btn.dataset.stock as MatchConfig['stock'];
@@ -145,6 +156,7 @@ export class Lobby {
       me.kind = 'human';
       me.name = 'You';
       me.colour = this.actions.colour();
+      me.captain = this.actions.captain();
       for (const s of this.match.slots.slice(1)) {
         if (s.colour === me.colour) s.colour = this.nextColour(s);
         if (!this.session.online && s.kind === 'open') s.kind = 'closed';
@@ -197,6 +209,7 @@ export class Lobby {
     const playing = this.match.slots.filter((s) => s.kind === 'human' || s.kind === 'ai' || (s.kind === 'open' && s.peer));
     if (playing.length < 2) return this.session.hosting ? 'Waiting for a friend to join, or add an AI captain.' : 'Open at least one more captain slot.';
     if (new Set(playing.map((s) => s.team)).size < 2) return 'Everyone is on the same team. Put someone on another.';
+    if (!this.match.fair && this.match.islands < playing.length * 2) return `${playing.length} captains need at least ${playing.length * 2} islands on a random map.`;
     return '';
   }
 
@@ -254,14 +267,18 @@ export class Lobby {
         const seated = !!slot.peer && (slot.kind === 'human' || slot.kind === 'open');
         const kinds = `${pick(`slot="${i}" data-kind`, 'ai', 'AI', slot.kind === 'ai')}${s.online ? pick(`slot="${i}" data-kind`, 'open', 'Open', slot.kind === 'open', 'A seat for a friend') : ''}${pick(`slot="${i}" data-kind`, 'closed', 'Closed', closed)}`;
         const kind = i === 0 ? `<span class="lobby-kind">${s.online ? 'Host' : 'You'}</span>` : `<span class="lobby-seg">${kinds}</span>`;
-        const teams = TEAM_NAMES.map((_, t) => pick(`slot="${i}" data-team`, t, String(t + 1), slot.team === t)).join('');
-        const name = mine ? (s.online ? `You (${slot.name})` : 'You') : closed ? 'Empty' : seated ? slot.name : slot.kind === 'open' ? 'Waiting for a friend...' : `Captain ${slot.name || AI_NAMES[i - 1]}`;
+        const cap = captainById(slot.captain);
+        const team = `<button class="lobby-team" data-slot="${i}" data-team="1" ${guest ? 'disabled' : ''} title="Change team">Team ${slot.team + 1}</button>`;
+        const name = mine ? (s.online ? `You (${slot.name})` : 'You') : closed ? 'Empty' : seated ? slot.name : slot.kind === 'open' ? 'Waiting for a friend...' : cap.name;
+        // you pick your own captain; the host picks the AI's
+        const canPick = mine || (!guest && slot.kind === 'ai');
         return `
           <div class="lobby-slot ${closed ? 'closed' : ''}">
+            <button class="lobby-face" data-slot="${i}" data-captain ${canPick ? '' : 'disabled'} title="${esc(`${cap.name}, ${cap.title}: ${cap.perk}`)}"><img src="${portraitUrl(cap, slot.colour)}" alt=""></button>
             <button class="lobby-colour" data-slot="${i}" data-colour style="background:${slot.colour}" ${i === 0 || closed || guest ? 'disabled' : ''} title="${i === 0 ? 'Your colour is set in Settings' : 'Change colour'}"></button>
-            <div class="lobby-name">${esc(name)}</div>
+            <div class="lobby-name">${esc(name)}${closed ? '' : `<small>${esc(cap.title)} · ${esc(cap.perk)}</small>`}</div>
             ${kind}
-            <span class="lobby-seg teams" ${closed ? 'hidden' : ''}><i>Team</i>${teams}</span>
+            <span class="teams" ${closed ? 'hidden' : ''}>${team}</span>
           </div>`;
       })
       .join('');

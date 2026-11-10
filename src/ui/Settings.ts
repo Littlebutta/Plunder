@@ -1,4 +1,6 @@
 import type { AudioBus, AudioManager } from '../audio/AudioManager';
+import { CAPTAINS, captainById } from '../world/Captains';
+import { drawPortrait, portraitElement } from './Portrait';
 
 /** Player settings, kept between sessions. */
 export interface GameSettings {
@@ -11,6 +13,8 @@ export interface GameSettings {
   fireMode: 'ripple' | 'volley';
   /** The player's colour: sails, pennant and island markers. */
   colour: string;
+  /** Which captain the player sails as (an id from `CAPTAINS`). */
+  captain: string;
 }
 
 /** Colours a player can fly. White is kept for NPCs. */
@@ -28,7 +32,7 @@ export const PLAYER_COLOURS: { name: string; hex: string }[] = [
 export const NPC_COLOUR = '#ffffff';
 
 const KEY = 'plunder.settings.v1';
-const DEFAULTS: GameSettings = { muted: false, master: 0.8, effects: 1, ambience: 0.7, music: 0.7, fireMode: 'ripple', colour: PLAYER_COLOURS[0].hex };
+const DEFAULTS: GameSettings = { muted: false, master: 0.8, effects: 1, ambience: 0.7, music: 0.7, fireMode: 'ripple', colour: PLAYER_COLOURS[0].hex, captain: CAPTAINS[0].id };
 
 export function loadSettings(): GameSettings {
   try {
@@ -42,6 +46,7 @@ export function loadSettings(): GameSettings {
       music: num(raw.music, DEFAULTS.music),
       fireMode: raw.fireMode === 'volley' ? 'volley' : 'ripple',
       colour: PLAYER_COLOURS.some((c) => c.hex === raw.colour) ? (raw.colour as string) : DEFAULTS.colour,
+      captain: CAPTAINS.some((c) => c.id === raw.captain) ? (raw.captain as string) : DEFAULTS.captain,
     };
   } catch {
     return { ...DEFAULTS };
@@ -88,6 +93,9 @@ export class SettingsPanel {
     this.root.innerHTML = `
       <div class="settings-card">
         <div class="settings-title">Settings</div>
+        <div class="settings-section">Your captain</div>
+        <div class="settings-captains" data-captains></div>
+        <div class="settings-note" data-captain-note></div>
         <div class="settings-section">Your colour</div>
         <div class="settings-swatches">
           ${PLAYER_COLOURS.map((c) => `<button data-colour="${c.hex}" title="${c.name}" aria-label="${c.name}" style="background:${c.hex}"></button>`).join('')}
@@ -137,14 +145,17 @@ export class SettingsPanel {
     this.root.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('button');
       const act = btn?.dataset.act;
-      if (btn?.dataset.colour) {
+      if (btn?.dataset.captain) {
+        this.settings.captain = btn.dataset.captain;
+        this.commit();
+      } else if (btn?.dataset.colour) {
         this.settings.colour = btn.dataset.colour;
         this.commit();
       } else if (btn?.dataset.fire) {
         this.settings.fireMode = btn.dataset.fire === 'volley' ? 'volley' : 'ripple';
         this.commit();
       } else if (act === 'reset') {
-        Object.assign(this.settings, DEFAULTS, { colour: this.settings.colour });
+        Object.assign(this.settings, DEFAULTS, { colour: this.settings.colour, captain: this.settings.captain });
         this.commit();
       } else if (act === 'close' || e.target === this.root) this.close();
     });
@@ -205,10 +216,33 @@ export class SettingsPanel {
     this.audio.setMuted(s.muted);
   }
 
+  /** Change the player's captain (the lobby's portrait does this too). */
+  setCaptain(id: string): void {
+    this.settings.captain = id;
+    this.commit();
+  }
+
   private refresh(): void {
     const s = this.settings;
     (this.root.querySelector('[data-mute]') as HTMLInputElement).checked = s.muted;
     this.root.querySelectorAll<HTMLElement>('[data-colour]').forEach((b) => b.classList.toggle('on', b.dataset.colour === s.colour));
+    // captain portraits wear the player's colour
+    const grid = this.root.querySelector('[data-captains]') as HTMLElement;
+    if (!grid.childElementCount) {
+      for (const c of CAPTAINS) {
+        const b = document.createElement('button');
+        b.dataset.captain = c.id;
+        b.title = `${c.name}, ${c.title}`;
+        b.append(portraitElement(c, s.colour, 1.5));
+        grid.append(b);
+      }
+    }
+    grid.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.captain === s.captain);
+      drawPortrait(b.querySelector('canvas')!, captainById(b.dataset.captain), s.colour);
+    });
+    const me = captainById(s.captain);
+    (this.root.querySelector('[data-captain-note]') as HTMLElement).innerHTML = `<b>${me.name}</b>, ${me.title}. Starts with: ${me.perk}.`;
     this.root.querySelectorAll<HTMLElement>('[data-fire]').forEach((b) => b.classList.toggle('on', b.dataset.fire === s.fireMode));
     for (const b of BUSES) {
       const slider = this.root.querySelector(`[data-bus="${b.id}"]`) as HTMLInputElement;
