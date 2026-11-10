@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:45Z",
+  "updated": "2026-11-10T01:45:47Z",
   "categories": [
     {
       "key": "feature",
@@ -756,16 +756,16 @@
       "id": "F-30",
       "cat": "feature",
       "title": "Multiplayer support",
-      "status": "idea",
+      "status": "in-progress",
       "priority": "medium",
       "milestone": "M-8",
       "tags": [
         "network"
       ],
-      "notes": "2026-11-09 (Claude): Devin 2026-11-09: use Steam friend invites and overlay if possible. Plan: steamworks.js in Electron; needs a Steamworks app ID.",
+      "notes": "2026-11-09 (Claude): Devin 2026-11-09: use Steam friend invites and overlay if possible. Plan: steamworks.js in Electron; needs a Steamworks app ID.\n\n2026-11-10 (Claude): Devin 2026-11-10: wants Steam multiplayer; chose Vs AI first, then Steam on Valve's test app (480) as its own update.",
       "links": [],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T21:20:14Z",
+      "updated": "2026-11-10T01:45:47Z",
       "by": "Claude"
     },
     {
