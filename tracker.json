@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:27:10Z",
+  "updated": "2026-11-10T03:27:12Z",
   "categories": [
     {
       "key": "feature",
@@ -1889,6 +1889,19 @@
       "created": "2026-11-10T03:27:10Z",
       "priority": "high",
       "updated": "2026-11-10T03:27:10Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-90",
+      "cat": "feature",
+      "title": "Polish pass on everything: smooth and well designed",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-10T03:27:12Z",
+      "priority": "high",
+      "updated": "2026-11-10T03:27:12Z",
       "by": "Claude"
     }
   ],
