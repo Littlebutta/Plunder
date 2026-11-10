@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:34:14Z",
+  "updated": "2026-11-10T02:52:36Z",
   "categories": [
     {
       "key": "feature",
@@ -1557,13 +1557,15 @@
       "id": "F-66",
       "cat": "feature",
       "title": "Each gun deck fires on its own press of Space",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:33:23Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:33:23Z",
+      "updated": "2026-11-10T02:52:36Z",
       "by": "Claude"
     },
     {
