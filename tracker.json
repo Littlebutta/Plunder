@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:23Z",
+  "updated": "2026-11-10T02:33:25Z",
   "categories": [
     {
       "key": "feature",
@@ -1564,6 +1564,19 @@
       "created": "2026-11-10T02:33:23Z",
       "priority": "medium",
       "updated": "2026-11-10T02:33:23Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-67",
+      "cat": "feature",
+      "title": "Automatic gathering into stores (no manual grabbing); shots from ships and forts cost metal; income rebalanced upward",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:25Z",
+      "priority": "high",
+      "updated": "2026-11-10T02:33:25Z",
       "by": "Claude"
     }
   ],
