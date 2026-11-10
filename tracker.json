@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:43Z",
+  "updated": "2026-11-10T01:45:45Z",
   "categories": [
     {
       "key": "feature",
@@ -1509,6 +1509,19 @@
       "created": "2026-11-10T01:45:43Z",
       "priority": "high",
       "updated": "2026-11-10T01:45:43Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-64",
+      "cat": "feature",
+      "title": "HUD: controls behind a ? button, P mutes, M opens the chart",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #16.",
+      "links": [],
+      "created": "2026-11-10T01:45:45Z",
+      "priority": "medium",
+      "updated": "2026-11-10T01:45:45Z",
       "by": "Claude"
     }
   ],
