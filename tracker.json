@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:50:04Z",
+  "updated": "2026-11-10T03:50:06Z",
   "categories": [
     {
       "key": "feature",
@@ -1782,13 +1782,15 @@
       "id": "F-81",
       "cat": "feature",
       "title": "Trade ships built at home that trade with your own islands for bonus resources; can be sunk",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/21"
+      ],
       "created": "2026-11-10T02:33:56Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:33:56Z",
+      "updated": "2026-11-10T03:50:06Z",
       "by": "Claude"
     },
     {
