@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:34:09Z",
+  "updated": "2026-11-10T02:34:12Z",
   "categories": [
     {
       "key": "feature",
@@ -1837,6 +1837,19 @@
       "created": "2026-11-10T02:34:09Z",
       "priority": "medium",
       "updated": "2026-11-10T02:34:09Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-88",
+      "cat": "feature",
+      "title": "Minimap: clearer whose ships are whose",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:34:12Z",
+      "priority": "medium",
+      "updated": "2026-11-10T02:34:12Z",
       "by": "Claude"
     }
   ],
