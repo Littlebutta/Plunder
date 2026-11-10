@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:47:56Z",
+  "updated": "2026-11-10T02:19:17Z",
   "categories": [
     {
       "key": "feature",
@@ -762,10 +762,12 @@
       "tags": [
         "network"
       ],
-      "notes": "2026-11-09 (Claude): Devin 2026-11-09: use Steam friend invites and overlay if possible. Plan: steamworks.js in Electron; needs a Steamworks app ID.\n\n2026-11-10 (Claude): Devin 2026-11-10: wants Steam multiplayer; chose Vs AI first, then Steam on Valve's test app (480) as its own update.",
-      "links": [],
+      "notes": "2026-11-09 (Claude): Devin 2026-11-09: use Steam friend invites and overlay if possible. Plan: steamworks.js in Electron; needs a Steamworks app ID.\n\n2026-11-10 (Claude): Devin 2026-11-10: wants Steam multiplayer; chose Vs AI first, then Steam on Valve's test app (480) as its own update.\n\n2026-11-10 (Claude): PR #18 (2026-11-10): online Vs over Steam (test app 480) plus a same-computer test link. Steam link itself untested; needs two accounts.",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/18"
+      ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-10T01:45:47Z",
+      "updated": "2026-11-10T02:19:17Z",
       "by": "Claude"
     },
     {
