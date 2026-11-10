@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:27:15Z",
+  "updated": "2026-11-10T03:27:17Z",
   "categories": [
     {
       "key": "feature",
@@ -1915,6 +1915,19 @@
       "created": "2026-11-10T03:27:15Z",
       "priority": "high",
       "updated": "2026-11-10T03:27:15Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-91",
+      "cat": "feature",
+      "title": "Matches of up to 8 players or bots",
+      "status": "idea",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-10T03:27:17Z",
+      "priority": "high",
+      "updated": "2026-11-10T03:27:17Z",
       "by": "Claude"
     }
   ],
