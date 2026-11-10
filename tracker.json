@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:12:40Z",
+  "updated": "2026-11-10T03:12:42Z",
   "categories": [
     {
       "key": "feature",
@@ -1660,15 +1660,15 @@
       "id": "F-73",
       "cat": "feature",
       "title": "Announcement popups much smaller and out of the way",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #19",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/19"
       ],
       "created": "2026-11-10T02:33:38Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:52:45Z",
+      "updated": "2026-11-10T03:12:42Z",
       "by": "Claude"
     },
     {
