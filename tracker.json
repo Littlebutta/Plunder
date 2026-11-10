@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:14Z",
+  "updated": "2026-11-10T05:32:17Z",
   "categories": [
     {
       "key": "feature",
@@ -1945,13 +1945,15 @@
       "id": "F-91",
       "cat": "feature",
       "title": "Matches of up to 8 players or bots",
-      "status": "idea",
+      "status": "good-enough",
       "tags": [],
-      "notes": "",
-      "links": [],
+      "notes": "2026-11-10 (Claude): Shipped in PR #22",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/22"
+      ],
       "created": "2026-11-10T03:27:17Z",
       "priority": "high",
-      "updated": "2026-11-10T03:27:17Z",
+      "updated": "2026-11-10T05:32:17Z",
       "by": "Claude"
     }
   ],
