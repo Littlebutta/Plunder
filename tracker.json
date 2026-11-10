@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:36Z",
+  "updated": "2026-11-10T01:45:39Z",
   "categories": [
     {
       "key": "feature",
@@ -1470,6 +1470,19 @@
       "created": "2026-11-10T01:45:36Z",
       "priority": "high",
       "updated": "2026-11-10T01:45:36Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-61",
+      "cat": "feature",
+      "title": "Shipyard only at the home dock; build escorts from stock or own designs",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #16.",
+      "links": [],
+      "created": "2026-11-10T01:45:39Z",
+      "priority": "high",
+      "updated": "2026-11-10T01:45:39Z",
       "by": "Claude"
     }
   ],
