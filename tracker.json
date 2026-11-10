@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:30Z",
+  "updated": "2026-11-10T05:32:32Z",
   "categories": [
     {
       "key": "feature",
@@ -1769,15 +1769,15 @@
       "id": "F-80",
       "cat": "feature",
       "title": "Salvage wreckage; resources for sinking ships",
-      "status": "in-progress",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 batch 5",
+      "notes": "Devin 2026-11-10 batch 5\n\n2026-11-10 (Claude): Merged in PR #21",
       "links": [
         "https://github.com/Littlebutta/Plunder/pull/21"
       ],
       "created": "2026-11-10T02:33:53Z",
       "priority": "medium",
-      "updated": "2026-11-10T03:50:04Z",
+      "updated": "2026-11-10T05:32:32Z",
       "by": "Claude"
     },
     {
