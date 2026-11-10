@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:22Z",
+  "updated": "2026-11-10T17:04:26Z",
   "categories": [
     {
       "key": "feature",
@@ -2144,13 +2144,15 @@
       "id": "B-15",
       "cat": "bug",
       "title": "FPS hitches mid-match",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
       "notes": "Fixed in PR #25: ship builds copy a per-design template, shared gun/cargo geometry, fort levels baked once, designs prebuilt at load. Worst step 103 ms -> 18 ms (8-AI match).",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:52Z",
       "priority": "high",
-      "updated": "2026-11-10T17:03:52Z",
+      "updated": "2026-11-10T17:04:26Z",
       "by": "Claude"
     },
     {
