@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
+import { ballisticVelocity } from '../combat/ballistics';
 import { WaveField } from '../ocean/waves';
 import { DesignedShip } from '../ship/DesignedShip';
 import { cloneDesign, HullDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
@@ -33,6 +34,9 @@ export const ENEMY = {
   /** Seconds a wreck takes to go down, and until the next one sails in. */
   sinkTime: 7,
   respawnTime: 25,
+  /** Hull repairs start this long after the last hit (s), at this rate (hp/s). */
+  repairDelay: 12,
+  repairRate: 1.5,
   /** Patrol circle (m) around the map centre. */
   patrolRadius: 190,
 };
@@ -88,6 +92,7 @@ export class Warship {
   /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
   raidTarget: THREE.Vector3 | null = null;
   sunkCount = 0;
+  private sinceHit = 99;
   private retired = false;
 
   private readonly battery: Broadside;
@@ -173,6 +178,7 @@ export class Warship {
   /** A projectile of `kind` hit it. Returns true if that sank it. */
   hit(kind: number): boolean {
     if (!this.alive) return false;
+    this.sinceHit = 0;
     // a shell through the hull sometimes carries rigging away with it
     if (kind === 1 && Math.random() < MAST.hullHitChance) {
       const m = this.ship.rig.nearest((Math.random() - 0.5) * this.ship.length);
@@ -225,6 +231,10 @@ export class Warship {
       }
       return;
     }
+
+    // the crew patch the hull once the shooting stops
+    this.sinceHit += dt;
+    if (this.sinceHit > ENEMY.repairDelay) this.hp = Math.min(this.maxHp, this.hp + ENEMY.repairRate * dt);
 
     const pos = this.position;
     const range = Math.hypot(player.x - pos.x, player.z - pos.z);
@@ -292,6 +302,11 @@ export class Warship {
     this.shots.length = 0;
     this.battery.update(dt, this.shots);
     for (const shot of this.shots) {
+      // shelling a stronghold: lob each shot at the walls themselves, over the beach in front of them
+      if (raid) {
+        _mark.copy(raid).setY(raid.y + 2.5);
+        shot.direction.copy(ballisticVelocity(shot.position, _mark, BROADSIDE.muzzleSpeed, _vel)).normalize();
+      }
       // NPC gunnery is honest but not perfect
       const yaw = (Math.random() - 0.5) * 2 * ENEMY.scatter;
       shot.direction.applyAxisAngle(_up, yaw);
@@ -330,6 +345,8 @@ export class Warship {
 }
 
 const _want = new THREE.Vector3();
+const _mark = new THREE.Vector3();
+const _vel = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);

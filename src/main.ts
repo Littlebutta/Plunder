@@ -738,10 +738,45 @@ const menu = new MainMenu(document.body, {
   shipyard: () => openYard(),
   settings: () => settings.open(),
   newMap: () => {
-    rollWorldSeed();
+    // in a Vs match this button reads "Leave match": back to the solo voyage on its own map
+    if (vs) saveMatch(null);
+    else rollWorldSeed();
     location.reload();
   },
+  versus: () => {
+    menu.hide();
+    lobby.open();
+  },
 });
+const lobby = new Lobby(document.body, {
+  start: (m) => {
+    saveMatch(m);
+    location.reload();
+  },
+  back: () => {
+    lobby.close();
+    openMenu();
+  },
+  colour: () => settings.settings.colour,
+});
+
+/** Vs: who is still in it, and how many islands each holds. */
+const teamsEl = document.createElement('div');
+teamsEl.className = 'hud-panel hud-teams';
+teamsEl.hidden = !vs;
+hudRoot.append(teamsEl);
+let teamsKey = '';
+function updateScoreboard(): void {
+  if (!vs) return;
+  const rows = factions.list.filter((f) => f.kind !== 'raiders').map((f) => ({ f, held: territory.held(f.id).length }));
+  const key = rows.map((r) => `${r.f.alive}${r.held}${r.f.colour}`).join('|');
+  if (key === teamsKey) return;
+  teamsKey = key;
+  teamsEl.innerHTML = rows
+    .map(({ f, held }) => `<div class="row ${f.alive ? '' : 'out'}"><i style="background:${f.colour}"></i><b>${f.name}${f.id !== ME && factions.allied(ME, f.id) ? ' <em>ally</em>' : ''}</b><span>${f.alive ? `${held} island${held === 1 ? '' : 's'}` : 'out'}</span></div>`)
+    .join('');
+}
+
 
 /** The shipyard works only at the home dock (or before the voyage has begun, when the ship is still there). */
 function openYard(): void {
@@ -827,7 +862,7 @@ function startPlay(): void {
 function openMenu(): void {
   mode = 'menu';
   audio.setPlaylist(['log']);
-  menu.show(voyageStarted, !voyageStarted || atHomeDock());
+  menu.show(voyageStarted, !voyageStarted || atHomeDock(), vs);
   hudRoot.classList.add('in-menu');
   settings.showGear(false);
   gun.preview.visible = false;
@@ -893,6 +928,17 @@ Object.assign(window, {
     fog,
     buildEscort,
     atHomeDock,
+    /** Tests: run the game ahead by this many seconds without drawing. */
+    fastForward: async (seconds: number) => {
+      fastForwarding = true;
+      for (let i = 0; i < seconds * 20; i++) {
+        step(0.05);
+        input.endFrame();
+        // let the projectile worker answer between steps
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      fastForwarding = false;
+    },
     openYard,
     get sunkFor() {
       return sunkFor;
@@ -1102,9 +1148,22 @@ const timer = new THREE.Timer();
 timer.connect(document);
 const fwd = new THREE.Vector3();
 
+/** Tests: the game is being run ahead by `fastForward`, so the frame loop stands by. */
+let fastForwarding = false;
 function frame(): void {
   timer.update();
-  const rawDt = timer.getDelta();
+  if (fastForwarding) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  step(timer.getDelta());
+  renderer.render(scene, camera);
+  input.endFrame();
+  requestAnimationFrame(frame);
+}
+
+/** Advance the whole game by one frame's worth of time (everything but the drawing). */
+function step(rawDt: number): void {
   const dt = Math.min(rawDt, 0.1);
 
   const playing = mode === 'play';
@@ -1112,7 +1171,10 @@ function frame(): void {
   const active = playing && sunkFor < 0;
   if (input.wasPressed('Escape')) {
     if (settings.visible) settings.close();
-    else if (chart.visible) chart.close();
+    else if (lobby.visible) {
+      lobby.close();
+      openMenu();
+    } else if (chart.visible) chart.close();
     else if (playing) openMenu();
     else if (mode === 'yard') leaveYard();
     else if (mode === 'menu' && voyageStarted) startPlay();
@@ -1132,7 +1194,7 @@ function frame(): void {
   wind.update(dt);
   if (active) {
     if (!followCourse(dt)) ship.control(dt, input.throttle, input.steer);
-  } else if (!playing && mode !== 'over' && !voyageStarted) autopilot(dt);
+  } else if (!playing && mode !== 'over' && !voyageStarted && !vs) autopilot(dt);
   else ship.control(dt, ship.sail > 0.02 ? -1 : 0, 0); // nobody at the helm: the sail comes in
   sim.advance(dt, (h) => {
     waves.update(h);
@@ -1256,6 +1318,7 @@ function frame(): void {
   if (playing) updateRaids(dt);
   territory.update(dt, sights, playing);
   territoryUi.update(territory, buildIsland, hold, fleet.length, active && atHomeDock());
+  updateScoreboard();
   islandMarkers.update(dt, wind.angle);
 
   targets.update(dt, waves.currentTime);
@@ -1309,13 +1372,20 @@ function frame(): void {
   streaks.update(dt, camera, follow.focusPoint);
   audio.updateListener(camera);
   audio.updateAmbience(wind.strength, ship.sail, Math.abs(ship.body.forwardSpeed));
-
-  renderer.render(scene, camera);
-  input.endFrame();
-  requestAnimationFrame(frame);
 }
 applySettings();
+if (vs) {
+  // a match begins at each captain's home, in a proper ship: your saved design if it needs no extra metals, else a Sloop
+  const own = loadDesign();
+  setShip(new DesignedShip(own && computeStats(own).guns <= FREE_CANNONS ? own : PRESETS[1], waves, wind, settings.settings.colour, RAFT_ID));
+  berthFlagship();
+}
 openMenu();
+if (vs && match.autostart) {
+  // straight from the lobby: to sea, and a plain reload afterwards comes back to the menu
+  saveMatch({ ...match, autostart: false });
+  startPlay();
+}
 follow.yaw = 2.3;
 follow.pitch = 0.2;
 requestAnimationFrame(frame);
