@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:50:23Z",
+  "updated": "2026-11-10T05:32:12Z",
   "categories": [
     {
       "key": "feature",
@@ -1902,13 +1902,15 @@
       "id": "F-89",
       "cat": "feature",
       "title": "Pick a captain with a pixel-art portrait (team-colour hat), talking portrait for chat, starting buffs",
-      "status": "idea",
+      "status": "good-enough",
       "tags": [],
-      "notes": "Devin 2026-11-10 03:26: like Star Fox, mouth moves on chat messages; same captain allowed for several players since hat takes team colour",
-      "links": [],
+      "notes": "Devin 2026-11-10 03:26: like Star Fox, mouth moves on chat messages; same captain allowed for several players since hat takes team colour\n\n2026-11-10 (Claude): Shipped in PR #22",
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/22"
+      ],
       "created": "2026-11-10T03:27:10Z",
       "priority": "high",
-      "updated": "2026-11-10T03:27:10Z",
+      "updated": "2026-11-10T05:32:12Z",
       "by": "Claude"
     },
     {
