@@ -12,10 +12,12 @@ import { Wind } from './Wind';
 /** Collider ids of warships: 1000 up (the player's flagship is 0, barrels 100+, strongholds 300+, weather 700+, masts 2000+). */
 export const WARSHIP_ID_BASE = 1000;
 export const WARSHIP_ID_END = 2000;
+/** Online: a human captain's flagship, as the other copies of the game see her, is this plus her faction id. */
+export const HUMAN_ID_BASE = 1900;
 let nextId = 0;
 /** A fresh collider id for a new warship. */
 export function warshipId(): number {
-  return WARSHIP_ID_BASE + (nextId++ % (WARSHIP_ID_END - WARSHIP_ID_BASE));
+  return WARSHIP_ID_BASE + (nextId++ % (HUMAN_ID_BASE - WARSHIP_ID_BASE));
 }
 
 export const ENEMY = {
@@ -65,6 +67,8 @@ export interface WarshipOptions {
   preset?: number;
   /** Or a design of the player's own. */
   design?: HullDesign;
+  /** Online: sailed by another copy of the game (see `Warship.remote`). */
+  remote?: boolean;
 }
 
 /**
@@ -92,6 +96,13 @@ export class Warship {
   /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
   raidTarget: THREE.Vector3 | null = null;
   sunkCount = 0;
+  /**
+   * Online: she is sailed by another copy of the game (a friend's flagship,
+   * or any ship when this copy is not the host). She keeps floating on the
+   * local sea but goes where the network says, and takes no damage here.
+   */
+  remote = false;
+  private readonly net = { x: 0, z: 0, heading: 0, vx: 0, vz: 0, sail: 0, rudder: 0, age: 0, fresh: false };
   private sinceHit = 99;
   private retired = false;
 
@@ -122,7 +133,11 @@ export class Warship {
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
     this.collider = { id: opts.id, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
-    if (opts.respawn && !opts.berth) this.spawn();
+    if (opts.remote) {
+      this.remote = true;
+      this.ship.spendWood = () => false; // her masts go up when her owner says so
+      this.ship.group.visible = false; // until her owner says where she is
+    } else if (opts.respawn && !opts.berth) this.spawn();
   }
 
   /** Put it on the water somewhere, ready to sail. */
@@ -162,7 +177,7 @@ export class Warship {
 
   /** True once she is gone and will not be replaced. */
   get lost(): boolean {
-    return this.state === 'gone' && (this.retired || !this.opts.respawn);
+    return !this.remote && this.state === 'gone' && (this.retired || !this.opts.respawn);
   }
 
   /** Colliders for the projectile sim: nothing while it is sinking or gone. */
@@ -209,7 +224,7 @@ export class Warship {
     const ship = this.ship;
     if (this.state === 'gone') {
       this.timer += dt;
-      if (this.opts.respawn && !this.retired && this.timer > ENEMY.respawnTime) {
+      if (!this.remote && this.opts.respawn && !this.retired && this.timer > ENEMY.respawnTime) {
         const berth = this.opts.berth?.();
         if (berth) this.placeAt(berth.x, berth.z, berth.heading);
         else if (!this.opts.berth) this.spawn(foe ?? undefined);
@@ -231,6 +246,8 @@ export class Warship {
       }
       return;
     }
+
+    if (this.remote) return this.followNet(dt);
 
     // the crew patch the hull once the shooting stops
     this.sinceHit += dt;
@@ -316,6 +333,63 @@ export class Warship {
     }
   }
 
+  /** Where she is and how she fares, for the other copies of an online match. */
+  netState(): number[] {
+    const b = this.ship.body;
+    const fwd = b.forward(_fwd);
+    const code = NET_STATES.indexOf(this.state);
+    return [this.id, r1(b.position.x), r1(b.position.z), r2(Math.atan2(-fwd.x, -fwd.z)), r1(b.velocity.x), r1(b.velocity.z), r2(this.ship.sail), r2(this.ship.rudder), Math.round((this.hp / this.maxHp) * 100), code, this.ship.rig.downMask];
+  }
+
+  /** Online: take her state from the copy of the game that sails her (same layout as `netState`). */
+  applyNet(a: number[]): void {
+    const [, x, z, heading, vx, vz, sail, rudder, hp, code, masts] = a;
+    const state = NET_STATES[code] ?? 'patrol';
+    const afloat = state !== 'sinking' && state !== 'gone';
+    if (afloat && (!this.alive || !this.ship.group.visible)) {
+      this.placeAt(x, z, heading); // a fresh ship
+    } else if (!afloat && this.alive) {
+      this.state = 'sinking';
+      this.timer = 0;
+      this.hooks.sunk(this);
+    }
+    if (afloat) this.state = state;
+    this.hp = (hp / 100) * this.maxHp;
+    for (let i = 0; i < this.ship.rig.count; i++) this.ship.rig.setDown(i, (masts & (1 << i)) !== 0);
+    Object.assign(this.net, { x, z, heading, vx, vz, sail, rudder, age: 0, fresh: true });
+  }
+
+  /** A remote ship: ride the local waves, but be pulled to where her owner says she is. */
+  private followNet(dt: number): void {
+    const n = this.net;
+    const ship = this.ship;
+    const b = ship.body;
+    if (n.fresh) {
+      n.age += dt;
+      const tx = n.x + n.vx * n.age;
+      const tz = n.z + n.vz * n.age;
+      const ex = tx - b.position.x;
+      const ez = tz - b.position.z;
+      if (ex * ex + ez * ez > 45 * 45) {
+        b.placeOnWater(tx, tz, n.heading);
+        b.velocity.set(n.vx, 0, n.vz);
+      } else {
+        const k = 1 - Math.exp(-dt * 3.5);
+        b.position.x += ex * k;
+        b.position.z += ez * k;
+        b.velocity.x += (n.vx - b.velocity.x) * k;
+        b.velocity.z += (n.vz - b.velocity.z) * k;
+        const fwd = b.forward(_fwd);
+        const off = Math.atan2(Math.sin(n.heading - Math.atan2(-fwd.x, -fwd.z)), Math.cos(n.heading - Math.atan2(-fwd.x, -fwd.z)));
+        b.quaternion.premultiply(_q.setFromAxisAngle(_up, off * k));
+      }
+      ship.sail = n.sail;
+    }
+    ship.control(dt, 0, n.rudder);
+    ship.syncVisuals(dt);
+    ship.group.updateMatrixWorld();
+  }
+
   /** Bring a fresh ship in on the patrol circle, on the far side from the player if there is one. */
   private spawn(player?: THREE.Vector3): void {
     const away = player ? Math.atan2(-player.z, -player.x) : 0.9;
@@ -344,6 +418,10 @@ export class Warship {
   }
 }
 
+const NET_STATES: Warship['state'][] = ['patrol', 'fight', 'raid', 'sinking', 'gone'];
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const r2 = (v: number) => Math.round(v * 100) / 100;
+const _q = new THREE.Quaternion();
 const _want = new THREE.Vector3();
 const _mark = new THREE.Vector3();
 const _vel = new THREE.Vector3();

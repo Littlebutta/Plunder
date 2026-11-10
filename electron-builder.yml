@@ -14,8 +14,15 @@ files:
   - electron/**/*
   - "!electron/dev.mjs"
   - package.json
+  # Steam (online play): only the Windows binaries are needed
+  - "!node_modules/steamworks.js/dist/linux64"
+  - "!node_modules/steamworks.js/dist/osx"
+  - "!node_modules/steamworks.js/dist/win64/*.lib"
 
 asar: true
+# native code and the Steam DLL must sit on disk, not inside the archive
+asarUnpack:
+  - node_modules/steamworks.js/**
 publish: null
 
 win:

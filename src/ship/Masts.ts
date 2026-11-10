@@ -129,6 +129,28 @@ export class MastRig {
     return true;
   }
 
+  /** Online: make mast `i` match what its owner's copy of the game says. */
+  setDown(i: number, down: boolean): void {
+    const m = this.masts[i];
+    if (!m || m.down === down) return;
+    if (!down) {
+      m.hp = MAST.hp;
+      m.down = false;
+      return;
+    }
+    m.hp = 0;
+    m.down = true;
+    m.paid = false;
+    m.fallSpeed = 0.25;
+    _top.set(0, m.visual.height * 0.7, 0).add(m.visual.foot);
+    this.onFall?.(i, m.visual.group.parent ? m.visual.group.parent.localToWorld(_top) : _top);
+  }
+
+  /** Which masts are down, as a bit mask. */
+  get downMask(): number {
+    return this.masts.reduce((n, m, i) => n | (m.down ? 1 << i : 0), 0);
+  }
+
   /** Stand everything back up, good as new (a new ship, or a respawn). */
   restore(): void {
     for (const m of this.masts) {

@@ -26,8 +26,7 @@ export class MainMenu {
         <div class="menu-sub">Build a ship. Take the islands.</div>
         <button data-act="play">Set sail</button>
         <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
-        <button data-act="versus">Vs match <small>teams, AI captains and map settings</small></button>
-        <button data-act="multi" disabled>Multiplayer <small>with Steam friends, in the next update</small></button>
+        <button data-act="versus">Vs match <small>against AI captains, or friends online</small></button>
         <button data-act="newmap">New map <small>generate a fresh set of islands</small></button>
         <button data-act="settings">Settings <small>sound and music volume</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}

@@ -17,6 +17,7 @@ for (const f of [...shellFiles, 'electron-builder.yml']) {
 }
 hash.update(require('electron/package.json').version);
 hash.update(require('fflate/package.json').version);
+hash.update(require('steamworks.js/package.json').version);
 
 const id = hash.digest('hex').slice(0, 16);
 writeFileSync('electron/shell.json', JSON.stringify({ id }) + '\n');

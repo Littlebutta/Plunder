@@ -23,13 +23,14 @@ import { Gathering } from './world/Gathering';
 import { Hold } from './world/Resources';
 import { GatherUi } from './ui/GatherUi';
 import { IslandMarkers } from './world/IslandMarkers';
-import { Warship, WarshipHooks, warshipId, WARSHIP_ID_BASE, WARSHIP_ID_END } from './world/Warship';
+import { Warship, WarshipHooks, warshipId, HUMAN_ID_BASE, WARSHIP_ID_BASE, WARSHIP_ID_END } from './world/Warship';
+import { MatchLink } from './net/Session';
 import { Factions, ME } from './world/Factions';
 import { loadMatch, saveMatch, START_STOCK } from './world/Match';
 import { AiCaptain } from './world/AiCaptain';
 import { Lobby } from './ui/Lobby';
 import { FogOfWar, Lookout } from './world/FogOfWar';
-import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS } from './ship/HullDesign';
+import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS, sanitizeDesign } from './ship/HullDesign';
 import { MAST, mastOwner } from './ship/Masts';
 import { TargetUi } from './ui/TargetUi';
 import { Territory, STRONGHOLD, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
@@ -88,6 +89,24 @@ scene.add(hemi);
 const match = loadMatch();
 const vs = match.mode === 'vs';
 const captainSlots = match.slots.filter((s) => s.kind !== 'closed');
+/**
+ * Online: the link to the other copies of the match. The host's copy runs the
+ * world (AI captains, escorts, strongholds); every copy sails its own flagship
+ * and decides what hits her. See the "Online play" section further down.
+ */
+const link = vs && match.net ? new MatchLink(match) : null;
+const online = !!link;
+/** This copy decides what the AI, the escorts and the strongholds do: always, unless it is a guest in an online match. */
+const authority = !link || link.host;
+/** The player's colour: in an online match, the one their seat in the lobby flies. */
+const myColour = (): string => (online ? captainSlots[ME].colour : settings.settings.colour);
+/** Shots fired by this copy this frame, for the others: eight numbers each. */
+const outShots: number[] = [];
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const r2 = (v: number) => Math.round(v * 100) / 100;
+function tellShot(owner: number, kind: number, from: THREE.Vector3, vel: THREE.Vector3): void {
+  if (link) outShots.push(owner === RAFT_ID ? HUMAN_ID_BASE + ME : owner, kind, r2(from.x), r2(from.y), r2(from.z), r2(vel.x), r2(vel.y), r2(vel.z));
+}
 const world = createIslands(match.seed, match.islands, 640, vs && match.fair ? captainSlots.length : 0);
 const waves = new WaveField();
 waves.shore = world.shore; // calm shallows around the islands
@@ -134,7 +153,7 @@ const audio = new AudioManager();
 const settings = new SettingsPanel(document.body, audio);
 settings.onClose = () => canvas.focus();
 settings.onChange = () => applySettings();
-ship.setColour(settings.settings.colour);
+ship.setColour(myColour());
 broadside.fireMode = settings.settings.fireMode;
 const onSailFilled = () => audio.play('sailFull', { volume: 0.8, rateJitter: 0.04 });
 ship.onSailFilled = onSailFilled;
@@ -167,13 +186,14 @@ function setShip(next: Vessel): void {
   ship.onSailFilled = onSailFilled;
   scene.add(ship.group);
   mountSwivel();
-  ship.setColour(settings.settings.colour);
+  ship.setColour(myColour());
   fitFlagship();
   broadside = new Broadside(ship.group, ship.gunMounts, waves);
   broadside.fireMode = settings.settings.fireMode;
   // a designed ship shows the cannons it was built with; the raft's test battery stays off until C
   broadside.setVisible(ship instanceof DesignedShip && ship.gunMounts.length > 0);
   scene.add(broadside.ribbon);
+  tellDesign();
   follow.setDistance(Math.max(14, ship.length * 1.9));
   const reach = Math.max(12, ship.length);
   sc.left = sc.bottom = -reach;
@@ -263,6 +283,7 @@ const warshipHooks: WarshipHooks = {
   fire: (w, from, dir) => {
     shotVel.copy(dir).multiplyScalar(BROADSIDE.muzzleSpeed);
     projectiles.spawn(from, shotVel, BROADSIDE.kind, w.id);
+    tellShot(w.id, BROADSIDE.kind, from, shotVel);
     effects.muzzle(from, dir, w.ship.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 0.95, rateJitter: 0.06, position: from });
   },
@@ -281,12 +302,12 @@ const warshipHooks: WarshipHooks = {
 const factions = new Factions();
 if (vs) {
   captainSlots.forEach((slot, n) => {
-    const f = factions.add(n === 0 ? 'You' : slot.name, n === 0 ? settings.settings.colour : slot.colour, slot.team, n === 0 ? 'human' : 'ai', n === 0 ? hold.stock : undefined);
+    const f = factions.add(n === ME ? 'You' : slot.name, n === ME ? myColour() : slot.colour, slot.team, slot.kind === 'human' ? 'human' : 'ai', n === ME ? hold.stock : undefined);
     Object.assign(f.stores, START_STOCK[match.stock]);
   });
   if (match.forts) factions.add('Raiders', NPC_COLOUR, 99, 'raiders');
 } else {
-  factions.add('You', settings.settings.colour, 0, 'human', hold.stock);
+  factions.add('You', myColour(), 0, 'human', hold.stock);
   factions.add('Raiders', NPC_COLOUR, 99, 'raiders');
 }
 const RAIDERS = factions.list.find((f) => f.kind === 'raiders')?.id ?? -1;
@@ -373,11 +394,13 @@ const chart = new MapView(document.body, {
     else {
       const w = fleet.find((f) => f.id === id);
       if (w) w.order = new THREE.Vector3(x, 0, z);
+      if (w && !authority) link!.toHost(['o', id, r1(x), r1(z)]);
     }
   },
   follow: (id) => {
     const w = fleet.find((f) => f.id === id);
     if (w) w.order = null;
+    if (w && !authority) link!.toHost(['o', id]);
   },
   close: () => {
     chart.close();
@@ -414,6 +437,7 @@ gathering.onHaul = () => audio.woodHit(ship.body.position);
 const territory = new Territory(world.islands, {
   fire: (from, vel, owner) => {
     projectiles.spawn(from, vel, BROADSIDE.kind, owner);
+    tellShot(owner, BROADSIDE.kind, from, vel);
     muzzleDir.copy(vel).normalize();
     effects.muzzle(from, muzzleDir, _zero, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 0.85, rateJitter: 0.06, position: from });
@@ -430,6 +454,7 @@ const territory = new Territory(world.islands, {
       for (const w of ships) if (w.faction === from) w.scuttle();
     }
     if (from === ME && wasHome) {
+      if (online) sinkPlayer(); // out of the match: her flag comes down for everyone
       if (mode !== 'over') endGame(false);
     } else if (by === ME && s === territory.enemyHome) {
       endGame(true);
@@ -442,15 +467,18 @@ const territory = new Territory(world.islands, {
   },
   changed: () => islandMarkers.refresh(),
 }, factions, { mode: match.mode, forts: match.forts });
+territory.remote = !authority;
 islandMarkers.colourOf = (f) => factions.colour(f);
 scene.add(territory.group);
 islandMarkers.refresh();
 const territoryUi = new TerritoryUi(hudRoot, document.body, {
   retry: () => {
+    if (online) return leaveMatch();
     if (vs) saveMatch({ ...match, autostart: true });
     location.reload();
   },
   newMap: () => {
+    if (online) return leaveMatch();
     if (vs) saveMatch({ ...match, seed: 1 + Math.floor(Math.random() * 999_983), autostart: true });
     else rollWorldSeed();
     location.reload();
@@ -462,7 +490,19 @@ const territoryUi = new TerritoryUi(hudRoot, document.body, {
 });
 /** The island the flagship is alongside, close enough to build on. */
 let buildIsland: Island | null = null;
+let buildWait = 0;
 function tryBuild(island: Island): void {
+  if (!authority) {
+    // a guest pays here and asks the host, who holds the islands, to do the building
+    const offer = territory.offer(island);
+    if (!offer || buildWait > 0 || (offer.act === 'build' && island !== buildIsland) || !canAfford(offer.cost, hold.stock, null)) return;
+    pay(offer.cost, hold.stock, null);
+    buildWait = 1.5;
+    link!.toHost(['b', world.islands.indexOf(island)]);
+    audio.woodHit(ship.body.position);
+    weatherUi.announce(offer.act === 'build' ? 'Outpost founded' : offer.label.replace('Upgrade to', 'Building a'), `Work begins at ${island.name}`, 'good');
+    return;
+  }
   if (!territory.build(island, island === buildIsland)) return;
   audio.woodHit(ship.body.position);
   const s = territory.at(island)!;
@@ -497,15 +537,21 @@ function atHomeDock(): boolean {
 }
 
 /** Lay down an escort at a captain's home island from a design, paid from their stores. Returns why not, or ''. */
-function buildEscort(design: HullDesign = PRESETS[1], faction = ME): string {
+function buildEscort(design: HullDesign = PRESETS[1], faction = ME, free = false): string {
   const owner = factions.get(faction)!;
   const cost = escortCost(design);
   const n = fleetBuilt.get(faction) ?? 0;
   const berth = homeBerth(1 + (n % 4), faction);
   if (!berth) return 'Your home island is lost.';
   if (escortsOf(faction).length >= STRONGHOLD.fleetMax) return `Your fleet is full (${STRONGHOLD.fleetMax} escorts).`;
-  if (!canAfford(cost, owner.stores, null)) return `An escort ${design.name} needs ${costLabel(cost)}.`;
-  pay(cost, owner.stores, null);
+  if (!free && !canAfford(cost, owner.stores, null)) return `An escort ${design.name} needs ${costLabel(cost)}.`;
+  if (!free) pay(cost, owner.stores, null);
+  if (!authority) {
+    // a guest pays here; the host builds her and she turns up with the next news from them
+    link!.toHost(['e', design]);
+    weatherUi.announce('Escort ordered', `A ${design.name} is fitting out at home. Give her orders on the chart (M).`, 'good');
+    return '';
+  }
   fleetBuilt.set(faction, n + 1);
   const w = addShip(
     new Warship(waves, wind, world.islands, warshipHooks, {
@@ -529,7 +575,7 @@ function buildEscort(design: HullDesign = PRESETS[1], faction = ME): string {
 // --- AI captains (Vs) -----------------------------------------------------------------
 const captains: AiCaptain[] = [];
 for (const f of factions.list) {
-  if (f.kind !== 'ai') continue;
+  if (f.kind !== 'ai' || !authority) continue;
   const flagship = addShip(
     new Warship(waves, wind, world.islands, warshipHooks, {
       id: warshipId(),
@@ -561,6 +607,179 @@ for (const f of factions.list) {
       match.ai,
     ),
   );
+}
+
+// --- Online play ----------------------------------------------------------------------
+// Every copy of an online match builds the same world from the same seed and
+// the same lobby. After that:
+//   * each player's copy sails their own flagship, and tells the rest where she
+//     is a dozen times a second ('p'); the others show her as a remote Warship
+//   * the host's copy sails everything else and holds the islands, and sends
+//     the lot eight times a second ('w'), with the list of ships when it changes ('r')
+//   * every shot is announced ('s') and flown on every copy; only the copy that
+//     owns what it hits counts the damage
+//   * guests pay for outposts and escorts from their own stores and ask the
+//     host to build them ('b', 'e'), and pass on chart orders ('o')
+/** The other players' flagships, by faction. */
+const humanShips = new Map<number, Warship>();
+function setHumanShip(f: number, design: HullDesign): void {
+  const owner = factions.get(f);
+  if (!owner) return;
+  const old = humanShips.get(f);
+  const w = new Warship(waves, wind, world.islands, warshipHooks, { id: HUMAN_ID_BASE + f, name: design.name || 'Flagship', faction: f, colour: owner.colour, respawn: false, flagship: true, design, remote: true });
+  if (old) {
+    const fw = old.ship.body.forward(new THREE.Vector3());
+    w.placeAt(old.position.x, old.position.z, Math.atan2(-fw.x, -fw.z));
+    scene.remove(old.group);
+    ships.splice(ships.indexOf(old), 1);
+    if (targeted === old) targeted = null;
+  } else {
+    const berth = homeBerth(0, f);
+    if (berth) w.placeAt(berth.x, berth.z, berth.heading);
+  }
+  humanShips.set(f, addShip(w));
+}
+/** Tell the others what ship this player sails (at the start, and after a refit). */
+function tellDesign(to: number | null = null): void {
+  link?.send(['d', ship instanceof DesignedShip ? ship.design : PRESETS[0]], true, to);
+}
+function leaveMatch(): void {
+  link?.leave();
+  saveMatch(null);
+  location.reload();
+}
+const netEl = document.createElement('div');
+netEl.className = 'hud-net';
+netEl.hidden = true;
+hudRoot.append(netEl);
+/** The host's list of the ships it sails: [id, faction, name, flagship, design] each. */
+type Roster = [number, number, string, number, HullDesign][];
+const roster = (): Roster => ships.filter((w) => !w.remote).map((w) => [w.id, w.faction, w.name, w.flagship ? 1 : 0, w.ship.design]);
+let rosterKey = '';
+let gotRoster = false;
+let askIn = 0;
+let sinceWorld = 0;
+let hostGone = false;
+let tellIn = 0;
+let worldIn = 0;
+function applyRoster(list: Roster): void {
+  gotRoster = true;
+  const ids = new Set(list.map((r) => r[0]));
+  for (let i = ships.length - 1; i >= 0; i--) {
+    const w = ships[i];
+    if (w.id >= HUMAN_ID_BASE || ids.has(w.id)) continue;
+    scene.remove(w.group);
+    ships.splice(i, 1);
+    if (fleet.includes(w)) fleet.splice(fleet.indexOf(w), 1);
+    if (targeted === w) targeted = null;
+  }
+  for (const [id, faction, name, flag, design] of list) {
+    if (ships.some((w) => w.id === id)) continue;
+    const w = addShip(new Warship(waves, wind, world.islands, warshipHooks, { id, name: String(name), faction, colour: factions.colour(faction), respawn: false, flagship: !!flag, design: sanitizeDesign(design), remote: true }));
+    if (faction === ME && !flag) fleet.push(w);
+  }
+}
+if (link) {
+  weather.auto = false; // no storms or sea monsters online yet: they are not shared between copies
+  for (const f of factions.list) if (f.kind === 'human' && f.id !== ME) setHumanShip(f.id, PRESETS[1]);
+  const on = link.handlers;
+  on.set('p', (from, m) => {
+    const w = humanShips.get(from);
+    if (w) w.applyNet([w.id, ...(m.slice(1) as number[])]);
+  });
+  on.set('d', (from, m) => {
+    if (from !== ME) setHumanShip(from, sanitizeDesign(m[1] as HullDesign));
+  });
+  on.set('s', (_from, m) => {
+    const a = m as number[];
+    for (let i = 1; i + 7 < a.length; i += 8) {
+      const kind = a[i + 1] === 1 ? 1 : 0;
+      muzzlePos.set(a[i + 2], a[i + 3], a[i + 4]);
+      shotVel.set(a[i + 5], a[i + 6], a[i + 7]);
+      projectiles.spawn(muzzlePos, shotVel, kind, a[i]);
+      effects.muzzle(muzzlePos, muzzleDir.copy(shotVel).normalize(), _zero, kind ? 1.5 : 0.8);
+      audio.play('cannon', { volume: kind ? 0.9 : 0.55, rate: kind ? 1 : 1.4, rateJitter: 0.06, position: muzzlePos });
+    }
+  });
+  on.set('ready', (from) => {
+    tellDesign(from);
+    if (link.host) link.send(['r', roster()], true, from);
+  });
+  if (link.host) {
+    on.set('b', (from, m) => {
+      const island = world.islands[Number(m[1])];
+      if (island) territory.build(island, true, from, true);
+    });
+    on.set('e', (from, m) => void buildEscort(sanitizeDesign(m[1] as HullDesign), from, true));
+    on.set('o', (from, m) => {
+      const w = ships.find((x) => x.id === m[1] && x.faction === from && !x.flagship);
+      if (w) w.order = m.length >= 4 ? new THREE.Vector3(Number(m[2]), 0, Number(m[3])) : null;
+    });
+  } else {
+    on.set('r', (from, m) => {
+      if (from === 0) applyRoster(m[1] as Roster);
+    });
+    on.set('w', (from, m) => {
+      if (from !== 0) return;
+      sinceWorld = 0;
+      wind.angle = Number(m[1]);
+      const a = m[2] as number[];
+      for (let i = 0; i + 10 < a.length; i += 11) {
+        const w = ships.find((x) => x.id === a[i]);
+        if (w) w.applyNet(a.slice(i, i + 11));
+        else gotRoster = false; // a ship we have not heard of: ask again
+      }
+      territory.applyNet(m[3] as number[]);
+    });
+  }
+  link.onLeft = (f) => {
+    if (!link.host && f === 0) {
+      hostGone = true;
+      return;
+    }
+    weatherUi.announce(`${factions.name(f)} has left`, 'Their ship goes down; their islands are there for the taking', 'danger');
+    humanShips.get(f)?.scuttle();
+  };
+  link.send(['ready']);
+  tellDesign();
+}
+/** Once a frame: send what the other copies need from this one. */
+function netTick(dt: number): void {
+  if (!link) return;
+  if (outShots.length) {
+    link.send(['s', ...outShots]);
+    outShots.length = 0;
+  }
+  if (!voyageStarted) return;
+  tellIn -= dt;
+  if (tellIn <= 0) {
+    tellIn = 1 / 12;
+    const b = ship.body;
+    b.forward(fwd);
+    link.send(['p', r1(b.position.x), r1(b.position.z), r2(Math.atan2(-fwd.x, -fwd.z)), r1(b.velocity.x), r1(b.velocity.z), r2(ship.sail), r2(ship.rudder), Math.round(hull.fraction * 100), sunkFor >= 0 ? 3 : 0, ship instanceof DesignedShip ? ship.rig.downMask : 0], false);
+  }
+  if (link.host) {
+    worldIn -= dt;
+    if (worldIn > 0) return;
+    worldIn = 1 / 8;
+    const mine = ships.filter((w) => !w.remote);
+    const key = mine.map((w) => w.id).join();
+    if (key !== rosterKey) {
+      rosterKey = key;
+      link.send(['r', roster()]);
+    }
+    link.send(['w', r2(wind.angle), mine.flatMap((w) => w.netState()), territory.netState()], false);
+    return;
+  }
+  askIn -= dt;
+  if (!gotRoster && askIn <= 0) {
+    askIn = 2;
+    link.toHost(['ready']);
+  }
+  sinceWorld += dt;
+  const quiet = hostGone || sinceWorld > 15;
+  netEl.hidden = !quiet && gotRoster;
+  if (!netEl.hidden) netEl.textContent = quiet ? 'The host has gone. Leave the match from the menu (Esc).' : 'Waiting for the host...';
 }
 
 // --- Sinking and coming back ---------------------------------------------------------
@@ -608,7 +827,7 @@ function updateFog(dt: number): void {
 }
 const _hd = new THREE.Vector3();
 function mapState(): MapState {
-  const colour = settings.settings.colour;
+  const colour = myColour();
   const ships_: MapShip[] = [
     { id: 0, position: ship.body.position, heading: compass(ship.body.forward(_hd)), colour, name: ship.displayName, hostile: false, health: hull.fraction, course, note: course ? 'Under orders' : 'At your command' },
   ];
@@ -663,20 +882,21 @@ function endGame(won: boolean): void {
   gun.preview.visible = false;
   broadside.ribbon.visible = false;
   marker.visible = false;
-  if (won) territoryUi.showVictory(vs ? null : territory.enemyHome);
-  else territoryUi.showDefeat(territory.home);
+  const leave = !link ? '' : link.host ? 'End the match for everyone' : 'Leave the match';
+  if (won) territoryUi.showVictory(vs ? null : territory.enemyHome, leave);
+  else territoryUi.showDefeat(territory.home, leave);
 }
 
 /** Push the player's settings (colour, fire mode) into the game. */
 function applySettings(): void {
   const s = settings.settings;
-  ship.setColour(s.colour);
+  ship.setColour(myColour());
   broadside.fireMode = s.fireMode;
-  factions.me.colour = s.colour;
+  factions.me.colour = myColour();
   territory.refreshColours();
   islandMarkers.refresh();
-  for (const w of fleet) w.ship.setColour(s.colour);
-  yard.colour = s.colour;
+  for (const w of fleet) w.ship.setColour(myColour());
+  yard.colour = myColour();
   hud.setFireMode(s.fireMode);
 }
 // Marker that floats over the island (or its port) you can gather from.
@@ -739,6 +959,7 @@ const menu = new MainMenu(document.body, {
   settings: () => settings.open(),
   newMap: () => {
     // in a Vs match this button reads "Leave match": back to the solo voyage on its own map
+    if (online) return leaveMatch();
     if (vs) saveMatch(null);
     else rollWorldSeed();
     location.reload();
@@ -758,6 +979,12 @@ const lobby = new Lobby(document.body, {
     openMenu();
   },
   colour: () => settings.settings.colour,
+  summon: () => {
+    if (voyageStarted && online) return false;
+    menu.hide();
+    lobby.open();
+    return true;
+  },
 });
 
 /** Vs: who is still in it, and how many islands each holds. */
@@ -814,7 +1041,7 @@ const yard = new Shipyard(document.body, {
     }
     pay(due, territory.stores, hold);
     cannonsPaid = Math.max(cannonsPaid, extra);
-    setShip(new DesignedShip(design, waves, wind, settings.settings.colour, RAFT_ID));
+    setShip(new DesignedShip(design, waves, wind, myColour(), RAFT_ID));
     yard.close();
     startPlay();
   },
@@ -925,8 +1152,11 @@ Object.assign(window, {
     match,
     territory,
     fleet,
+    link,
+    humanShips,
     fog,
     buildEscort,
+    tryBuild,
     atHomeDock,
     /** Tests: run the game ahead by this many seconds without drawing. */
     fastForward: async (seconds: number) => {
@@ -980,7 +1210,8 @@ projectiles.onImpact = (e: ImpactEvent) => {
       if (factions.hostile(by, ME) && ship instanceof DesignedShip) ship.rig.hit(mast.mast, e.kind);
     } else {
       const w = ships.find((f) => f.id === mast.ship);
-      if (w && factions.hostile(by, w.faction) && w.hitMast(mast.mast, e.kind)) mastFell(w);
+      // a ship sailed by another copy of the game loses her masts when that copy says so
+      if (w && !w.remote && factions.hostile(by, w.faction) && w.hitMast(mast.mast, e.kind)) mastFell(w);
     }
     return;
   }
@@ -1009,7 +1240,7 @@ projectiles.onImpact = (e: ImpactEvent) => {
     // only a known enemy's shot counts: weather and stray shots pass warships by
     if (w && by !== null && factions.hostile(by, w.faction)) {
       w.ship.crewHit(e.position, e.kind);
-      if (w.hit(e.kind) && e.owner === RAFT_ID) targets.score += 10;
+      if (!w.remote && w.hit(e.kind) && e.owner === RAFT_ID) targets.score += 10;
     }
     return;
   }
@@ -1167,6 +1398,8 @@ function step(rawDt: number): void {
   const dt = Math.min(rawDt, 0.1);
 
   const playing = mode === 'play';
+  /** The world goes on: an online match does not stop for one player's menu, or their defeat. */
+  const running = online ? voyageStarted : playing;
   /** Playing with the flagship afloat: the helm, guns and crew answer. */
   const active = playing && sunkFor < 0;
   if (input.wasPressed('Escape')) {
@@ -1208,7 +1441,7 @@ function step(rawDt: number): void {
     ship.group.position.y -= sunkFor * (0.3 + sunkFor * 0.12);
     ship.group.rotateZ(Math.min(1.3, sunkFor * 0.2));
     ship.group.rotateX(Math.min(0.5, sunkFor * 0.07));
-    if (sunkFor >= RESPAWN_TIME && mode === 'play') {
+    if (sunkFor >= RESPAWN_TIME && mode === 'play' && (!online || factions.me.alive)) {
       berthFlagship();
       follow.update(0, ship.body.position);
       weatherUi.announce('Back at the helm', `A fresh ship at ${territory.home.island.name}`, 'good');
@@ -1228,6 +1461,7 @@ function step(rawDt: number): void {
     gun.muzzle(muzzlePos, muzzleDir);
     shotVel.copy(muzzleDir).multiplyScalar(SWIVEL.muzzleSpeed);
     projectiles.spawn(muzzlePos, shotVel, SWIVEL.kind, RAFT_ID);
+    tellShot(RAFT_ID, SWIVEL.kind, muzzlePos, shotVel);
     effects.muzzle(muzzlePos, muzzleDir, ship.body.velocity, 0.8);
     audio.play('cannon', { volume: 0.55, rate: 1.4, rateJitter: 0.05, position: muzzlePos });
   }
@@ -1242,6 +1476,7 @@ function step(rawDt: number): void {
   for (const shot of broadsideShots) {
     shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed);
     projectiles.spawn(shot.position, shotVel, BROADSIDE.kind, RAFT_ID);
+    tellShot(RAFT_ID, BROADSIDE.kind, shot.position, shotVel);
     effects.muzzle(shot.position, shot.direction, ship.body.velocity, 1.5);
     audio.play('cannon', { volume: 0.9, rate: 1, rateJitter: 0.06, position: shot.position });
     // recoil shoves the raft the other way
@@ -1258,7 +1493,7 @@ function step(rawDt: number): void {
   }
 
   // warships: each fights the nearest ship of the other side
-  _playerSight.alive = active;
+  _playerSight.alive = online ? running && sunkFor < 0 : active;
   _playerSight.position = ship.body.position;
   _playerSight.velocity = ship.body.velocity;
   sights.length = 0;
@@ -1271,7 +1506,7 @@ function step(rawDt: number): void {
     sight.faction = w.faction;
     sights.push(sight);
   });
-  if (playing) for (const c of captains) c.update(dt);
+  if (running) for (const c of captains) c.update(dt);
   for (let i = ships.length - 1; i >= 0; i--) {
     const w = ships[i];
     if (w.lost) {
@@ -1281,10 +1516,11 @@ function step(rawDt: number): void {
       if (at >= 0) fleet.splice(at, 1);
       continue;
     }
-    if (w.faction === ME) {
-      w.escort = ship.body.position;
+    if (!w.remote && !w.flagship && factions.get(w.faction)?.kind === 'human') {
+      // a player's escort keeps station on their flagship
+      w.escort = w.faction === ME ? ship.body.position : (humanShips.get(w.faction)?.position ?? null);
       // an escort shells any hostile stronghold it finds itself near
-      const mark = territory.strongholds.find((s) => factions.hostile(ME, s.side) && !s.ruined && Math.hypot(s.site.x - w.position.x, s.site.z - w.position.z) < 150);
+      const mark = territory.strongholds.find((s) => factions.hostile(w.faction, s.side) && !s.ruined && Math.hypot(s.site.x - w.position.x, s.site.z - w.position.z) < 150);
       w.raidTarget = mark ? mark.site : null;
     }
     // each fights the nearest ship of a hostile side
@@ -1298,7 +1534,7 @@ function step(rawDt: number): void {
         foe = o.position;
       }
     }
-    w.update(dt, foe, playing);
+    w.update(dt, foe, running);
     if (w.alive) edgeCurrent(w.position, w.ship.body.velocity, dt);
   }
   ship.setCargo(hold.stock, CARGO_FULL);
@@ -1316,7 +1552,8 @@ function step(rawDt: number): void {
   buildIsland = active ? territory.islandInReach(ship.body.position) : null;
   if (active && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
   if (playing) updateRaids(dt);
-  territory.update(dt, sights, playing);
+  buildWait -= dt;
+  territory.update(dt, sights, running);
   territoryUi.update(territory, buildIsland, hold, fleet.length, active && atHomeDock());
   updateScoreboard();
   islandMarkers.update(dt, wind.angle);
@@ -1334,6 +1571,7 @@ function step(rawDt: number): void {
   projectiles.setColliders(_colliders);
   projectiles.update(dt);
   effects.update(dt);
+  netTick(dt);
 
   // --- Wake + wind FX ---
   stern.set(0, 0, ship.length / 2 + 0.1).applyQuaternion(ship.body.quaternion).add(ship.body.position);
@@ -1377,7 +1615,7 @@ applySettings();
 if (vs) {
   // a match begins at each captain's home, in a proper ship: your saved design if it needs no extra metals, else a Sloop
   const own = loadDesign();
-  setShip(new DesignedShip(own && computeStats(own).guns <= FREE_CANNONS ? own : PRESETS[1], waves, wind, settings.settings.colour, RAFT_ID));
+  setShip(new DesignedShip(own && computeStats(own).guns <= FREE_CANNONS ? own : PRESETS[1], waves, wind, myColour(), RAFT_ID));
   berthFlagship();
 }
 openMenu();

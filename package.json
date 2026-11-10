@@ -27,6 +27,7 @@
   "description": "Plunder: stylized 3D sailing and naval combat",
   "author": "Devin",
   "dependencies": {
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "steamworks.js": "^0.4.0"
   }
 }

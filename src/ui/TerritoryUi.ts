@@ -1,3 +1,4 @@
+import { ME } from '../world/Factions';
 import { Hold, RESOURCE_IDS } from '../world/Resources';
 import { canAfford, costLabel, STRONGHOLD, Stronghold, Territory } from '../world/Strongholds';
 import { escortCost, HullDesign } from '../ship/HullDesign';
@@ -47,14 +48,14 @@ export class TerritoryUi {
     const offer = near ? territory.offer(near) : null;
     const can = offer ? canAfford(offer.cost, territory.stores, hold) : false;
     const stores = territory.stores;
-    const held = territory.held(0).length;
-    const taking = territory.strongholds.find((s) => s.capture > 0 && territory.factions.hostile(0, s.side));
+    const held = territory.held(ME).length;
+    const taking = territory.strongholds.find((s) => s.capture > 0 && territory.factions.hostile(ME, s.side));
     const key = [fleet, ...RESOURCE_IDS.map((id) => stores[id]), home.level, Math.ceil(home.hp), Math.ceil(home.capture), held, near?.name, offer?.label, can, dock, taking ? Math.ceil(taking.capture) : ''].join('|');
     if (key === this.last) return;
     this.last = key;
 
     const f = home.hp / home.maxHp;
-    const losing = home.capture > 0 && home.side === 0;
+    const losing = home.capture > 0 && home.side === ME;
     this.homeEl.dataset.state = losing || home.ruined ? 'danger' : f < 0.999 ? 'hurt' : 'ok';
     this.homeEl.innerHTML = `
       <div class="home-title">Home · ${home.island.name}</div>
@@ -89,10 +90,10 @@ export class TerritoryUi {
     if (s) {
       const f = territory.factions;
       const isHome = [...territory.homes.values()].includes(s);
-      const whose = s.side === 0 ? 'Your' : `${f.name(s.side)}'s`;
-      const who = `${whose} ${isHome ? 'home' : 'outpost'}${s.side !== 0 && f.allied(0, s.side) ? ' (ally)' : ''}`;
+      const whose = s.side === ME ? 'Your' : `${f.name(s.side)}'s`;
+      const who = `${whose} ${isHome ? 'home' : 'outpost'}${s.side !== ME && f.allied(ME, s.side) ? ' (ally)' : ''}`;
       html += `<div class="row"><span>${who}: ${s.levelName}</span><b>${Math.ceil(s.hp)} / ${s.maxHp}</b></div>`;
-      if (territory.factions.hostile(0, s.side)) html += '<div class="chart-hint">Shoot it to ruins, then hold a ship close to take the island.</div>';
+      if (territory.factions.hostile(ME, s.side)) html += '<div class="chart-hint">Shoot it to ruins, then hold a ship close to take the island.</div>';
       else if (s.side !== 0) html += '<div class="chart-hint">Held by your ally.</div>';
       else html += `<div class="chart-hint">Sends ${1 + s.level} unit${s.level ? 's' : ''} to your stores every ${STRONGHOLD.incomeEvery}s.</div>`;
     }
@@ -103,7 +104,7 @@ export class TerritoryUi {
       if (needsShip && !here) html += '<div class="chart-hint">Sail your flagship alongside to found an outpost.</div>';
       else if (!can) html += `<div class="chart-hint">Not enough in your stores.</div>`;
     }
-    if (s && s === territory.home && s.side === 0) {
+    if (s && s === territory.home && s.side === ME) {
       const full = fleet >= STRONGHOLD.fleetMax;
       html += `<div class="chart-sub">Build an escort (${fleet} of ${STRONGHOLD.fleetMax})</div><div class="chart-ships">`;
       designs.forEach((d, n) => {
@@ -117,26 +118,26 @@ export class TerritoryUi {
     return html;
   }
 
-  showDefeat(home: Stronghold): void {
+  /** @param leave online: the one way on from here, and what the button says */
+  showDefeat(home: Stronghold, leave = ''): void {
     this.end.dataset.tone = 'defeat';
     this.end.innerHTML = `
       <div class="endgame-card">
         <div class="endgame-title">Home lost</div>
         <p>Your home at <b>${home.island.name}</b> has been taken. Your flag comes down.</p>
-        <button data-end="retry">Try again</button>
-        <button data-end="new">New map</button>
+        ${leave ? `<button data-end="new">${leave}</button>` : '<button data-end="retry">Try again</button>\n        <button data-end="new">New map</button>'}
       </div>`;
     this.end.hidden = false;
   }
 
-  showVictory(taken: Stronghold | null): void {
+  showVictory(taken: Stronghold | null, leave = ''): void {
     this.end.dataset.tone = 'victory';
     this.end.innerHTML = `
       <div class="endgame-card">
         <div class="endgame-title">Victory!</div>
         <p>${taken ? `You have taken the raiders' home at <b>${taken.island.name}</b>. ` : 'Every rival captain has lost their home. '}These waters are yours.</p>
         <button data-end="on">Keep sailing</button>
-        <button data-end="new">New map</button>
+        <button data-end="new">${leave || 'New map'}</button>
       </div>`;
     this.end.hidden = false;
   }
