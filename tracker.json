@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:36Z",
+  "updated": "2026-11-10T02:33:38Z",
   "categories": [
     {
       "key": "feature",
@@ -1642,6 +1642,19 @@
       "created": "2026-11-10T02:33:36Z",
       "priority": "medium",
       "updated": "2026-11-10T02:33:36Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-73",
+      "cat": "feature",
+      "title": "Announcement popups much smaller and out of the way",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:38Z",
+      "priority": "medium",
+      "updated": "2026-11-10T02:33:38Z",
       "by": "Claude"
     }
   ],
