@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:34:12Z",
+  "updated": "2026-11-10T02:34:14Z",
   "categories": [
     {
       "key": "feature",
@@ -641,10 +641,10 @@
       "tags": [
         "map"
       ],
-      "notes": "",
+      "notes": "2026-11-10 (Claude): Devin 2026-11-10: the game is match based now, not round based; this may no longer apply",
       "links": [],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-10T02:34:14Z",
       "by": "Claude"
     },
     {
