@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:19:17Z",
+  "updated": "2026-11-10T02:33:00Z",
   "categories": [
     {
       "key": "feature",
@@ -709,10 +709,10 @@
       "tags": [
         "progression"
       ],
-      "notes": "",
+      "notes": "2026-11-10 (Claude): Devin 2026-11-10: no rounds; upgrades now come from ghost ships and the HQ upgrade button",
       "links": [],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:30:00Z",
+      "updated": "2026-11-10T02:33:00Z",
       "by": "Claude"
     },
     {
