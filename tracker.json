@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:03:43Z",
+  "updated": "2026-11-10T17:03:48Z",
   "categories": [
     {
       "key": "feature",
@@ -2113,6 +2113,19 @@
       "created": "2026-11-10T17:03:43Z",
       "priority": "low",
       "updated": "2026-11-10T17:03:43Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-14",
+      "cat": "bug",
+      "title": "Merchant ships get stuck",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Fixed in PR #25: a new order now clears 'arrived', trade runs accept the ship's own arrival, A* route planner (NavGrid).",
+      "links": [],
+      "created": "2026-11-10T17:03:48Z",
+      "priority": "high",
+      "updated": "2026-11-10T17:03:48Z",
       "by": "Claude"
     }
   ],
