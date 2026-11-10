@@ -1,26 +1,40 @@
 // Launch-time updater for the portable Plunder folder (no installer).
 //
 // Each push to main publishes a GitHub Release with:
-//   latest.json              { version, shellId, game, full }
-//   game-<version>.zip       just the built game (dist/), ~1-2 MB
+//   latest.json              { version, shell, game, full }
+//   game-<version>.zip       just the built game (dist/), a few MB
 //   Plunder-win-x64.zip      the whole portable folder
 //
-// On launch we read latest.json. If only the game changed (same shellId) we
-// download the small game zip into <folder>/game/ and play it straight away.
-// If the Electron shell itself changed, we download the full folder zip and a
-// tiny script swaps the files in place after the game quits, then relaunches.
+// On launch we read latest.json and, if the game is newer, download the small
+// game zip into <folder>/game/ and play it straight away. That always works,
+// whatever shell (Electron, main process) is installed.
+//
+// If the shell itself changed, the full folder is fetched in the background
+// while you play, unpacked into <folder>/update/, and copied over the folder
+// by a small script after the game quits. The download is kept, so a swap
+// that fails is retried on the next quit without downloading again, and it
+// gives up on a version after a few tries. Everything is logged to
+// <folder>/data/updater.log.
+//
+// latest.json used to call the shell fingerprint "shellId". Shells from before
+// this file was rewritten took any shellId change as a reason to download the
+// whole folder on the splash screen, and on some PCs the swap never completed,
+// so they downloaded it again on every launch. The key is now "shell": those
+// older shells see no fingerprint and take the game-only path, which works.
+//
 // Offline / slow / any error: we just play what's already in the folder.
 
 const { BrowserWindow, app, net } = require('electron');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { unzipSync } = require('fflate');
+const { unzip, unzipSync } = require('fflate');
 
 const RELEASES = process.env.PLUNDER_UPDATE_URL || 'https://github.com/Littlebutta/Plunder/releases';
 const CHECK_TIMEOUT_MS = 10_000; // give up on the version check (not a running download) after this
 const SHELL_ID = readJson(path.join(__dirname, 'shell.json'))?.id || 'dev';
+/** Swap attempts per shell version before we stop trying (the game still updates). */
+const MAX_SWAPS = 3;
 
 function readJson(file) {
   try {
@@ -43,6 +57,29 @@ function newer(a, b) {
 /** Folder that holds Plunder.exe; everything (game updates, saves) lives inside it. */
 function portableDir() {
   return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'));
+}
+
+const updateDir = () => path.join(portableDir(), 'update');
+const logFile = () => path.join(portableDir(), 'data', 'updater.log');
+
+/** Append a line to data/updater.log (kept short: the last ~200 lines). */
+function log(msg) {
+  const line = `${new Date().toISOString()} ${msg}`;
+  console.log(`[updater] ${msg}`);
+  try {
+    const file = logFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let old = '';
+    try {
+      old = fs.readFileSync(file, 'utf8');
+    } catch {
+      // first line
+    }
+    const lines = (old + line + '\r\n').split(/\r?\n/).filter(Boolean).slice(-200);
+    fs.writeFileSync(file, lines.join('\r\n') + '\r\n');
+  } catch {
+    // logging must never stop the game
+  }
 }
 
 /** Version of the game files currently played (downloaded game/ or the one bundled with the shell). */
@@ -80,6 +117,7 @@ async function download(url, onProgress, signal) {
     got += value.length;
     if (total) onProgress(got / total);
   }
+  if (total && got !== total) throw new Error(`download cut short (${got} of ${total} bytes)`);
   return Buffer.concat(chunks);
 }
 
@@ -107,42 +145,109 @@ function installGame(zipBuf, version) {
   fs.renameSync(staging, live);
 }
 
+// --- Shell (full folder) updates ----------------------------------------------------
+
+/** Like extractTo, but off the main thread and with async writes, so a game in progress never stalls. */
+async function extractToAsync(zipBuf, dir) {
+  await fs.promises.rm(dir, { recursive: true, force: true });
+  const files = await new Promise((resolve, reject) => unzip(new Uint8Array(zipBuf), (err, out) => (err ? reject(err) : resolve(out))));
+  for (const [name, data] of Object.entries(files)) {
+    if (name.endsWith('/')) continue;
+    const out = path.normalize(path.join(dir, name));
+    if (!out.startsWith(dir + path.sep)) continue; // ignore path traversal
+    await fs.promises.mkdir(path.dirname(out), { recursive: true });
+    await fs.promises.writeFile(out, data);
+  }
+}
+
+/** A finished or abandoned swap leaves update/ behind: clear it once it is no use. */
+function tidyUpdates() {
+  const state = readJson(stateFile());
+  if (fs.existsSync(updateDir()) && (!state || state.shell === SHELL_ID)) {
+    fs.rmSync(updateDir(), { recursive: true, force: true });
+    if (state) log(`shell ${SHELL_ID} is installed; cleared the staged update`);
+  }
+}
+
+/** What is staged in update/: { version, shell, attempts } once a full folder is unpacked there. */
+const stateFile = () => path.join(updateDir(), 'state.json');
+const stagedFolder = (version) => path.join(updateDir(), `v${version}`);
+
 /**
- * Full update (Windows): unpack the new folder to %TEMP%, then a cmd script waits
- * for this process to exit, copies the files over the portable folder (data/ is
- * untouched), drops the old game/ override and relaunches Plunder.exe.
+ * Fetch and unpack the full folder for `latest` into update/v<version>/, in the
+ * background while the game runs. Does nothing if it is already there.
  */
-function stageFullUpdate(zipBuf, version) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plunder-update-'));
-  const newDir = path.join(tmp, 'Plunder');
-  extractTo(zipBuf, newDir);
+async function stageShell(latest, shell) {
+  const state = readJson(stateFile());
+  if (state && state.shell === shell && fs.existsSync(path.join(stagedFolder(state.version), 'Plunder.exe'))) {
+    if ((state.attempts || 0) >= MAX_SWAPS) log(`shell ${shell} failed to install ${state.attempts} times; not trying again`);
+    return;
+  }
+  log(`shell changed (${SHELL_ID} -> ${shell}): downloading the full folder for v${latest.version} in the background`);
+  fs.rmSync(updateDir(), { recursive: true, force: true });
+  const zip = await download(`${RELEASES}/download/v${latest.version}/${latest.full}`, () => {});
+  await extractToAsync(zip, stagedFolder(latest.version));
+  if (!fs.existsSync(path.join(stagedFolder(latest.version), 'Plunder.exe'))) throw new Error('the full folder has no Plunder.exe');
+  fs.writeFileSync(stateFile(), JSON.stringify({ version: latest.version, shell, attempts: 0 }));
+  log(`staged v${latest.version}; it is copied in when the game quits`);
+}
+
+/**
+ * Called as the app quits: if a new shell is staged, start the script that
+ * copies it over the folder once this process (and its helpers) have exited.
+ */
+function applyStagedShell() {
+  if (process.platform !== 'win32') return;
+  const state = readJson(stateFile());
+  if (!state || state.shell === SHELL_ID || (state.attempts || 0) >= MAX_SWAPS) return;
+  const from = stagedFolder(state.version);
+  if (!fs.existsSync(path.join(from, 'Plunder.exe'))) return;
+  fs.writeFileSync(stateFile(), JSON.stringify({ ...state, attempts: (state.attempts || 0) + 1 }));
   const appDir = portableDir();
-  const exe = path.join(appDir, path.basename(app.getPath('exe')));
-  const script = path.join(tmp, 'apply-update.cmd');
+  const exeName = path.basename(app.getPath('exe'));
+  const logPath = logFile();
+  const script = path.join(updateDir(), 'apply-update.cmd');
+  // No `timeout` here: it fails at once without a console. `ping` waits a second either way.
   fs.writeFileSync(
     script,
     [
       '@echo off',
+      'setlocal',
+      `set "LOG=${logPath}"`,
+      `echo %date% %time% swap: waiting for Plunder (pid ${process.pid}) to exit>>"%LOG%"`,
+      'set /a tries=0',
       ':wait',
-      `tasklist /FI "PID eq ${process.pid}" 2>nul | find "${process.pid}" >nul && (timeout /t 1 /nobreak >nul & goto wait)`,
-      'timeout /t 1 /nobreak >nul',
-      `robocopy "${newDir}" "${appDir}" /E /IS /IT /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul`,
-      `if exist "${path.join(appDir, 'game')}" rmdir /s /q "${path.join(appDir, 'game')}"`,
-      `start "" "${exe}"`,
-      `(goto) 2>nul & rmdir /s /q "${tmp}"`,
+      'set /a tries+=1',
+      `tasklist /FI "PID eq ${process.pid}" /NH 2>nul | find " ${process.pid} " >nul`,
+      'if errorlevel 1 goto gone',
+      'if %tries% geq 60 goto gone',
+      'ping -n 2 127.0.0.1 >nul',
+      'goto wait',
+      ':gone',
+      // Chromium's crash reporter and GPU helpers can hold the exe for a moment after the main process
+      'ping -n 3 127.0.0.1 >nul',
+      `robocopy "${from}" "${appDir}" /E /IS /IT /R:20 /W:1 /NFL /NDL /NJH /NP >>"%LOG%"`,
+      'set rc=%errorlevel%',
+      // (labels, not a bracketed block: a folder name with brackets in it would break one)
+      'if %rc% geq 8 goto failed',
+      `echo %date% %time% swap: done, robocopy code %rc%>>"%LOG%"`,
+      `rmdir /s /q "${from}"`,
+      `del "${stateFile()}"`,
+      '(goto) 2>nul & del "%~f0"',
+      ':failed',
+      `echo %date% %time% swap: robocopy failed with code %rc%, will retry on the next quit>>"%LOG%"`,
+      'exit /b 1',
       '',
     ].join('\r\n'),
   );
-  console.log(`[updater] staged full update to v${version}`);
-  return () => {
-    spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-  };
+  log(`quitting: copying in the staged v${state.version} (try ${(state.attempts || 0) + 1} of ${MAX_SWAPS}) for ${exeName}`);
+  spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }
 
 /**
- * Shows the splash, updates if needed. Resolves with
- *   { action: 'continue', gameDir }  start the game (gameDir = downloaded game/, or null for bundled)
- *   { action: 'restart' }            a full update is applying; the app will relaunch
+ * Shows the splash, updates the game if needed. Resolves with
+ *   { action: 'continue', gameDir, shell }  start the game (gameDir = downloaded game/, or null for bundled);
+ *                                            `shell` is set when a newer shell should be fetched in the background
  */
 function runUpdateCheck(ipcMain) {
   return new Promise((resolve) => {
@@ -166,6 +271,7 @@ function runUpdateCheck(ipcMain) {
 
     const abort = new AbortController();
     let done = false;
+    let shellUpdate = null;
     const status = (text, progress) => {
       if (!splash.isDestroyed()) splash.webContents.send('updater:status', { text, progress });
     };
@@ -178,49 +284,47 @@ function runUpdateCheck(ipcMain) {
       if (!splash.isDestroyed()) splash.destroy();
       resolve(result);
     };
-    const play = () => finish({ action: 'continue', gameDir: installedGame().dir });
+    const play = () => finish({ action: 'continue', gameDir: installedGame().dir, shell: shellUpdate });
 
     ipcMain.once('updater:skip', play);
     const checkTimer = setTimeout(play, CHECK_TIMEOUT_MS);
 
     (async () => {
       if (!isWritable(portableDir())) {
-        console.warn('[updater] folder is read-only; skipping updates');
+        log('folder is read-only; skipping updates');
         return play();
+      }
+      try {
+        tidyUpdates();
+      } catch (err) {
+        log(`could not clear old update files: ${err && err.message}`);
       }
       status('Checking for updates…');
       const latest = await (await net.fetch(`${RELEASES}/latest/download/latest.json`, { signal: abort.signal, cache: 'no-store' })).json();
+      const shell = latest?.shell || latest?.shellId;
+      if (shell && shell !== SHELL_ID && SHELL_ID !== 'dev' && latest.full && process.platform === 'win32') shellUpdate = { latest, shell };
       const current = installedGame().version;
       if (!latest?.version || !newer(latest.version, current)) return play();
       clearTimeout(checkTimer); // an update is coming; don't time out the download
 
-      const assetBase = `${RELEASES}/download/v${latest.version}`;
-      const shellChanged = latest.shellId && latest.shellId !== SHELL_ID && SHELL_ID !== 'dev';
-
-      if (shellChanged && process.platform === 'win32') {
-        status(`Downloading Plunder v${latest.version}…`, 0);
-        const zip = await download(`${assetBase}/${latest.full}`, (p) => status(`Downloading Plunder v${latest.version}… ${Math.round(p * 100)}%`, p), abort.signal);
-        status(`Installing v${latest.version}…`, 1);
-        const apply = stageFullUpdate(zip, latest.version);
-        if (done) return; // player hit "Play now" meanwhile
-        done = true;
-        if (!splash.isDestroyed()) splash.destroy();
-        apply();
-        resolve({ action: 'restart' });
-        return;
-      }
-
       status(`Downloading v${latest.version}…`, 0);
-      const zip = await download(`${assetBase}/${latest.game}`, (p) => status(`Downloading v${latest.version}… ${Math.round(p * 100)}%`, p), abort.signal);
+      const zip = await download(`${RELEASES}/download/v${latest.version}/${latest.game}`, (p) => status(`Downloading v${latest.version}… ${Math.round(p * 100)}%`, p), abort.signal);
       if (done) return;
       status(`Installing v${latest.version}…`, 1);
       installGame(zip, latest.version);
+      log(`game updated ${current} -> ${latest.version}`);
       play();
     })().catch((err) => {
-      if (!done) console.warn('[updater]', err && err.message);
+      if (!done) log(`update check failed: ${err && err.message}`);
       play(); // offline, rate-limited, etc: just play what we have
     });
   });
 }
 
-module.exports = { runUpdateCheck, installedGame, portableDir, SHELL_ID };
+/** Fetch a newer shell in the background (after the game has opened). Never throws. */
+function fetchShellInBackground(info) {
+  if (!info) return;
+  stageShell(info.latest, info.shell).catch((err) => log(`background shell download failed: ${err && err.message}`));
+}
+
+module.exports = { runUpdateCheck, fetchShellInBackground, applyStagedShell, installedGame, portableDir, SHELL_ID };
