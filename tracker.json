@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:39Z",
+  "updated": "2026-11-10T01:45:41Z",
   "categories": [
     {
       "key": "feature",
@@ -1483,6 +1483,19 @@
       "created": "2026-11-10T01:45:39Z",
       "priority": "high",
       "updated": "2026-11-10T01:45:39Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-62",
+      "cat": "feature",
+      "title": "Sailors on decks and on islands in team colours",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #16. src/crew/Crew.ts",
+      "links": [],
+      "created": "2026-11-10T01:45:41Z",
+      "priority": "medium",
+      "updated": "2026-11-10T01:45:41Z",
       "by": "Claude"
     }
   ],
