@@ -503,6 +503,24 @@ export class Broadside {
 }
 
 /** A cannon on its carriage, standing at `mount` in ship space and pointing out over that side. */
+/** Every gun is the same shape: one set of geometry for all of them (making it per gun was a hitch whenever a ship was built). */
+let gunGeo: { carriage: THREE.BufferGeometry; wheel: THREE.BufferGeometry; tube: THREE.BufferGeometry; ring: THREE.BufferGeometry; muzzleRing: THREE.BufferGeometry; knob: THREE.BufferGeometry } | null = null;
+function gunGeometry(): NonNullable<typeof gunGeo> {
+  if (gunGeo) return gunGeo;
+  const tube = new THREE.CylinderGeometry(0.085, 0.13, 1.3, 12);
+  tube.rotateX(Math.PI / 2);
+  tube.translate(0, 0, -0.3);
+  gunGeo = {
+    carriage: new THREE.BoxGeometry(0.42, 0.16, 0.7),
+    wheel: new THREE.CylinderGeometry(0.09, 0.09, 0.06, 10),
+    tube,
+    ring: new THREE.TorusGeometry(0.125, 0.025, 6, 14),
+    muzzleRing: new THREE.TorusGeometry(0.1, 0.025, 6, 14),
+    knob: new THREE.IcosahedronGeometry(0.08, 1),
+  };
+  return gunGeo;
+}
+
 export function buildGunModel(mount: THREE.Vector3): Gun {
   {
     const side: 1 | -1 = mount.x >= 0 ? 1 : -1;
@@ -512,15 +530,16 @@ export function buildGunModel(mount: THREE.Vector3): Gun {
     root.rotation.y = side === 1 ? -Math.PI / 2 : Math.PI / 2;
     const iron = toonMaterial(0x2f2c2a);
     const wood = toonMaterial(PALETTE.woodDark);
+    const g = gunGeometry();
 
     // Stubby wooden carriage with four trucks (wheels)
-    const carriage = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.7), wood);
+    const carriage = new THREE.Mesh(g.carriage, wood);
     carriage.position.y = 0.14;
     addOutline(carriage, 0.02, PALETTE.outline);
     root.add(carriage);
     for (const x of [-0.24, 0.24]) {
       for (const z of [-0.22, 0.22]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 10), wood);
+        const wheel = new THREE.Mesh(g.wheel, wood);
         wheel.rotation.z = Math.PI / 2;
         wheel.position.set(x, 0.09, z);
         root.add(wheel);
@@ -533,18 +552,15 @@ export function buildGunModel(mount: THREE.Vector3): Gun {
     yawPivot.add(pitchPivot);
     const barrel = new THREE.Group();
     pitchPivot.add(barrel);
-    const tube = new THREE.CylinderGeometry(0.085, 0.13, 1.3, 12);
-    tube.rotateX(Math.PI / 2);
-    tube.translate(0, 0, -0.3);
-    const tubeMesh = new THREE.Mesh(tube, iron);
+    const tubeMesh = new THREE.Mesh(g.tube, iron);
     addOutline(tubeMesh, 0.02, PALETTE.outline);
     barrel.add(tubeMesh);
     for (const z of [-0.9, -0.5, 0.05]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(z < -0.8 ? 0.1 : 0.125, 0.025, 6, 14), iron);
+      const ring = new THREE.Mesh(z < -0.8 ? g.muzzleRing : g.ring, iron);
       ring.position.z = z;
       barrel.add(ring);
     }
-    const knob = new THREE.Mesh(new THREE.IcosahedronGeometry(0.08, 1), iron);
+    const knob = new THREE.Mesh(g.knob, iron);
     knob.position.z = 0.42;
     barrel.add(knob);
     root.traverse((o) => {

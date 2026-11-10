@@ -132,7 +132,41 @@ export class WaveField {
     uWaveB: { value: Array.from({ length: MAX_WAVES }, () => new THREE.Vector4()) },
     uWaveCount: { value: 0 },
     uWarp: { value: 1.15 },
+    // A lone travelling swell (the tsunami, see setSwell): xy = direction, z = crest offset along it, w = height
+    uSwellA: { value: new THREE.Vector4(1, 0, 0, 0) },
+    // xy = middle of the crest, z = half its length, w = width
+    uSwellB: { value: new THREE.Vector4(0, 0, 1, 1) },
   };
+
+  /**
+   * Raise a lone swell (the tsunami): a crest `width` across and `halfLength`
+   * either side of `centre`, travelling along `dir` (unit). Height 0 removes it.
+   * GLSL twin: `swell()` in GERSTNER_GLSL.
+   */
+  setSwell(dirX: number, dirZ: number, centreX: number, centreZ: number, height: number, halfLength: number, width: number): void {
+    const sw = this.swellState;
+    Object.assign(sw, { dx: dirX, dz: dirZ, cx: centreX, cz: centreZ, h: height, half: halfLength, w: width });
+    this.uniforms.uSwellA.value.set(dirX, dirZ, dirX * centreX + dirZ * centreZ, height);
+    this.uniforms.uSwellB.value.set(centreX, centreZ, halfLength, width);
+  }
+  private readonly swellState = { dx: 1, dz: 0, cx: 0, cz: 0, h: 0, half: 1, w: 1 };
+
+  /** The swell's height (and, in `slope`, its rise along its direction) at grid point (x, z), before the shore scale. */
+  swellAt(x: number, z: number, slope?: { v: number }): number {
+    const sw = this.swellState;
+    if (sw.h <= 0) {
+      if (slope) slope.v = 0;
+      return 0;
+    }
+    const ds = sw.dx * (x - sw.cx) + sw.dz * (z - sw.cz);
+    const w = ds > 0 ? sw.w * 0.45 : sw.w * 1.5;
+    const prof = Math.exp(-(ds * ds) / (w * w));
+    const along = Math.abs(-sw.dz * (x - sw.cx) + sw.dx * (z - sw.cz));
+    const m = 1 - THREE.MathUtils.smoothstep(along, sw.half * 0.55, sw.half);
+    const h = sw.h * prof * m;
+    if (slope) slope.v = h * ((-2 * ds) / (w * w));
+    return h;
+  }
 
   private time = 0;
   /** Scratch for one wave's evaluation: phase, envelope, warp gradient x/z. */
@@ -325,7 +359,15 @@ export class WaveField {
       oz += s[o + 4] * amp * cf;
     }
     out.set(ox, oy, oz);
-    if (this.shore) out.multiplyScalar(this.shore.waveScale(x, z));
+    const sc = this.shore ? this.shore.waveScale(x, z) : 1;
+    if (sc !== 1) out.multiplyScalar(sc);
+    if (this.swellState.h > 0) {
+      const h = this.swellAt(x, z) * sc;
+      // the crest leans forward a little as it runs
+      out.x += this.swellState.dx * h * 0.3;
+      out.y += h;
+      out.z += this.swellState.dz * h * 0.3;
+    }
     return out;
   }
 
@@ -408,9 +450,16 @@ export class WaveField {
       nz -= (c[o + 1] + ev.wz) * amp * cf;
       ny -= c[o + 5] * ev.env * s * sf;
     }
+    if (this.swellState.h > 0) {
+      this.swellAt(x, z, _slope);
+      nx -= this.swellState.dx * _slope.v * s;
+      nz -= this.swellState.dz * _slope.v * s;
+    }
     return out.set(nx, ny, nz).normalize();
   }
 }
+
+const _slope = { v: 0 };
 
 const _tmpD = new THREE.Vector3();
 
@@ -439,6 +488,25 @@ export const GERSTNER_GLSL = /* glsl */ `
   }
 
   vec2 rot(vec2 d, float c, float s) { return vec2(d.x * c - d.y * s, d.x * s + d.y * c); }
+
+  uniform vec4 uSwellA;
+  uniform vec4 uSwellB;
+  // The lone travelling swell (tsunami): steep in front, long behind, tapering at its ends.
+  // Adds its displacement; bends the normal and raises the foam envelope on the crest.
+  vec3 swell(vec2 p, float scale, inout vec3 n, inout float env) {
+    if (uSwellA.w <= 0.0) return vec3(0.0);
+    vec2 dir = uSwellA.xy;
+    float ds = dot(dir, p) - uSwellA.z;
+    float w = ds > 0.0 ? uSwellB.w * 0.45 : uSwellB.w * 1.5;
+    float prof = exp(-(ds * ds) / (w * w));
+    float along = abs(dot(vec2(-dir.y, dir.x), p - uSwellB.xy));
+    float m = 1.0 - smoothstep(uSwellB.z * 0.55, uSwellB.z, along);
+    float h = uSwellA.w * prof * m * scale;
+    float dh = h * (-2.0 * ds / (w * w));
+    n = normalize(n / max(n.y, 0.2) - vec3(dir.x * dh, 0.0, dir.y * dh));
+    env = max(env, 1.0 + prof * m * 1.6);
+    return vec3(dir.x * h * 0.3, h, dir.y * h * 0.3);
+  }
 
   // Phase (x), envelope (y) and warp gradient (zw) of one wave at grid point p.
   vec4 waveEval(vec4 a, vec4 b, vec2 p) {

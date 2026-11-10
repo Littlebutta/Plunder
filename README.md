@@ -59,7 +59,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | U | Alongside an island: found an outpost on an unclaimed island, or upgrade your stronghold there. |
 | Y | At your home dock: open the shipyard. |
 | T | Mark the nearest hostile ship, or let go of the one you have marked. |
-| M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships (Shift click adds more), right click sends the selection there (the flagship if none; touch the helm to cancel). Shift right click adds a waypoint, Ctrl right click is an attack move (they fight whatever comes in range on the way), right click on your flagship makes them follow it, and holding right and dragging draws a patrol zone. Selected ships can be made into a fleet, picked again from the bar at the top. Drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
+| M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships (Shift click adds more), right click sends the selection there (the flagship if none; touch the helm to cancel). Shift right click adds a waypoint, Ctrl right click is an attack move (they fight whatever comes in range on the way), right click on your flagship makes them follow it, and holding right and dragging draws a patrol zone. Selected ships can be made into a fleet, picked again from the bar at the top. RTS control groups: **Ctrl + 1-9** makes a fleet of the ships picked, **1-9** picks it again (twice quickly centres the chart on it; at sea it opens the chart on that fleet). Drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
 | X (or V) | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | P | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
@@ -82,7 +82,7 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 
 ## Islands
 
-Generated from a seed: peaks (some with craters), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
+Generated from a seed: peaks (some with craters), ridges, terraced mesas, rolling hills, flat sandy cays, sea stacks and shipwreck islands, dressed with palms, ferns and boulders. Each kind comes in styles so the mountains vary: peaks are lone volcanoes or twin summits on a saddle, ridges run straight, curl round a bay (crescent) or break into teeth (sawtooth), hills may carry pale limestone towers or a bald granite dome, and mesas are two-step plateaus, tall lone buttes or three-step tiers. Seagulls (`src/fx/Gulls.ts`) wheel over the islands near you and follow your ship; out of combat (no hits taken or shots fired for 10 s and no enemy within 260 m) one now and then lands on a masthead or the cargo, and any fighting scares them off. Each island sits on a sandy shelf: the water turns turquoise, the waves calm down and foam laps at the beach. This all comes from one terrain height map (`src/ocean/shore.ts`) shared by the wave model, the ocean shader and the projectile simulation.
 
 ## Gathering and ports
 
@@ -110,7 +110,7 @@ The **chart** (Tab, `src/ui/MapView.ts`) is drawn as an old paper map: torn parc
 
 - **Islands are solid** (`src/world/Grounding.ts`): a hull is pushed back off the beach and loses the speed it carried in. **Reefs and sea stacks** (each island's `rocks`) hole the hull, harder the faster she hit them; the AI and the chart's autopilot steer round them.
 - **Wreckage** (`src/world/Flotsam.ts`): every ship that sinks leaves barrels and planks for 100 s; the first hull to sail over them hauls the wood and metals. Whoever sank her also gets a **bounty** in metals at once.
-- **Trade ships** (`src/world/Trade.ts`): built from the home island's chart panel once you hold a second island. They sail from home to each of your islands in turn and bring back a cargo of that island's goods (more from far islands and trading posts). They carry no guns.
+- **Trade ships** (`src/world/Trade.ts`): built from the home island's chart panel once you hold a second island. They sail from home to each of your islands in turn and bring back a cargo of that island's goods (more from far islands and trading posts). They carry no guns. Every self-sailing ship plans its way on a coarse sea chart (`src/world/NavGrid.ts`: A* over 8 m cells, islands and reefs padded with sea room, the route pulled tight), plans again when its goal moves or it stops making headway, and backs off the nearest shore when stuck.
 - **Ghost ships** drift in every few minutes (more often as the match goes on), fight anyone they meet and fade away after three and a half minutes. Sinking one gives your flagship a random **upgrade** (`src/world/Upgrades.ts`): sight, cannon range, reload, hull, repairs, speed, turning, income, salvage, free shots, trade. Each is small; they stack up to a limit. The HQ (home island's chart panel) sells the same upgrades at random for a price that rises by half each time.
 - **Random enemy ships**: the Marauder, AI flagships and AI escorts are rolled by `randomDesign()` in `src/ship/HullDesign.ts`.
 - **The volcano** (`src/weather/Volcano.ts`): a volcanic peak (flared flanks, gullies and a crater) erupts: lava wells up in the crater and runs down its sides in glowing rivers that cool to crust, the sky turns red and ash falls, and fireballs come down all over. A red ring on the water marks where each will land.
@@ -135,7 +135,7 @@ The raiders have a **home of their own**: a watchtower on the port island furthe
 
 **Stores and income.** Every island you hold sends resources to your stores: 1 + its stronghold's level units every 12 s, in the mix that island yields. Stores are shown at the top right with the income per minute. Upgrades and ships are paid from the stores from anywhere. Founding an outpost needs the flagship alongside.
 
-**Capturing islands.** The raiders also keep a stockade on every other port island. Shoot one to ruins and hold a ship within 110 m for 10 s and the island, its flag and its income are yours. They can take a port back the same way.
+**Capturing islands.** The raiders also keep a stockade on every other port island. Shoot one to ruins and hold a ship within 110 m for 10 s and the island, its flag and its income are yours. A capture is **contested** while any ship hostile to the taker is also within 110 m: the timer holds until one side is driven off. They can take a port back the same way.
 
 **Fleet.** From your home island's panel on the chart, or from the shipyard, build escorts (as many as you can pay for) from any of the stock designs or your own saved design. An escort costs half the design's hull wood plus 2 metals a cannon (`escortCost`), and bigger hulls take more sinking. An escort follows the flagship, fights the raiders' ship when it comes within 150 m, and shells any raider stronghold it is near. Select them on the chart and right click to send them somewhere (plain moves sail past fights, attack moves stop for them); "Follow the flagship" calls them back. The home island's chart panel also opens the shipyard from anywhere: designs can be built as escorts there, but the flagship itself is only refitted alongside home. Escorts and the *Marauder* are the same class (`src/world/Warship.ts`).
 
@@ -209,6 +209,12 @@ round loop exists), each at level I, II or III:
   wind-up to dodge. Shoot the eyes or tentacle to make it dive, enough hits drive it off.
 - **Armageddon**: the sky and sea turn blood red and a cursed fleet rises out of the sea, circles you
   and fires volleys. Sink them all to end it early.
+- **Tsunami** (`Tsunami.ts`): one huge swell (6, 9 or 12 m) rolls across the map, its heading drifting
+  at random and turning back in from the rim. It is part of the sea itself (`WaveField.setSwell`, shared
+  by the shader and the buoyancy), so ships climb it; the breaking crest batters and sweeps along any ship it catches.
+- **Waterspouts** (`Waterspouts.ts`): one to three ocean tornadoes wander the sea at random, veering off
+  land. Near one the wind drags a ship round and in; sail into its foot and she is lifted up to 20 m,
+  whirled round and flung clear, taking damage when she lands.
 
 Hull damage shows in a bar above the stats; it repairs slowly once you're out of trouble. Tuning panel
 (G) → *Weather & time*: time of day, day length, start/stop any event at any level.

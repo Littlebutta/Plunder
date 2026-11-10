@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { FloatingBody } from '../physics/FloatingBody';
 import { toonMaterial, addOutline } from '../render/toon';
 import type { WaveField } from '../ocean/waves';
 import type { Collider } from '../combat/ProjectileSystem';
@@ -17,6 +18,8 @@ export interface LurkerTarget {
   length: number;
   /** The tentacle came down on her. */
   hit(damage: number, at: THREE.Vector3, shove: THREE.Vector3): void;
+  /** Her hull's physics, for weather that picks ships up (waterspouts). */
+  body?: FloatingBody;
 }
 
 /** How far a creature notices a ship (m); beyond that it roams. */

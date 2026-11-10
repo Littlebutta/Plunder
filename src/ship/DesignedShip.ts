@@ -6,7 +6,7 @@ import { Wind } from '../world/Wind';
 import { computeStats, deckAt, designToDrive, designToHullSpec, halfBeamAt, HullDesign, mastSize, rigBoost, ShipStats, zAt } from './HullDesign';
 import { Crew, CrewSurface } from '../crew/Crew';
 import { MastRig } from './Masts';
-import { buildShipVisual, ShipVisual } from './ShipVisual';
+import { shipVisualFor, ShipVisual } from './ShipVisual';
 import { Vessel } from './Vessel';
 import { CargoPile } from './Cargo';
 import type { Stock } from '../world/Resources';
@@ -75,7 +75,7 @@ export class DesignedShip extends Vessel {
     const hull = designToHullSpec(design, stats);
     super(hull, designToDrive(design, hull, stats), waves, wind);
     this.stats = stats;
-    this.visual = buildShipVisual(design, colour);
+    this.visual = shipVisualFor(design, colour);
     this.group.add(this.visual.group);
     this.cargo = new CargoPile(this.visual.cargoPlaces);
     this.visual.group.add(this.cargo.group);

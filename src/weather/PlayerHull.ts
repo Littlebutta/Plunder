@@ -9,6 +9,10 @@ export class PlayerHull {
   hp = 100;
   /** Seconds since the last hit; repairs start after `repairDelay`. */
   private sinceHit = 99;
+  /** Seconds since she was last hit. */
+  get quietFor(): number {
+    return this.sinceHit;
+  }
   repairDelay = 8;
   repairRate = 2.5;
   onBattered: (() => void) | null = null;

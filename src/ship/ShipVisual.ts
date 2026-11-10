@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../render/palette';
 import { addOutline, sailTint, toonMaterial } from '../render/toon';
 import { createWaterMask } from '../render/waterMask';
-import { cannonMount, deckAt, gunHeight, halfBeamAt, HullDesign, hullHalfWidthAt, hullPoint, keelAt, mastSize, SailType, sheerAt, STATIONS, zAt } from './HullDesign';
+import { cannonMount, deckAt, gunHeight, halfBeamAt, HullDesign, hullHalfWidthAt, sanitizeDesign, hullPoint, keelAt, mastSize, SailType, sheerAt, STATIONS, zAt } from './HullDesign';
 
 export interface ShipVisual {
   group: THREE.Group;
@@ -505,6 +505,71 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   void hull;
 
   return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces, masts, helm };
+}
+
+/**
+ * Built ships, one per design, kept to copy from. Building a hull from scratch
+ * (lofting, a few hundred little meshes, outlines) took 30 to 60 ms, which was a
+ * hitch every time a captain refitted or launched a ship mid-match. A copy of one
+ * already built shares its geometry and only gets its own materials (so each
+ * ship can take its owner's colour and fade on its own): about a millisecond.
+ */
+const templates = new Map<string, ShipVisual>();
+
+/**
+ * The same as `buildShipVisual`, but copied from a cached build of the design
+ * when there is one. Its geometry is shared, so never pass the result to
+ * `disposeShipVisual` (the shipyard, which does, builds its own).
+ */
+export function shipVisualFor(d: HullDesign, colour: THREE.ColorRepresentation = PALETTE.sail): ShipVisual {
+  const plain = sanitizeDesign({ ...d, name: '' });
+  const key = JSON.stringify(plain);
+  let t = templates.get(key);
+  if (!t) {
+    t = buildShipVisual(plain, PALETTE.sail);
+    if (templates.size > 40) templates.delete(templates.keys().next().value!);
+    templates.set(key, t);
+  }
+  const v = cloneVisual(t);
+  if (colour !== PALETTE.sail) {
+    v.sailMaterial.color.copy(sailTint(colour));
+    v.flagMaterial.color.set(colour);
+  }
+  return v;
+}
+
+/** A copy of a built ship that shares its geometry but has its own toon materials, and every reference pointing into the copy. */
+function cloneVisual(t: ShipVisual): ShipVisual {
+  const group = t.group.clone(true);
+  const objects = new Map<THREE.Object3D, THREE.Object3D>();
+  const a: THREE.Object3D[] = [];
+  const b: THREE.Object3D[] = [];
+  t.group.traverse((o) => a.push(o));
+  group.traverse((o) => b.push(o));
+  a.forEach((o, i) => objects.set(o, b[i]));
+  const mats = new Map<THREE.Material, THREE.Material>();
+  const own = (m: THREE.Material): THREE.Material => {
+    // outlines and the water lid are shared by every ship anyway
+    if (!(m as THREE.MeshToonMaterial).isMeshToonMaterial) return m;
+    let c = mats.get(m);
+    if (!c) mats.set(m, (c = m.clone()));
+    return c;
+  };
+  for (const o of b) {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh) mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material);
+  }
+  const remap = (v: unknown): unknown => {
+    if (v === null || typeof v !== 'object') return v;
+    if ((v as THREE.Object3D).isObject3D) return objects.get(v as THREE.Object3D) ?? v;
+    if ((v as THREE.Material).isMaterial) return own(v as THREE.Material);
+    if ((v as THREE.Vector3).isVector3) return (v as THREE.Vector3).clone();
+    if (Array.isArray(v)) return v.map(remap);
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) out[k] = remap(x);
+    return out;
+  };
+  return remap(t) as ShipVisual;
 }
 
 /** Free the GPU memory of a built ship (the shipyard rebuilds its preview on every edit). */

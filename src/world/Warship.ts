@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { shunRocks } from './Grounding';
-import { helm, islandReach, routeVia } from './navigation';
+import { helm, islandReach } from './navigation';
+import { navGrid, Pilot } from './NavGrid';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -92,6 +93,10 @@ export class Warship {
   readonly flagship: boolean;
   /** Chart order: sail here and hold. */
   order: THREE.Vector3 | null = null;
+  /** Plans and follows the way to wherever she is sailing. */
+  readonly pilot = new Pilot();
+  /** The order she last set out on, to tell when a new one comes. */
+  private readonly orderSeen = new THREE.Vector3(1e9, 0, 1e9);
   /** Chained orders: where to go after `order`, in turn. */
   queue: THREE.Vector3[] = [];
   /** With an order: fight whatever comes in range on the way (true), or sail past it, firing only as the guns bear (false). */
@@ -130,7 +135,7 @@ export class Warship {
   /** Which way she circles a target: chosen so the side that carries her guns faces it. */
   private circle = 1;
   /** At the end of her orders, lying with her sail struck. */
-  private arrived = false;
+  arrived = false;
   /** Seconds she has lain keel-up. */
   private capsized = 0;
   private retired = false;
@@ -409,6 +414,13 @@ export class Warship {
         to = _leg.set(zone.x + Math.cos(a) * zone.r * 0.6, 0, zone.z + Math.sin(a) * zone.r * 0.6);
         if (Math.hypot(to.x - pos.x, to.z - pos.z) < 34) this.patrolLeg = (this.patrolLeg + 1) % 5;
       }
+      // a fresh order: under way again. (Lying "arrived" carried over to the next order when it was
+      // close by, and a merchant that had just loaded at an island near home never sailed for home.)
+      if (this.order && this.order.distanceToSquared(this.orderSeen) > 64) {
+        this.orderSeen.copy(this.order);
+        this.arrived = false;
+        this.pilot.reset();
+      }
       const left = Math.hypot(to.x - pos.x, to.z - pos.z);
       const len = ship.length;
       const hold = (this.order ? 22 : zone ? 6 : 34) + len * 0.6;
@@ -421,9 +433,10 @@ export class Warship {
       if (this.arrived && !zone) {
         cruise = 0;
         steady = true;
+        this.pilot.reset();
       } else {
-        // the way there, round any island in the road
-        const via = routeVia(pos, to, this.islands, _via);
+        // the way there, planned round every island and reef in the road
+        const via = this.pilot.next(dt, pos, to, navGrid(this.islands), _via);
         want.set(via.x - pos.x, 0, via.z - pos.z).normalize();
         // ease off the sail on the approach, so she glides in rather than overshooting
         cruise = THREE.MathUtils.clamp((left - hold) / 90, 0.25, 0.9);
@@ -432,8 +445,23 @@ export class Warship {
       const a = (this.waypoint / 6) * Math.PI * 2;
       this.dest.set(Math.cos(a) * ENEMY.patrolRadius, 0, Math.sin(a) * ENEMY.patrolRadius);
       if (Math.hypot(this.dest.x - pos.x, this.dest.z - pos.z) < 40) this.waypoint = (this.waypoint + 1) % 6;
-      const via = routeVia(pos, this.dest, this.islands, _via);
+      const via = this.pilot.next(dt, pos, this.dest, navGrid(this.islands), _via);
       want.set(via.x - pos.x, 0, via.z - pos.z).normalize();
+    }
+    // stuck against a shore or another hull: turn away from the nearest land for a moment before trying again
+    if (this.pilot.unstick > 0 && this.state !== 'fight' && !raid) {
+      let near: Island | null = null;
+      let nd = Infinity;
+      for (const island of this.islands) {
+        const d = Math.hypot(pos.x - island.center.x, pos.z - island.center.z) - islandReach(island);
+        if (d < nd) {
+          nd = d;
+          near = island;
+        }
+      }
+      if (near && nd < 40) want.set(pos.x - near.center.x, 0, pos.z - near.center.z).normalize();
+      cruise = Math.max(cruise, 0.5);
+      steady = false;
     }
     // keep off the islands (the route already goes round them: this is only a last shove close in)
     for (const island of this.islands) {
