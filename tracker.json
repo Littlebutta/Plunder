@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:50:08Z",
+  "updated": "2026-11-10T03:50:11Z",
   "categories": [
     {
       "key": "feature",
@@ -1812,13 +1812,15 @@
       "id": "F-83",
       "cat": "feature",
       "title": "Buildings on islands never clip through other objects",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/21"
+      ],
       "created": "2026-11-10T02:34:00Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:34:00Z",
+      "updated": "2026-11-10T03:50:11Z",
       "by": "Claude"
     },
     {
