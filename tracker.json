@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:15Z",
+  "updated": "2026-11-10T17:04:18Z",
   "categories": [
     {
       "key": "feature",
@@ -2114,13 +2114,15 @@
       "id": "F-98",
       "cat": "feature",
       "title": "Seagulls that fly around and land on your ship out of combat",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 7, PR #25 (2026-11-10). Waiting on Devin's playtest.",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:43Z",
       "priority": "low",
-      "updated": "2026-11-10T17:03:43Z",
+      "updated": "2026-11-10T17:04:18Z",
       "by": "Claude"
     },
     {
