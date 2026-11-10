@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:49Z",
+  "updated": "2026-11-10T02:52:51Z",
   "categories": [
     {
       "key": "feature",
@@ -1831,13 +1831,15 @@
       "id": "F-86",
       "cat": "feature",
       "title": "Forts repair very slowly by consuming stone",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:34:07Z",
       "priority": "low",
-      "updated": "2026-11-10T02:34:07Z",
+      "updated": "2026-11-10T02:52:51Z",
       "by": "Claude"
     },
     {
