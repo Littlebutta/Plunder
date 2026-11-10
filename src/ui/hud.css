@@ -431,3 +431,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .hud-teams .row.out { opacity: .45; text-decoration: line-through; }
 .hud-teams .row em { font-style: normal; font-size: 11px; opacity: .7; }
 .in-menu .hud-teams { display: none; }
+
+/* --- Vs lobby: online panel ------------------------------------------------------------ */
+.lobby-online { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lobby-online input { width: 130px; font: 800 14px 'Nunito', sans-serif; color: #fff8e6; background: rgba(255, 255, 255, .08); border: 2px solid #6e3b1b; border-radius: 8px; padding: 6px 8px; text-transform: uppercase; }
+.lobby-code { font: 800 20px 'Nunito', sans-serif; letter-spacing: 3px; background: rgba(0, 0, 0, .35); border: 2px dashed #c0814a; border-radius: 8px; padding: 3px 12px; user-select: all; max-width: 100%; overflow-wrap: anywhere; }
+.lobby-notice { margin-top: 8px; font-size: 13px; font-weight: 700; color: #ffd27a; }
+.hud-net { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: rgba(42, 23, 8, .85); border: 2px solid #c0814a; color: #fff8e6; font: 800 14px 'Nunito', sans-serif; pointer-events: none; }
+.hud-net[hidden] { display: none; }

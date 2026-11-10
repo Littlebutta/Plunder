@@ -80,6 +80,7 @@ function createGameWindow() {
       nodeIntegration: false,
       sandbox: true,
       backgroundThrottling: false,
+      preload: path.join(__dirname, 'preload.cjs'), // Steam and "second window" for online play
     },
   });
 
@@ -118,6 +119,17 @@ async function start() {
       gameRoot = result.gameDir || BUNDLED_DIST;
     }
   }
+
+  // Online play: Steam is loaded only when the game asks, and never stops the game from starting.
+  try {
+    require('./steam.cjs').register(ipcMain);
+  } catch (err) {
+    console.error('Steam bridge unavailable:', err);
+  }
+  // A second game window, for trying an online match alone on one computer.
+  ipcMain.on('plunder:new-window', () => {
+    if (BrowserWindow.getAllWindows().length < 4) createGameWindow();
+  });
 
   gameWindow = createGameWindow();
 }

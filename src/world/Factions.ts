@@ -1,9 +1,14 @@
+import { loadMatch } from './Match';
 import { emptyStock, Stock } from './Resources';
 
 /** Nobody: the owner of an unclaimed island. */
 export const NONE = -1;
-/** The local player is always faction 0. */
-export const ME = 0;
+/**
+ * The local player's faction. Faction ids are the same on every copy of an
+ * online match (a captain's place in the lobby), so this is 0 only when
+ * playing alone or hosting. Fixed for the life of the page: a match starts with a reload.
+ */
+export const ME = loadMatch().net?.me ?? 0;
 
 export type FactionKind = 'human' | 'ai' | 'raiders';
 

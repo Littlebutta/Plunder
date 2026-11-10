@@ -1,7 +1,8 @@
 import { Stock } from './Resources';
 import { worldSeed } from './worldConfig';
 
-export type SlotKind = 'human' | 'ai' | 'closed';
+/** 'open' only exists in the online lobby: a slot waiting for a friend to join. */
+export type SlotKind = 'human' | 'ai' | 'closed' | 'open';
 
 export interface MatchSlot {
   kind: SlotKind;
@@ -9,6 +10,19 @@ export interface MatchSlot {
   team: number;
   colour: string;
   name: string;
+  /** Online: which copy of the game sails this slot (a transport peer id). */
+  peer?: string;
+}
+
+/** An online match: how this copy is linked to the others. */
+export interface NetInfo {
+  transport: 'steam' | 'local';
+  /** The room's invite code. */
+  room: string;
+  /** Is this copy the host, which runs the world for everyone? */
+  host: boolean;
+  /** This copy's faction: its place among the captains. */
+  me: number;
 }
 
 /**
@@ -32,6 +46,8 @@ export interface MatchConfig {
   slots: MatchSlot[];
   /** Go straight to sea when the page loads (set by the lobby's Start). */
   autostart?: boolean;
+  /** Set when the match is played online. */
+  net?: NetInfo;
 }
 
 export const TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
@@ -74,7 +90,7 @@ export function loadMatch(): MatchConfig {
     const raw = sessionStorage.getItem(KEY);
     if (raw) {
       const m = JSON.parse(raw) as MatchConfig;
-      if (m && m.mode === 'vs' && Array.isArray(m.slots) && m.slots.filter((s) => s.kind !== 'closed').length >= 2) return m;
+      if (m && m.mode === 'vs' && Array.isArray(m.slots) && m.slots.filter((s) => s.kind === 'human' || s.kind === 'ai').length >= 2) return m;
     }
   } catch {
     // no storage: classic
@@ -96,7 +112,14 @@ export function loadLobby(): MatchConfig | null {
   try {
     const raw = localStorage.getItem(KEY + '.lobby');
     const m = raw ? (JSON.parse(raw) as MatchConfig) : null;
-    return m && Array.isArray(m.slots) && m.slots.length === 4 ? m : null;
+    if (!m || !Array.isArray(m.slots) || m.slots.length !== 4) return null;
+    // an online lobby's seats are not remembered: next time they start empty
+    delete m.net;
+    for (const s of m.slots.slice(1)) {
+      if (s.kind === 'open' || s.kind === 'human') s.kind = 'closed';
+      delete s.peer;
+    }
+    return m;
   } catch {
     return null;
   }

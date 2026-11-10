@@ -228,6 +228,17 @@ export class Stronghold {
     return true;
   }
 
+  /** Online: take level and health from the host. Returns true if that left it newly in ruins. */
+  sync(level: number, hp: number, capture: number): boolean {
+    if (level !== this.level) this.setLevel(level);
+    const was = this.ruined;
+    this.hp = Math.min(this.maxHp, hp);
+    this.capture = capture;
+    if (was !== this.ruined) this.showRuin(this.ruined);
+    this.refreshBar();
+    return this.ruined && !was;
+  }
+
   /** Per-frame upkeep. `contested`: a hostile ship is close enough to stop repairs. */
   update(dt: number, contested: boolean): void {
     this.sinceHit += dt;
@@ -453,6 +464,12 @@ export class Territory {
   /** Classic voyage: the raiders' home island, if the map has a port for them. Taking it wins. */
   readonly enemyHome: Stronghold | null = null;
   private incomeTimer = 0;
+  /**
+   * Online, on a copy that is not the host: the host decides who holds what.
+   * Here nothing fires, falls or changes hands on its own; `applyNet` copies
+   * the host's state in, and only the local player's income is counted.
+   */
+  remote = false;
 
   constructor(
     private readonly islands: Island[],
@@ -580,11 +597,11 @@ export class Territory {
    * can be ordered from anywhere; founding a new outpost needs a ship of
    * theirs alongside (`alongside`).
    */
-  build(island: Island, alongside: boolean, faction: number = ME): boolean {
+  build(island: Island, alongside: boolean, faction: number = ME, free = false): boolean {
     const offer = this.offer(island, faction);
     const stores = this.factions.get(faction)?.stores;
-    if (!offer || !stores || (offer.act === 'build' && !alongside) || !canAfford(offer.cost, stores, null)) return false;
-    pay(offer.cost, stores, null);
+    if (!offer || !stores || (offer.act === 'build' && !alongside) || (!free && !canAfford(offer.cost, stores, null))) return false;
+    if (!free) pay(offer.cost, stores, null);
     const s = this.at(island);
     if (s) s.setLevel(s.level + 1);
     else this.add(island, faction, false, Math.atan2(-island.center.z, -island.center.x));
@@ -610,6 +627,7 @@ export class Territory {
     const s = this.strongholds.find((x) => x.id === colliderId);
     if (!s || by === null || !this.factions.hostile(by, s.side)) return null;
     s.crewBlast(s.site);
+    if (this.remote) return s; // the host counts the damage
     if (s.damage(STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0])) this.hooks.ruined(s);
     return s;
   }
@@ -621,6 +639,7 @@ export class Territory {
       if (s.ruined || !this.factions.hostile(by, s.side)) continue;
       if (Math.hypot(at.x - s.site.x, at.z - s.site.z) > s.collider.radius + STRONGHOLD.nearMiss) continue;
       s.crewBlast(at);
+      if (this.remote) continue;
       if (s.damage((STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0]) * 0.5)) this.hooks.ruined(s);
     }
   }
@@ -636,7 +655,7 @@ export class Territory {
       this.incomeTimer -= STRONGHOLD.incomeEvery;
       for (const s of this.strongholds) {
         const owner = this.factions.get(s.side);
-        if (!owner || owner.kind === 'raiders' || s.ruined) continue;
+        if (!owner || owner.kind === 'raiders' || s.ruined || (this.remote && s.side !== ME)) continue;
         const total = RESOURCE_IDS.reduce((n, id) => n + s.island.capacity[id], 0) || 1;
         for (let u = 0; u < 1 + s.level; u++) {
           for (const id of RESOURCE_IDS) s.yieldAcc[id] += s.island.capacity[id] / total;
@@ -648,6 +667,10 @@ export class Territory {
       this.hooks.changed();
     }
 
+    if (this.remote) {
+      for (const s of this.strongholds) s.crew.update(dt);
+      return;
+    }
     for (let i = this.strongholds.length - 1; i >= 0; i--) {
       const s = this.strongholds[i];
       let foe: ShipSight = _nobody;
@@ -680,6 +703,64 @@ export class Territory {
       else s.capture = Math.max(0, s.capture - dt * 0.5);
       if (s.capture >= STRONGHOLD.captureTime) this.capture(s, foe.faction);
     }
+  }
+
+  /** Everything the other copies of an online match need: who is still in, then five numbers per stronghold. */
+  netState(): number[] {
+    const out = [this.factions.list.reduce((n, f) => n | (f.alive ? 1 << f.id : 0), 0)];
+    for (const s of this.strongholds) out.push(this.islands.indexOf(s.island), s.side, s.level, Math.round(s.hp), Math.round(s.capture * 10) / 10);
+    return out;
+  }
+
+  /** Online: make this copy match the host's `netState`, raising the same hooks a local change would. */
+  applyNet(a: number[]): void {
+    const seen = new Set<Stronghold>();
+    const taken: { s: Stronghold; by: Side; from: Side; wasHome: boolean }[] = [];
+    let changed = false;
+    for (let i = 1; i + 4 < a.length; i += 5) {
+      const island = this.islands[a[i]];
+      if (!island) continue;
+      const side = a[i + 1];
+      let s = this.at(island);
+      if (!s) {
+        s = this.add(island, side, false, Math.atan2(-island.center.z, -island.center.x));
+        changed = true;
+      } else if (s.side !== side) {
+        const from = s.side;
+        taken.push({ s, by: side, from, wasHome: this.homes.get(from) === s });
+        this.give(s, side);
+        changed = true;
+      }
+      if (s.level !== a[i + 2]) changed = true;
+      if (s.sync(a[i + 2], a[i + 3], a[i + 4])) this.hooks.ruined(s);
+      seen.add(s);
+    }
+    // burned to the ground by raiders
+    for (const s of this.strongholds.filter((x) => !seen.has(x))) {
+      const from = s.side;
+      s.island.owner = NONE;
+      this.group.remove(s.group);
+      this.strongholds.splice(this.strongholds.indexOf(s), 1);
+      this.hooks.captured(s, this.factions.list.find((f) => f.kind === 'raiders')?.id ?? NONE, from, false, true);
+      changed = true;
+    }
+    // captains who lost their home are out; tell of the home first, and say nothing of the outposts that went with it
+    for (const t of taken.filter((x) => x.wasHome)) {
+      const loser = this.factions.get(t.from);
+      if (loser) loser.alive = false;
+      this.homes.delete(t.from);
+      this.hooks.captured(t.s, t.by, t.from, true, false);
+    }
+    for (const f of this.factions.list) {
+      if (!f.alive || a[0] & (1 << f.id)) continue;
+      // their home fell to raiders, who do not keep it
+      f.alive = false;
+      const home = this.homes.get(f.id);
+      this.homes.delete(f.id);
+      if (home) this.hooks.captured(home, this.factions.list.find((x) => x.kind === 'raiders')?.id ?? NONE, f.id, true, false);
+    }
+    for (const t of taken) if (!t.wasHome && this.factions.get(t.from)?.alive !== false) this.hooks.captured(t.s, t.by, t.from, false, false);
+    if (changed) this.hooks.changed();
   }
 
   private capture(s: Stronghold, by: Side): void {

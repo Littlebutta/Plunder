@@ -118,7 +118,7 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
 ## Vs match
 
-**Vs match** on the main menu opens a lobby (`src/ui/Lobby.ts`): four captain slots (you, and AI captains until Steam multiplayer lands), each with a team and a colour, and the map and rules on the right. Start reloads the game into that match (`src/world/Match.ts` keeps the config in session storage; "Leave match" on the menu goes back to the solo voyage).
+**Vs match** on the main menu opens a lobby (`src/ui/Lobby.ts`): four captain slots (you, AI captains, and friends when the match is hosted online), each with a team and a colour, and the map and rules on the right. Start reloads the game into that match (`src/world/Match.ts` keeps the config in session storage; "Leave match" on the menu goes back to the solo voyage).
 
 | Setting | What it does |
 | --- | --- |
@@ -132,6 +132,15 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 Every captain starts with a hut on a home island and a flagship in its berth. A captain whose home is taken is **out**: their ships go down and whatever else they held passes to the captor. The last team with a home wins. Teammates share vision, do not hurt each other, and show on the chart in their own colours. A scoreboard under the home chip lists who is still in and how many islands each holds.
 
 Sides are **factions** (`src/world/Factions.ts`): an id, a colour, a team and a pool of stores. Strongholds, islands, warships and shots all carry a faction id, and `factions.hostile(a, b)` decides who may hurt whom, so the solo voyage is simply you against a "Raiders" faction. **AI captains** (`src/world/AiCaptain.ts`) play by the same rules as you: they settle the free islands near home, upgrade the home, build escorts, then take everything they have to the nearest hostile stronghold, and come home if theirs is attacked. Instead of gathering by hand they get a stipend of resources a minute. A sunk AI flagship is replaced at its home berth after 25 s.
+
+## Online play
+
+A Vs match can be played with friends. In the lobby, **Host a match** makes a room and shows an invite code; a friend opens their own lobby, pastes the code and presses **Join** (over Steam they can also accept an invite from your friends list while Plunder is open). Friends take the slots set to **Open**; the host sets teams, map and rules and starts the match for everyone.
+
+- **Steam** (desktop version, Steam running): a friends-only Steam lobby and peer-to-peer packets through `steamworks.js` in the Electron shell (`electron/steam.cjs`, exposed to the game by `electron/preload.cjs`). Until Plunder has its own Steamworks app id it runs on Valve's public test app, 480 ("Spacewar"), so Steam shows you as playing Spacewar. Change `APP_ID` in `electron/steam.cjs` when there is a real one.
+- **This computer**: a link between windows of the same copy (a `BroadcastChannel`), for trying an online match alone. In the desktop version the lobby has **Open a second window**; in a browser, open a second tab.
+
+How it stays in step (`src/net/`, and the "Online play" section of `src/main.ts`): every copy builds the same world from the same seed and lobby. Each player's copy sails their own flagship and reports her a dozen times a second; the host's copy runs everything else (AI captains, escorts, strongholds, captures) and sends that eight times a second. Every shot is announced and flown on every copy, and only the copy that owns what it hits counts the damage. Guests pay for outposts and escorts from their own stores and ask the host to build them. Weather events are off online for now (they are not shared yet), and if the host leaves the match ends.
 
 ## Sinking, masts and crew
 
