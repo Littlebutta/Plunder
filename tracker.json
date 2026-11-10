@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:32Z",
+  "updated": "2026-11-10T17:04:37Z",
   "categories": [
     {
       "key": "feature",
@@ -570,12 +570,13 @@
         "islands",
         "visuals"
       ],
-      "notes": "2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.",
+      "notes": "2026-11-09 (Claude): Built in PR #2 (second commit), waiting to be merged.\n\n2026-11-09 (Claude): Shipped to main in PR #2 (2026-11-09). Waiting on Devin's playtest before closing.\n\n2026-11-10 (Claude): 2026-11-10 (Claude): Island styles added in PR #25 (twin peaks, crescent and sawtooth ridges, limestone towers, granite domes, buttes, tiers).",
       "links": [
-        "https://github.com/Littlebutta/Plunder/pull/2"
+        "https://github.com/Littlebutta/Plunder/pull/2",
+        "https://github.com/Littlebutta/Plunder/pull/25"
       ],
       "created": "2026-11-09T20:30:00Z",
-      "updated": "2026-11-09T20:25:01Z",
+      "updated": "2026-11-10T17:04:37Z",
       "by": "Claude"
     },
     {
