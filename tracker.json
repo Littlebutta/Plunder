@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:45Z",
+  "updated": "2026-11-10T02:52:47Z",
   "categories": [
     {
       "key": "feature",
@@ -1671,13 +1671,15 @@
       "id": "F-74",
       "cat": "feature",
       "title": "Wind trails sometimes larger so the wind direction reads",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:33:40Z",
       "priority": "low",
-      "updated": "2026-11-10T02:33:40Z",
+      "updated": "2026-11-10T02:52:47Z",
       "by": "Claude"
     },
     {
