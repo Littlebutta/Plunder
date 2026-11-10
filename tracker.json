@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:49Z",
+  "updated": "2026-11-10T02:33:51Z",
   "categories": [
     {
       "key": "feature",
@@ -1720,6 +1720,19 @@
       "created": "2026-11-10T02:33:49Z",
       "priority": "high",
       "updated": "2026-11-10T02:33:49Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-79",
+      "cat": "feature",
+      "title": "Match based, not round based",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:51Z",
+      "priority": "high",
+      "updated": "2026-11-10T02:33:51Z",
       "by": "Claude"
     }
   ],
