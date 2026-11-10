@@ -39,6 +39,9 @@ import { ballisticVelocity } from './combat/ballistics';
 import { MapView, MiniMap, MapState, MapShip } from './ui/MapView';
 import { WorldEdge } from './world/WorldEdge';
 import { edgeCurrent, steerToward } from './world/navigation';
+import { ground, KnockTimer } from './world/Grounding';
+import { FlotsamField, FLOTSAM, wreckValue } from './world/Flotsam';
+const knocks = new KnockTimer();
 import { rollWorldSeed } from './world/worldConfig';
 import { NPC_COLOUR } from './ui/Settings';
 import { MainMenu } from './ui/MainMenu';
@@ -143,6 +146,8 @@ scene.add(targets.group);
 const projectiles = new ProjectileSystem(waves);
 scene.add(projectiles.mesh);
 const effects = new Effects(waves);
+const flotsam = new FlotsamField(waves);
+scene.add(flotsam.group);
 scene.add(effects.group);
 const wake = new Wake(waves);
 scene.add(wake.mesh);
@@ -293,11 +298,36 @@ const warshipHooks: WarshipHooks = {
     effects.splash(w.position, 2.2);
     audio.woodHit(w.position);
     audio.splash(w.position, 1.6);
+    leaveWreckage(w.position, w.maxHp);
     if (w === marauder) endRaid();
     else if (w.faction === ME) weatherUi.announce(`${w.name} is lost`, 'One of your escorts has gone down', 'danger');
     else if (w.flagship && fog.canSee(w.position.x, w.position.z)) weatherUi.announce(`${w.name} is sunk`, `${factions.name(w.faction)} will be back with a new ship`, factions.hostile(ME, w.faction) ? 'good' : 'danger');
   },
 };
+
+/**
+ * Add resources to a faction's stores (salvage, bounties). Online, a guest's
+ * stores live on their own copy, so the host sends them the takings ('k').
+ */
+function credit(faction: number, stock: Stock): void {
+  const f = factions.get(faction);
+  if (!f || f.kind === 'raiders') return;
+  if (link?.host && f.kind === 'human' && faction !== ME) {
+    link.send(['k', stock.wood, stock.stone, stock.salvage], true, faction);
+    return;
+  }
+  f.stores.wood += stock.wood;
+  f.stores.stone += stock.stone;
+  f.stores.salvage += stock.salvage;
+}
+const stockLabel = (k: Stock) => [k.wood && `${k.wood} wood`, k.stone && `${k.stone} stone`, k.salvage && `${k.salvage} metals`].filter(Boolean).join(', ');
+
+/** A ship went down here: leave her wreckage for whoever gets to it first (the host decides, and tells the guests). */
+function leaveWreckage(at: THREE.Vector3, maxHp: number): void {
+  if (!authority) return;
+  const item = flotsam.spawn(at, wreckValue(maxHp));
+  link?.send(['f', item.id, r1(at.x), r1(at.z), item.stock.wood, item.stock.stone, item.stock.salvage]);
+}
 
 /**
  * Take resources from a faction's stores (shot, repairs). The raiders pay for
@@ -779,6 +809,22 @@ if (link) {
       if (w && (kind === 0 || kind === 1 || kind === 2) && w.queue.length < 24) applyOrder(w, kind, n(3), n(4), n(5), !!m[6], !!m[7]);
     });
   } else {
+    on.set('k', (from, m) => {
+      // the host paid us: salvage hauled or a bounty
+      if (from !== 0) return;
+      const n = (i: number) => Math.max(0, Math.min(500, Number(m[i]) || 0));
+      hold.stock.wood += n(1);
+      hold.stock.stone += n(2);
+      hold.stock.salvage += n(3);
+    });
+    on.set('f', (from, m) => {
+      if (from === 0) flotsam.spawn(_flot.set(Number(m[2]), 0, Number(m[3])), { wood: Number(m[4]), stone: Number(m[5]), salvage: Number(m[6]) }, Number(m[1]));
+    });
+    on.set('g', (from, m) => {
+      if (from !== 0) return;
+      flotsam.remove(Number(m[1]));
+      if (Number(m[2]) === ME) weatherUi.announce('Salvage hauled aboard', stockLabel({ wood: Number(m[3]), stone: Number(m[4]), salvage: Number(m[5]) }), 'good');
+    });
     on.set('c', (from, m) => {
       // the host's bill for what this player's forts and escorts used
       if (from !== 0) return;
@@ -865,6 +911,7 @@ function sinkPlayer(): void {
   courseQueue = [];
   ship.sail = 0;
   gathering.select(null);
+  leaveWreckage(ship.body.position, 100);
   effects.splinters(ship.body.position, 40);
   effects.splash(ship.body.position, 2.2);
   audio.woodHit(ship.body.position);
@@ -1245,6 +1292,7 @@ Object.assign(window, {
     get course() {
       return course;
     },
+    flotsam,
     audio,
     barrage,
     weather,
@@ -1308,7 +1356,14 @@ projectiles.onImpact = (e: ImpactEvent) => {
     // only a known enemy's shot counts: weather and stray shots pass warships by
     if (w && by !== null && factions.hostile(by, w.faction)) {
       w.ship.crewHit(e.position, e.kind);
-      if (!w.remote && w.hit(e.kind) && e.owner === RAFT_ID) targets.score += 10;
+      if (!w.remote && w.hit(e.kind)) {
+        if (e.owner === RAFT_ID) targets.score += 10;
+        // the side that sank her is paid a bounty on top of the wreckage
+        const v = wreckValue(w.maxHp);
+        const bounty = { wood: 0, stone: 0, salvage: Math.round(v.salvage * FLOTSAM.bounty) + 2 };
+        credit(by, bounty);
+        if (by === ME) weatherUi.announce(`${w.name} sunk`, `Bounty: ${stockLabel(bounty)}. Sail over her wreckage for more`, 'good');
+      }
     }
     return;
   }
@@ -1445,6 +1500,7 @@ hull.spend = (hp) => {
   hullWood -= 1;
   return true;
 };
+const _flot = new THREE.Vector3();
 const _playerSight: ShipSight = { position: ship.body.position, velocity: ship.body.velocity, alive: true, faction: ME };
 /** Every ship afloat this frame, as the territory rules and the AI see them. */
 const sights: ShipSight[] = [];
@@ -1631,11 +1687,35 @@ function step(rawDt: number): void {
     // ships out of sight of the player's own ships and islands are hidden, and fade in at the edge
     const seen = !voyageStarted || factions.allied(ME, w.faction) || fog.canSee(w.position.x, w.position.z);
     w.showAs(THREE.MathUtils.clamp(w.reveal + (seen ? dt : -dt) * 1.4, 0, 1));
-    if (w.alive) edgeCurrent(w.position, w.ship.body.velocity, dt);
+    if (w.alive) {
+      edgeCurrent(w.position, w.ship.body.velocity, dt);
+      if (!w.remote) {
+        const knock = ground(w.position, w.ship.body.velocity, w.collider.radius, world.islands);
+        if (knock > 0 && authority && knocks.ready(w.id, waves.currentTime)) {
+          effects.splinters(w.position, 14);
+          audio.woodHit(w.position);
+          w.scrape(knock);
+        }
+      }
+    }
   }
+  flotsam.update(dt, running ? sights : [], authority, (item, by) => {
+    if (by >= 0) credit(by, item.stock);
+    if (by === ME) weatherUi.announce('Salvage hauled aboard', stockLabel(item.stock), 'good');
+    link?.send(['g', item.id, by, item.stock.wood, item.stock.stone, item.stock.salvage]);
+  });
   ship.setCargo(hold.stock, CARGO_FULL);
   // the current at the rim turns every ship back
   const atEdge = edgeCurrent(ship.body.position, ship.body.velocity, dt);
+  if (sunkFor < 0) {
+    const knock = ground(ship.body.position, ship.body.velocity, Math.max(1.7, ship.length * 0.36), world.islands);
+    if (knock > 0 && playing && knocks.ready(RAFT_ID, waves.currentTime)) {
+      effects.splinters(ship.body.position, 16);
+      audio.woodHit(ship.body.position);
+      hull.damage(knock);
+      if (knock > 6) weatherUi.announce('Rocks!', 'You struck a reef and holed the hull', 'danger');
+    }
+  }
   edgeWarning.hidden = !playing || atEdge < 0.15;
   worldEdge.update(dt);
   if (playing) updateFog(dt);

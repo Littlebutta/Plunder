@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Island } from './Islands';
 import { EDGE_MARGIN, WORLD_RADIUS } from './worldConfig';
+import { shunRocks } from './Grounding';
 
 const _want = new THREE.Vector3();
 
@@ -25,6 +26,7 @@ export function steerToward(pos: THREE.Vector3, fwd: THREE.Vector3, dest: THREE.
       want.z += (dz / d) * k;
     }
   }
+  shunRocks(pos, fwd, want, islands);
   const r = Math.hypot(pos.x, pos.z);
   if (r > WORLD_RADIUS - EDGE_MARGIN * 1.5) {
     const k = ((r - (WORLD_RADIUS - EDGE_MARGIN * 1.5)) / EDGE_MARGIN) * 3;

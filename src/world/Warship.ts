@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { shunRocks } from './Grounding';
 import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -129,7 +130,7 @@ export class Warship {
   private readonly shots: BroadsideShot[] = [];
   private timer = 0;
   private waypoint = 0;
-  private readonly collider: Collider;
+  readonly collider: Collider;
   private readonly dest = new THREE.Vector3();
 
   constructor(
@@ -260,6 +261,19 @@ export class Warship {
     return true;
   }
 
+  /** She struck a rock: the hull takes `amount` like a shot would. Returns true if that sank her. */
+  scrape(amount: number): boolean {
+    if (!this.alive || amount <= 0) return false;
+    this.hp -= amount;
+    if (this.hp > 0) return false;
+    this.hp = 0;
+    this.state = 'sinking';
+    this.timer = 0;
+    this.sunkCount++;
+    this.hooks.sunk(this);
+    return true;
+  }
+
   /** Fixed-step physics. */
   physicsStep(h: number): void {
     if (this.alive) this.ship.physicsStep(h);
@@ -367,8 +381,9 @@ export class Warship {
       const keepOff = raid ? 38 : 70; // a raider has to come in close to shell the shore
       if (clear < keepOff) want.addScaledVector(_v.set(dx / d, 0, dz / d), ((keepOff - clear) / keepOff) * 3);
     }
-    want.normalize();
     const fwd = ship.body.forward(_fwd).setY(0).normalize();
+    shunRocks(pos, fwd, want, this.islands);
+    want.normalize();
     const turn = fwd.x * want.z - fwd.z * want.x;
     const ahead = fwd.dot(want);
     const steer = ahead < -0.2 ? Math.sign(turn || 1) : THREE.MathUtils.clamp(turn * 2.5, -1, 1);

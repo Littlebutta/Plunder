@@ -4,7 +4,7 @@ import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
-import type { Island } from './Islands';
+import { clearGround, type Island } from './Islands';
 import { Factions, ME, NONE } from './Factions';
 import { ECONOMY, emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
 
@@ -119,6 +119,8 @@ export class Stronghold {
   ) {
     this.group.name = 'stronghold';
     findSite(island, preferAngle, this.site);
+    // room for the biggest fort it can become, and the villagers around it
+    clearGround(island, this.site.x, this.site.z, 11 * (home ? 1 : STRONGHOLD.outpostScale));
     this.group.position.copy(this.site);
     // face the sea
     this.group.rotation.y = -Math.atan2(this.site.z - island.center.z, this.site.x - island.center.x);
