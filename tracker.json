@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:38Z",
+  "updated": "2026-11-10T02:52:40Z",
   "categories": [
     {
       "key": "feature",
@@ -1613,13 +1613,15 @@
       "id": "F-70",
       "cat": "feature",
       "title": "Ships outside vision are hidden and fade in at the fog edge (vision upgrades later)",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:33:31Z",
       "priority": "high",
-      "updated": "2026-11-10T02:33:31Z",
+      "updated": "2026-11-10T02:52:40Z",
       "by": "Claude"
     },
     {
