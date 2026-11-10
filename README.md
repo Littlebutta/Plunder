@@ -138,7 +138,7 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 
 ## Vs match
 
-**Vs match** on the main menu opens a lobby (`src/ui/Lobby.ts`): four captain slots (you, AI captains, and friends when the match is hosted online), each with a team and a colour, and the map and rules on the right. Start reloads the game into that match (`src/world/Match.ts` keeps the config in session storage; "Leave match" on the menu goes back to the solo voyage).
+**Vs match** on the main menu opens a lobby (`src/ui/Lobby.ts`): eight captain seats (you, AI captains, and friends when the match is hosted online), each with a captain, a team and a colour, and the map and rules on the right. Start reloads the game into that match (`src/world/Match.ts` keeps the config in session storage; "Leave match" on the menu goes back to the solo voyage).
 
 | Setting | What it does |
 | --- | --- |
@@ -152,6 +152,12 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 Every captain starts with a hut on a home island and a flagship in its berth. A captain whose home is taken is **out**: their ships go down and whatever else they held passes to the captor. The last team with a home wins. Teammates share vision, do not hurt each other, and show on the chart in their own colours. A scoreboard under the home chip lists who is still in and how many islands each holds.
 
 Sides are **factions** (`src/world/Factions.ts`): an id, a colour, a team and a pool of stores. Strongholds, islands, warships and shots all carry a faction id, and `factions.hostile(a, b)` decides who may hurt whom, so the solo voyage is simply you against a "Raiders" faction. **AI captains** (`src/world/AiCaptain.ts`) play by the same rules as you: they settle the free islands near home, upgrade the home, build escorts, then take everything they have to the nearest hostile stronghold, and come home if theirs is attacked. Instead of gathering by hand they get a stipend of resources a minute. A sunk AI flagship is replaced at its home berth after 25 s.
+
+## Captains and chatter
+
+Every seat is sailed by one of eight **captains** (`src/world/Captains.ts`), each with a pixel-art portrait and a starting perk: one or two upgrades from the HQ list, and for some a little extra in the stores (Old Salt Pell starts with Canvas and Copper, Madame Coral with double Tax and 15 metals, and so on). Pick yours under **Settings, Your captain**, or click the portrait on your seat in the lobby; when hosting, click an AI seat's portrait to change its captain. Two players may pick the same captain: the hat is always drawn in the seat's team colour, so they stay apart.
+
+Portraits are painted at 32×32 on a canvas (`src/ui/Portrait.ts`) from each captain's look (skin, hair, beard, hat style, coat, extras) and cached per colour. When a captain speaks, a card slides in at the bottom left (`src/ui/Chat.ts`) with the portrait, the name in the team colour and the line typed out letter by letter while the mouth flaps. AI captains greet you at the start, taunt you when they come for your islands and grumble when their home falls; you get a line when you win. Online, **Enter** opens a chat box and your lines go to every player with your portrait.
 
 ## Online play
 

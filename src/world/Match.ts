@@ -1,5 +1,6 @@
 import { Stock } from './Resources';
 import { worldSeed } from './worldConfig';
+import { CAPTAINS } from './Captains';
 
 /** 'open' only exists in the online lobby: a slot waiting for a friend to join. */
 export type SlotKind = 'human' | 'ai' | 'closed' | 'open';
@@ -12,6 +13,8 @@ export interface MatchSlot {
   name: string;
   /** Online: which copy of the game sails this slot (a transport peer id). */
   peer?: string;
+  /** Which captain sails it (an id from `CAPTAINS`). */
+  captain?: string;
 }
 
 /** An online match: how this copy is linked to the others. */
@@ -50,9 +53,11 @@ export interface MatchConfig {
   net?: NetInfo;
 }
 
-export const TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
+/** Up to eight captains, in up to eight teams. */
+export const MAX_SLOTS = 8;
+export const TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4', 'Team 5', 'Team 6', 'Team 7', 'Team 8'];
 export const SLOT_COLOURS = ['#d8343a', '#2f7fd6', '#3aa655', '#e0a020', '#8a4fc7', '#e06a9a', '#20a5a5', '#3a3a44'];
-export const AI_NAMES = ['Blackwood', 'Redmayne', 'Calloway', 'Vane', 'Marlowe', 'Drummond', 'Ashby'];
+export const AI_NAMES = CAPTAINS.map((c) => c.name);
 export const START_STOCK: Record<MatchConfig['stock'], Stock> = {
   lean: { wood: 30, stone: 10, salvage: 25 },
   standard: { wood: 60, stone: 25, salvage: 60 },
@@ -63,6 +68,11 @@ const KEY = 'plunder.match';
 
 export function classicMatch(): MatchConfig {
   return { mode: 'classic', seed: worldSeed(), islands: 11, fair: false, forts: true, stock: 'lean', ai: 'normal', slots: [] };
+}
+
+/** A fresh seat: closed, on a team of its own. */
+function seat(i: number, colour: string): MatchSlot {
+  return { kind: 'closed', team: i, colour, name: CAPTAINS[i % CAPTAINS.length].name, captain: CAPTAINS[i % CAPTAINS.length].id };
 }
 
 /** A two-captain match to start the lobby from. */
@@ -77,9 +87,8 @@ export function defaultVsMatch(colour: string): MatchConfig {
     ai: 'normal',
     slots: [
       { kind: 'human', team: 0, colour, name: 'You' },
-      { kind: 'ai', team: 1, colour: SLOT_COLOURS.find((c) => c !== colour) ?? SLOT_COLOURS[1], name: AI_NAMES[0] },
-      { kind: 'closed', team: 2, colour: SLOT_COLOURS[2], name: AI_NAMES[1] },
-      { kind: 'closed', team: 3, colour: SLOT_COLOURS[3], name: AI_NAMES[2] },
+      { ...seat(1, SLOT_COLOURS.find((c) => c !== colour) ?? SLOT_COLOURS[1]), kind: 'ai' },
+      ...Array.from({ length: MAX_SLOTS - 2 }, (_, i) => seat(i + 2, SLOT_COLOURS[i + 2])),
     ],
   };
 }
@@ -112,7 +121,11 @@ export function loadLobby(): MatchConfig | null {
   try {
     const raw = localStorage.getItem(KEY + '.lobby');
     const m = raw ? (JSON.parse(raw) as MatchConfig) : null;
-    if (!m || !Array.isArray(m.slots) || m.slots.length !== 4) return null;
+    if (!m || !Array.isArray(m.slots) || m.slots.length < 2) return null;
+    // older lobbies had four seats: fill the rest
+    m.slots = m.slots.slice(0, MAX_SLOTS);
+    while (m.slots.length < MAX_SLOTS) m.slots.push(seat(m.slots.length, SLOT_COLOURS[m.slots.length]));
+    m.slots.forEach((s, i) => (s.captain ??= CAPTAINS[i % CAPTAINS.length].id));
     // an online lobby's seats are not remembered: next time they start empty
     delete m.net;
     for (const s of m.slots.slice(1)) {

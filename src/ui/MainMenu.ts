@@ -28,7 +28,7 @@ export class MainMenu {
         <button data-act="shipyard">Shipyard <small>draw and launch your own ship</small></button>
         <button data-act="versus">Vs match <small>against AI captains, or friends online</small></button>
         <button data-act="newmap">New map <small>generate a fresh set of islands</small></button>
-        <button data-act="settings">Settings <small>sound and music volume</small></button>
+        <button data-act="settings">Settings <small>your captain, colour and sound</small></button>
         ${isDesktop ? '<button data-act="quit">Quit</button>' : ''}
         <div class="menu-foot">Hold the middle mouse button and drag to look around</div>
       </div>`;
