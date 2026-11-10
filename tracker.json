@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:56Z",
+  "updated": "2026-11-10T01:45:58Z",
   "categories": [
     {
       "key": "feature",
@@ -1452,13 +1452,15 @@
       "id": "F-59",
       "cat": "feature",
       "title": "Mast destruction: hitboxes, masts topple and slow the ship, repaired for wood",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Batch 4. PR #16. src/ship/Masts.ts",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/16"
+      ],
       "created": "2026-11-10T01:45:34Z",
       "priority": "high",
-      "updated": "2026-11-10T01:45:34Z",
+      "updated": "2026-11-10T01:45:58Z",
       "by": "Claude"
     },
     {
