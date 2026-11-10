@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T05:32:46Z",
+  "updated": "2026-11-10T05:54:04Z",
   "categories": [
     {
       "key": "feature",
@@ -1973,6 +1973,19 @@
       "created": "2026-11-10T05:32:46Z",
       "priority": "medium",
       "updated": "2026-11-10T05:32:46Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-10",
+      "cat": "bug",
+      "title": "Launcher re-downloads the same full update every launch",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "Shell id changed at v0.2.37, so the old launcher fetched the full app zip each launch and the swap never completed. New updater installs the game first, stages the shell in the background, applies on quit, logs to data/updater.log.",
+      "links": [],
+      "created": "2026-11-10T05:54:04Z",
+      "priority": "high",
+      "updated": "2026-11-10T05:54:04Z",
       "by": "Claude"
     }
   ],
