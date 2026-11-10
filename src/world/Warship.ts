@@ -8,10 +8,14 @@ import { MAST } from '../ship/Masts';
 import type { Island } from './Islands';
 import { Wind } from './Wind';
 
-/** Collider ids: the raiders' ship is 50, the player's fleet 60 to 89 (the player is 0, barrels 100+, strongholds 300+, weather 700+). */
-export const ENEMY_ID = 50;
-export const FLEET_ID_BASE = 60;
-export const FLEET_ID_END = 90;
+/** Collider ids of warships: 1000 up (the player's flagship is 0, barrels 100+, strongholds 300+, weather 700+, masts 2000+). */
+export const WARSHIP_ID_BASE = 1000;
+export const WARSHIP_ID_END = 2000;
+let nextId = 0;
+/** A fresh collider id for a new warship. */
+export function warshipId(): number {
+  return WARSHIP_ID_BASE + (nextId++ % (WARSHIP_ID_END - WARSHIP_ID_BASE));
+}
 
 export const ENEMY = {
   hp: 100,
@@ -44,10 +48,15 @@ export interface WarshipOptions {
   /** Collider id, also the owner id of its shots. */
   id: number;
   name: string;
-  side: 'player' | 'npc';
+  /** Whose ship she is (a faction id). */
+  faction: number;
   colour: THREE.ColorRepresentation;
-  /** Raiders are replaced after a while; the player's ships are gone for good. */
+  /** Raiders and captains' flagships are replaced after a while; escorts are gone for good. */
   respawn: boolean;
+  /** Where a replacement appears (a captain's home berth). Without it: out on the patrol circle. */
+  berth?: () => { x: number; z: number; heading: number } | null;
+  /** A captain's own ship, rather than an escort. */
+  flagship?: boolean;
   /** Index into the shipyard presets. */
   preset?: number;
   /** Or a design of the player's own. */
@@ -66,7 +75,8 @@ export class Warship {
   readonly ship: DesignedShip;
   readonly name: string;
   readonly id: number;
-  readonly side: 'player' | 'npc';
+  readonly faction: number;
+  readonly flagship: boolean;
   /** Chart order: sail here and hold. */
   order: THREE.Vector3 | null = null;
   /** With no order: keep station on this point (the flagship). */
@@ -78,6 +88,7 @@ export class Warship {
   /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
   raidTarget: THREE.Vector3 | null = null;
   sunkCount = 0;
+  private retired = false;
 
   private readonly battery: Broadside;
   private readonly shots: BroadsideShot[] = [];
@@ -95,7 +106,8 @@ export class Warship {
   ) {
     this.name = opts.name;
     this.id = opts.id;
-    this.side = opts.side;
+    this.faction = opts.faction;
+    this.flagship = !!opts.flagship;
     const design = sanitizeDesign({ ...cloneDesign(opts.design ?? PRESETS[opts.preset ?? 1]), name: this.name });
     this.ship = new DesignedShip(design, waves, wind, opts.colour, opts.id);
     // bigger hulls take more sinking
@@ -105,7 +117,7 @@ export class Warship {
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
     this.collider = { id: opts.id, position: this.ship.body.position, radius: Math.max(1.7, this.ship.length * 0.36) };
-    if (opts.respawn) this.spawn();
+    if (opts.respawn && !opts.berth) this.spawn();
   }
 
   /** Put it on the water somewhere, ready to sail. */
@@ -132,6 +144,20 @@ export class Warship {
 
   get alive(): boolean {
     return this.state === 'patrol' || this.state === 'fight' || this.state === 'raid';
+  }
+
+  /** Go down for good: her captain is out of the game. */
+  scuttle(): void {
+    this.retired = true;
+    if (!this.alive) return;
+    this.hp = 0;
+    this.state = 'sinking';
+    this.timer = 0;
+  }
+
+  /** True once she is gone and will not be replaced. */
+  get lost(): boolean {
+    return this.state === 'gone' && (this.retired || !this.opts.respawn);
   }
 
   /** Colliders for the projectile sim: nothing while it is sinking or gone. */
@@ -177,7 +203,12 @@ export class Warship {
     const ship = this.ship;
     if (this.state === 'gone') {
       this.timer += dt;
-      if (this.opts.respawn && this.timer > ENEMY.respawnTime) this.spawn(foe ?? undefined);
+      if (this.opts.respawn && !this.retired && this.timer > ENEMY.respawnTime) {
+        const berth = this.opts.berth?.();
+        if (berth) this.placeAt(berth.x, berth.z, berth.heading);
+        else if (!this.opts.berth) this.spawn(foe ?? undefined);
+        else this.timer = ENEMY.respawnTime - 5; // no home to come back to yet: look again shortly
+      }
       return;
     }
     if (this.state === 'sinking') {

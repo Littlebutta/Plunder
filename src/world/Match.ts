@@ -1,0 +1,111 @@
+import { Stock } from './Resources';
+import { worldSeed } from './worldConfig';
+
+export type SlotKind = 'human' | 'ai' | 'closed';
+
+export interface MatchSlot {
+  kind: SlotKind;
+  /** 0-based team number. */
+  team: number;
+  colour: string;
+  name: string;
+}
+
+/**
+ * What kind of game the world is built for. 'classic' is the solo voyage
+ * against the raiders; 'vs' is a match set up in the lobby: several captains
+ * (you and AI for now) in teams, each with a home island.
+ */
+export interface MatchConfig {
+  mode: 'classic' | 'vs';
+  seed: number;
+  /** How many islands to scatter. */
+  islands: number;
+  /** Deal every captain the same islands at the same distances. */
+  fair: boolean;
+  /** Neutral forts on the port islands, there for the taking. */
+  forts: boolean;
+  /** What every captain starts with. */
+  stock: 'lean' | 'standard' | 'rich';
+  /** How well supplied the AI captains are. */
+  ai: 'easy' | 'normal' | 'hard';
+  slots: MatchSlot[];
+  /** Go straight to sea when the page loads (set by the lobby's Start). */
+  autostart?: boolean;
+}
+
+export const TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
+export const SLOT_COLOURS = ['#d8343a', '#2f7fd6', '#3aa655', '#e0a020', '#8a4fc7', '#e06a9a', '#20a5a5', '#3a3a44'];
+export const AI_NAMES = ['Blackwood', 'Redmayne', 'Calloway', 'Vane', 'Marlowe', 'Drummond', 'Ashby'];
+export const START_STOCK: Record<MatchConfig['stock'], Stock> = {
+  lean: { wood: 15, stone: 4, salvage: 0 },
+  standard: { wood: 40, stone: 12, salvage: 8 },
+  rich: { wood: 120, stone: 50, salvage: 40 },
+};
+
+const KEY = 'plunder.match';
+
+export function classicMatch(): MatchConfig {
+  return { mode: 'classic', seed: worldSeed(), islands: 11, fair: false, forts: true, stock: 'lean', ai: 'normal', slots: [] };
+}
+
+/** A two-captain match to start the lobby from. */
+export function defaultVsMatch(colour: string): MatchConfig {
+  return {
+    mode: 'vs',
+    seed: 1 + Math.floor(Math.random() * 999_983),
+    islands: 12,
+    fair: true,
+    forts: true,
+    stock: 'standard',
+    ai: 'normal',
+    slots: [
+      { kind: 'human', team: 0, colour, name: 'You' },
+      { kind: 'ai', team: 1, colour: SLOT_COLOURS.find((c) => c !== colour) ?? SLOT_COLOURS[1], name: AI_NAMES[0] },
+      { kind: 'closed', team: 2, colour: SLOT_COLOURS[2], name: AI_NAMES[1] },
+      { kind: 'closed', team: 3, colour: SLOT_COLOURS[3], name: AI_NAMES[2] },
+    ],
+  };
+}
+
+/** The match this page load is for: the lobby's, if one was just started, else the classic voyage. */
+export function loadMatch(): MatchConfig {
+  try {
+    const raw = sessionStorage.getItem(KEY);
+    if (raw) {
+      const m = JSON.parse(raw) as MatchConfig;
+      if (m && m.mode === 'vs' && Array.isArray(m.slots) && m.slots.filter((s) => s.kind !== 'closed').length >= 2) return m;
+    }
+  } catch {
+    // no storage: classic
+  }
+  return classicMatch();
+}
+
+export function saveMatch(m: MatchConfig | null): void {
+  try {
+    if (m) sessionStorage.setItem(KEY, JSON.stringify(m));
+    else sessionStorage.removeItem(KEY);
+  } catch {
+    // no storage: the match cannot be carried over a reload
+  }
+}
+
+/** The lobby's last settings, kept between games. */
+export function loadLobby(): MatchConfig | null {
+  try {
+    const raw = localStorage.getItem(KEY + '.lobby');
+    const m = raw ? (JSON.parse(raw) as MatchConfig) : null;
+    return m && Array.isArray(m.slots) && m.slots.length === 4 ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLobby(m: MatchConfig): void {
+  try {
+    localStorage.setItem(KEY + '.lobby', JSON.stringify(m));
+  } catch {
+    // not remembered
+  }
+}

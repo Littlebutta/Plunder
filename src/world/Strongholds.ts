@@ -5,6 +5,7 @@ import { ballisticVelocity } from '../combat/ballistics';
 import { PALETTE } from '../render/palette';
 import { addOutline, toonMaterial } from '../render/toon';
 import type { Island } from './Islands';
+import { Factions, ME, NONE } from './Factions';
 import { emptyStock, Hold, RESOURCE_IDS, RESOURCES, ResourceId, Stock } from './Resources';
 
 /** Collider ids of strongholds: one per island, 300 + the island's index. */
@@ -58,7 +59,8 @@ export const STRONGHOLD = {
   fleetMax: 4,
 };
 
-export type Side = 'player' | 'npc';
+/** Who holds a stronghold: a faction id (see Factions). */
+export type Side = number;
 
 export function costLabel(cost: Stock): string {
   return (
@@ -414,8 +416,12 @@ export interface TerritoryHooks {
   fire(from: THREE.Vector3, velocity: THREE.Vector3, owner: number): void;
   /** Its walls have just been reduced to ruins. */
   ruined(s: Stronghold): void;
-  /** A ruined stronghold has been taken by the other side (`by`). */
-  captured(s: Stronghold, by: Side): void;
+  /**
+   * A ruined stronghold has been taken by faction `by` from faction `from`.
+   * `wasHome`: it was `from`'s home island, so `from` is out of the game.
+   * `burned`: it was put to the torch rather than kept.
+   */
+  captured(s: Stronghold, by: Side, from: Side, wasHome: boolean, burned: boolean): void;
   /** Something the UI shows has changed (level, owner, a new outpost). */
   changed(): void;
 }
@@ -425,55 +431,100 @@ export interface ShipSight {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   alive: boolean;
+  /** Whose ship it is. */
+  faction: number;
 }
 
 /**
- * Who holds which island. The player starts with a hut on a home island and
- * loses the game if it is taken; the raiders have a home of their own. Either
- * side's strongholds can be upgraded, shot to ruins and captured.
+ * Who holds which island. Every captain starts with a hut on a home island
+ * and is out of the game if it is taken. Strongholds can be upgraded, shot
+ * to ruins and captured; each one held sends resources to its owner.
+ *
+ * Classic voyage: the player against the raiders, who hold the port islands.
+ * Vs match: the captains from the lobby, each with a home, and (optionally)
+ * neutral raider forts on the ports.
  */
 export class Territory {
   readonly group = new THREE.Group();
   readonly strongholds: Stronghold[] = [];
-  readonly home: Stronghold;
-  /** The raiders' home island, if the map has a port for them. */
+  /** Each captain's home, by faction id. */
+  readonly homes = new Map<number, Stronghold>();
+  private readonly firstHomes = new Map<number, Stronghold>();
+  /** Classic voyage: the raiders' home island, if the map has a port for them. Taking it wins. */
   readonly enemyHome: Stronghold | null = null;
-  /** The player's stores: income from held islands lands here, and building draws on it from anywhere. */
-  readonly stores: Stock;
   private incomeTimer = 0;
-  private playerColour: THREE.ColorRepresentation = 0xd8343a;
 
   constructor(
     private readonly islands: Island[],
     private readonly hooks: TerritoryHooks,
-    stores: Stock = emptyStock(),
+    readonly factions: Factions,
+    setup: { mode: 'classic' | 'vs'; forts: boolean },
   ) {
-    this.stores = stores;
     this.group.name = 'territory';
-    // Home: the unsettled island nearest the start.
-    const free = islands.filter((i) => !i.port);
-    const homeIsland = [...(free.length ? free : islands)].sort((a, b) => a.center.length() - b.center.length())[0];
-    homeIsland.owner = 'player';
-    this.home = this.add(homeIsland, 'player', true, Math.atan2(-homeIsland.center.z, -homeIsland.center.x));
+    for (const i of islands) i.owner = NONE;
+    const captains = factions.list.filter((f) => f.kind !== 'raiders');
+    const raiders = factions.list.find((f) => f.kind === 'raiders') ?? null;
+    const inward = (i: Island) => Math.atan2(-i.center.z, -i.center.x);
 
-    // The raiders hold the port furthest from it.
-    const ports = islands.filter((i) => i.port && i !== homeIsland);
-    if (ports.length) {
-      const far = ports.sort((a, b) => b.center.distanceTo(homeIsland.center) - a.center.distanceTo(homeIsland.center))[0];
-      const portAngle = Math.atan2(far.port!.z - far.center.z, far.port!.x - far.center.x);
-      this.enemyHome = this.add(far, 'npc', true, portAngle + 1.1);
-      this.enemyHome.setLevel(2);
-      // ...and keep a stockade on every other port, each of which can be taken from them
-      for (const port of ports.slice(1)) {
-        const a = Math.atan2(port.port!.z - port.center.z, port.port!.x - port.center.x);
-        this.add(port, 'npc', false, a + 1.1).setLevel(1);
+    if (setup.mode === 'classic') {
+      // Home: the unsettled island nearest the start.
+      const free = islands.filter((i) => !i.port);
+      const homeIsland = [...(free.length ? free : islands)].sort((a, b) => a.center.length() - b.center.length())[0];
+      this.homes.set(ME, this.add(homeIsland, ME, true, inward(homeIsland)));
+      // The raiders hold the port furthest from it, and a stockade on every other port.
+      const ports = islands.filter((i) => i.port && i !== homeIsland);
+      if (ports.length && raiders) {
+        const far = ports.sort((a, b) => b.center.distanceTo(homeIsland.center) - a.center.distanceTo(homeIsland.center))[0];
+        this.enemyHome = this.add(far, raiders.id, true, portAngle(far) + 1.1);
+        this.enemyHome.setLevel(2);
+        this.homes.set(raiders.id, this.enemyHome);
+        for (const port of ports.slice(1)) this.add(port, raiders.id, false, portAngle(port) + 1.1).setLevel(1);
+      }
+      return;
+    }
+
+    // Vs: a home for every captain. A fair map marks them; otherwise spread them as far apart as the map allows.
+    const marked = islands.filter((i) => i.start !== undefined).sort((a, b) => a.start! - b.start!);
+    const homes: Island[] = [];
+    if (marked.length >= captains.length) homes.push(...marked.slice(0, captains.length));
+    else {
+      const pool = islands.filter((i) => !i.port && i.radius >= 24);
+      const from = pool.length >= captains.length ? pool : islands;
+      homes.push([...from].sort((a, b) => b.center.length() - a.center.length())[0]);
+      while (homes.length < captains.length) {
+        const next = from.filter((i) => !homes.includes(i)).sort((a, b) => Math.min(...homes.map((h) => h.center.distanceTo(b.center))) - Math.min(...homes.map((h) => h.center.distanceTo(a.center))))[0];
+        if (!next) break;
+        homes.push(next);
       }
     }
+    captains.forEach((f, n) => {
+      if (homes[n]) this.homes.set(f.id, this.add(homes[n], f.id, true, inward(homes[n])));
+    });
+    if (setup.forts && raiders) {
+      for (const port of islands) if (port.port && !homes.includes(port)) this.add(port, raiders.id, false, portAngle(port) + 1.1).setLevel(1);
+    }
+  }
+
+  /** The local player's home (still this stronghold after it has been taken from them). */
+  get home(): Stronghold {
+    return this.firstHomes.get(ME)!;
+  }
+
+  /** A faction's home, even after they have lost it. */
+  homeOf(faction: number): Stronghold | null {
+    return this.firstHomes.get(faction) ?? null;
+  }
+
+  /** The local player's stores. */
+  get stores(): Stock {
+    return this.factions.me.stores;
   }
 
   private add(island: Island, side: Side, home: boolean, angle: number): Stronghold {
     const s = new Stronghold(island, STRONGHOLD_ID_BASE + this.islands.indexOf(island), side, home, angle);
-    s.setColour(side === 'player' ? this.playerColour : 0xffffff);
+    s.setColour(this.factions.colour(side));
+    island.owner = side;
+    if (home && !this.firstHomes.has(side)) this.firstHomes.set(side, s);
     this.strongholds.push(s);
     this.group.add(s.group);
     return s;
@@ -483,9 +534,14 @@ export class Territory {
     return this.strongholds.find((s) => s.island === island) ?? null;
   }
 
-  setPlayerColour(colour: THREE.ColorRepresentation): void {
-    this.playerColour = colour;
-    for (const s of this.strongholds) if (s.side === 'player') s.setColour(colour);
+  /** Repaint every flag and shirt after a faction's colour changed. */
+  refreshColours(): void {
+    for (const s of this.strongholds) s.setColour(this.factions.colour(s.side));
+  }
+
+  /** Strongholds a faction holds. */
+  held(faction: number): Stronghold[] {
+    return this.strongholds.filter((s) => s.side === faction);
   }
 
   /** The island the ship is close enough to build on, if any. */
@@ -502,34 +558,36 @@ export class Territory {
     return best;
   }
 
-  /** What the player could build on an island right now: founding an outpost, or the next upgrade. */
-  offer(island: Island): { act: 'build' | 'upgrade'; label: string; cost: Stock } | null {
+  /** What a faction could build on an island right now: founding an outpost, or the next upgrade. */
+  offer(island: Island, faction: number = ME): { act: 'build' | 'upgrade'; label: string; cost: Stock } | null {
     const s = this.at(island);
-    if (!s) return island.owner === 'none' ? { act: 'build', label: 'Build an outpost', cost: STRONGHOLD.outpostCost } : null;
-    if (s.side !== 'player' || s.level >= LEVELS.length - 1) return null;
+    if (!s) return { act: 'build', label: 'Build an outpost', cost: STRONGHOLD.outpostCost };
+    if (s.side !== faction || s.level >= LEVELS.length - 1) return null;
     return { act: 'upgrade', label: `Upgrade to ${LEVELS[s.level + 1].name}`, cost: LEVELS[s.level + 1].cost };
   }
 
-  /** Units a minute coming in from the islands the player holds. */
+  /** Units a minute coming in from the islands a faction holds. */
+  incomeOf(faction: number): number {
+    return (this.strongholds.filter((s) => s.side === faction && !s.ruined).reduce((n, s) => n + 1 + s.level, 0) * 60) / STRONGHOLD.incomeEvery;
+  }
+
   get incomePerMinute(): number {
-    return (this.strongholds.filter((s) => s.side === 'player' && !s.ruined).reduce((n, s) => n + 1 + s.level, 0) * 60) / STRONGHOLD.incomeEvery;
+    return this.incomeOf(ME);
   }
 
   /**
-   * Build or upgrade on an island. An upgrade can be ordered from anywhere and
-   * is paid from the stores; a ship alongside (`hold`) pays from its hold
-   * first, and is needed to found a new outpost.
+   * Build or upgrade on an island, paid from the faction's stores. An upgrade
+   * can be ordered from anywhere; founding a new outpost needs a ship of
+   * theirs alongside (`alongside`).
    */
-  build(island: Island, hold: Hold | null): boolean {
-    const offer = this.offer(island);
-    if (!offer || (offer.act === 'build' && !hold) || !canAfford(offer.cost, this.stores, hold)) return false;
-    pay(offer.cost, this.stores, hold);
+  build(island: Island, alongside: boolean, faction: number = ME): boolean {
+    const offer = this.offer(island, faction);
+    const stores = this.factions.get(faction)?.stores;
+    if (!offer || !stores || (offer.act === 'build' && !alongside) || !canAfford(offer.cost, stores, null)) return false;
+    pay(offer.cost, stores, null);
     const s = this.at(island);
     if (s) s.setLevel(s.level + 1);
-    else {
-      island.owner = 'player';
-      this.add(island, 'player', false, Math.atan2(-island.center.z, -island.center.x));
-    }
+    else this.add(island, faction, false, Math.atan2(-island.center.z, -island.center.x));
     this.hooks.changed();
     return true;
   }
@@ -542,15 +600,15 @@ export class Territory {
     return colliderId >= STRONGHOLD_ID_BASE && colliderId < STRONGHOLD_ID_END;
   }
 
-  /** Which side a stronghold's shot came from, from its owner id. */
+  /** Which faction a stronghold's shot came from, from its owner id. */
   sideOf(owner: number): Side | null {
     return this.strongholds.find((s) => s.id === owner)?.side ?? null;
   }
 
-  /** A shot struck a stronghold's collider. Friendly fire does nothing. */
+  /** A shot struck a stronghold's collider. Fire from its own team (or from nobody in particular) does nothing. */
   hit(colliderId: number, kind: number, by: Side | null): Stronghold | null {
     const s = this.strongholds.find((x) => x.id === colliderId);
-    if (!s || !by || by === s.side) return null;
+    if (!s || by === null || !this.factions.hostile(by, s.side)) return null;
     s.crewBlast(s.site);
     if (s.damage(STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0])) this.hooks.ruined(s);
     return s;
@@ -558,9 +616,9 @@ export class Territory {
 
   /** A shot landed on the ground: one close under the walls counts for half. */
   landed(at: THREE.Vector3, kind: number, by: Side | null): void {
-    if (!by) return;
+    if (by === null) return;
     for (const s of this.strongholds) {
-      if (s.side === by || s.ruined) continue;
+      if (s.ruined || !this.factions.hostile(by, s.side)) continue;
       if (Math.hypot(at.x - s.site.x, at.z - s.site.z) > s.collider.radius + STRONGHOLD.nearMiss) continue;
       s.crewBlast(at);
       if (s.damage((STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0]) * 0.5)) this.hooks.ruined(s);
@@ -568,22 +626,23 @@ export class Territory {
   }
 
   /**
-   * @param friends the player's ships afloat (flagship and escorts)
-   * @param raiders the enemy's ships afloat
+   * @param ships every ship afloat, with whose it is
+   * @param active false in menus: nothing fires, earns or changes hands
    */
-  update(dt: number, friends: ShipSight[], raiders: ShipSight[], hostile: boolean): void {
-    // income from the islands the player holds
-    if (hostile) this.incomeTimer += dt;
+  update(dt: number, ships: ShipSight[], active: boolean): void {
+    // income from the islands each captain holds (the raiders' forts earn nothing)
+    if (active) this.incomeTimer += dt;
     if (this.incomeTimer >= STRONGHOLD.incomeEvery) {
       this.incomeTimer -= STRONGHOLD.incomeEvery;
       for (const s of this.strongholds) {
-        if (s.side !== 'player' || s.ruined) continue;
+        const owner = this.factions.get(s.side);
+        if (!owner || owner.kind === 'raiders' || s.ruined) continue;
         const total = RESOURCE_IDS.reduce((n, id) => n + s.island.capacity[id], 0) || 1;
         for (let u = 0; u < 1 + s.level; u++) {
           for (const id of RESOURCE_IDS) s.yieldAcc[id] += s.island.capacity[id] / total;
           const pick = RESOURCE_IDS.reduce((a: ResourceId, b) => (s.yieldAcc[b] > s.yieldAcc[a] ? b : a));
           s.yieldAcc[pick] -= 1;
-          this.stores[pick]++;
+          owner.stores[pick]++;
         }
       }
       this.hooks.changed();
@@ -593,8 +652,8 @@ export class Territory {
       const s = this.strongholds[i];
       let foe: ShipSight = _nobody;
       let range = Infinity;
-      for (const ship of s.side === 'player' ? raiders : friends) {
-        if (!ship.alive || !hostile) continue;
+      for (const ship of ships) {
+        if (!ship.alive || !active || !this.factions.hostile(ship.faction, s.side)) continue;
         const d = Math.hypot(ship.position.x - s.site.x, ship.position.z - s.site.z);
         if (d < range) {
           range = d;
@@ -616,40 +675,50 @@ export class Territory {
         this.hooks.fire(_from, ballisticVelocity(_from, _to, STRONGHOLD.gunSpeed, _vel), s.id);
       }
 
-      // capture
+      // capture: by whoever's ship is standing over the ruins
       if (s.ruined && range < STRONGHOLD.captureRange) s.capture += dt;
       else s.capture = Math.max(0, s.capture - dt * 0.5);
-      if (s.capture >= STRONGHOLD.captureTime) this.capture(s, i);
+      if (s.capture >= STRONGHOLD.captureTime) this.capture(s, foe.faction);
     }
   }
 
-  private capture(s: Stronghold, index: number): void {
+  private capture(s: Stronghold, by: Side): void {
     s.capture = 0;
-    const by: Side = s.side === 'npc' ? 'player' : 'npc';
-    if (s.side === 'npc') {
-      // the player takes it over, a level down from the fight
-      s.side = 'player';
-      s.island.owner = 'player';
-      s.setColour(this.playerColour);
-      s.setLevel(Math.max(0, s.level - 1));
-    } else if (s.island.port) {
-      // a port changes hands rather than burning
-      s.side = 'npc';
-      s.island.owner = 'npc';
-      s.setColour(0xffffff);
-      s.setLevel(Math.max(0, s.level - 1));
-    } else if (!s.home) {
-      // an outpost is burned to the ground
-      s.island.owner = 'none';
+    const from = s.side;
+    const wasHome = this.homes.get(from) === s;
+    const taker = this.factions.get(by);
+    // raiders burn what they cannot use; everyone else keeps what they take
+    const burned = taker?.kind === 'raiders' && !s.island.port && !wasHome;
+    if (burned) {
+      s.island.owner = NONE;
       this.group.remove(s.group);
-      this.strongholds.splice(index, 1);
+      this.strongholds.splice(this.strongholds.indexOf(s), 1);
+    } else if (!(wasHome && taker?.kind === 'raiders')) {
+      // it changes hands, a level down from the fight
+      this.give(s, by);
+      s.setLevel(Math.max(0, s.level - 1));
     }
-    this.hooks.captured(s, by);
+    if (wasHome) {
+      // the captain is out, and the rest of what they held goes with the home
+      const loser = this.factions.get(from);
+      if (loser) loser.alive = false;
+      this.homes.delete(from);
+      if (taker?.kind !== 'raiders') for (const o of this.held(from)) this.give(o, by);
+    }
+    this.hooks.captured(s, by, from, wasHome, burned);
     this.hooks.changed();
+  }
+
+  private give(s: Stronghold, to: Side): void {
+    s.side = to;
+    s.island.owner = to;
+    s.setColour(this.factions.colour(to));
   }
 }
 
-const _nobody: ShipSight = { position: new THREE.Vector3(), velocity: new THREE.Vector3(), alive: false };
+const portAngle = (i: Island) => Math.atan2(i.port!.z - i.center.z, i.port!.x - i.center.x);
+
+const _nobody: ShipSight = { position: new THREE.Vector3(), velocity: new THREE.Vector3(), alive: false, faction: NONE };
 const _from = new THREE.Vector3();
 const _to = new THREE.Vector3();
 const _vel = new THREE.Vector3();

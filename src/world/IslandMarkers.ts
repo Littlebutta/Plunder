@@ -3,13 +3,14 @@ import type { Island } from './Islands';
 
 /**
  * Ownership pips: a small banner on a pole on every island someone holds,
- * white for NPCs and the player's colour for the player's. Unheld islands
+ * in the colour of whoever holds it. Unheld islands
  * show nothing.
  */
 export class IslandMarkers {
   readonly group = new THREE.Group();
   private readonly pips: { island: Island; root: THREE.Group; cloth: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
-  private playerColour = new THREE.Color(0xd8343a);
+  /** Colour of a faction's banner. */
+  colourOf: (faction: number) => THREE.ColorRepresentation = () => 0xffffff;
   private time = 0;
 
   constructor(islands: Island[]) {
@@ -45,16 +46,11 @@ export class IslandMarkers {
     this.refresh();
   }
 
-  setPlayerColour(colour: THREE.ColorRepresentation): void {
-    this.playerColour.set(colour);
-    this.refresh();
-  }
-
   /** Call after any island changes hands. */
   refresh(): void {
     for (const p of this.pips) {
-      p.root.visible = p.island.owner !== 'none';
-      p.mat.color.copy(p.island.owner === 'player' ? this.playerColour : _white);
+      p.root.visible = p.island.owner >= 0;
+      if (p.island.owner >= 0) p.mat.color.set(this.colourOf(p.island.owner));
     }
   }
 
@@ -67,5 +63,3 @@ export class IslandMarkers {
     }
   }
 }
-
-const _white = new THREE.Color(0xffffff);
