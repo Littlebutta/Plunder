@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T01:45:34Z",
+  "updated": "2026-11-10T01:45:36Z",
   "categories": [
     {
       "key": "feature",
@@ -1457,6 +1457,19 @@
       "created": "2026-11-10T01:45:34Z",
       "priority": "high",
       "updated": "2026-11-10T01:45:34Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-60",
+      "cat": "feature",
+      "title": "One shared resource pool; deck cargo shows the total",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4. PR #16.",
+      "links": [],
+      "created": "2026-11-10T01:45:36Z",
+      "priority": "high",
+      "updated": "2026-11-10T01:45:36Z",
       "by": "Claude"
     }
   ],
