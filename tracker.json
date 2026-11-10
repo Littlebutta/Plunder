@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:42Z",
+  "updated": "2026-11-10T02:33:45Z",
   "categories": [
     {
       "key": "feature",
@@ -1681,6 +1681,19 @@
       "created": "2026-11-10T02:33:42Z",
       "priority": "medium",
       "updated": "2026-11-10T02:33:42Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-76",
+      "cat": "feature",
+      "title": "Random enemy ship designs for variety",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:45Z",
+      "priority": "medium",
+      "updated": "2026-11-10T02:33:45Z",
       "by": "Claude"
     }
   ],
