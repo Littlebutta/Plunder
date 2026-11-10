@@ -3,6 +3,7 @@ import { PALETTE } from '../render/palette';
 import { toonMaterial } from '../render/toon';
 import {
   cannonClash,
+  CANNON_SPACING,
   CannonFit,
   cannonProblem,
   CANNON_T_RANGE,
@@ -76,6 +77,8 @@ export class Shipyard {
   private gunLevel = 0;
   private mirror = true;
   private warning = '';
+  /** Cannons tool: what a click under the pointer would do. */
+  private hover: { t: number; side: 1 | -1; ok: boolean; remove: number } | null = null;
   /** Owner's colour for the preview's sails. */
   colour: THREE.ColorRepresentation = PALETTE.sail;
   private dirty = true;
@@ -328,7 +331,17 @@ export class Shipyard {
       last = { f, v };
       this.changed(false);
     };
+    /** Cannons: a drag keeps doing what its first click did (placing, or taking guns off). */
+    let gunDrag: 'place' | 'remove' | null = null;
     canvas.addEventListener('pointerdown', (e) => {
+      if (isTop && this.tool === 'cannons') {
+        const at = local(e);
+        const spot = this.gunSpot(at.x, at.y);
+        gunDrag = spot.remove >= 0 ? 'remove' : 'place';
+        canvas.setPointerCapture(e.pointerId);
+        this.gunAt(spot, gunDrag);
+        return;
+      }
       if (isTop && this.tool !== 'draw') {
         const at = local(e);
         this.placeAt(at.x, at.y);
@@ -342,6 +355,24 @@ export class Shipyard {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (drawing) paint(e);
+      if (isTop && this.tool === 'cannons') {
+        const at = local(e);
+        const spot = this.gunSpot(at.x, at.y);
+        if (gunDrag && (gunDrag === 'remove' || spot.ok)) this.gunAt(spot, gunDrag);
+        this.hover = spot;
+        this.drawTop();
+      }
+    });
+    canvas.addEventListener('pointerleave', () => {
+      if (!this.hover) return;
+      this.hover = null;
+      this.drawTop();
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (!gunDrag) return;
+      gunDrag = null;
+      canvas.releasePointerCapture(e.pointerId);
+      this.changed();
     });
     const end = (e: PointerEvent) => {
       if (!drawing) return;
@@ -357,6 +388,72 @@ export class Shipyard {
     };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Cannons tool: the spot under the pointer. Over a gun, that gun (to take
+   * off); otherwise the nearest place within a metre or so where a gun fits on
+   * this deck, so a click a little off still lands.
+   */
+  private gunSpot(x: number, y: number): { t: number; side: 1 | -1; ok: boolean; remove: number } {
+    const d = this.design;
+    const side: 1 | -1 = y < TOP_H / 2 ? 1 : -1;
+    const raw = THREE.MathUtils.clamp(this.tOf(x), CANNON_T_RANGE[0], CANNON_T_RANGE[1]);
+    const pxPerT = W - MARGIN * 2;
+    // a gun already there (either side when placing pairs)
+    let remove = -1;
+    let best = Infinity;
+    d.cannons.forEach((g, i) => {
+      if (g.level !== this.gunLevel || (g.side !== side && !this.mirror)) return;
+      const px = Math.abs(g.t - raw) * pxPerT;
+      if (px < Math.max(9, (CANNON_SPACING / d.length) * pxPerT * 0.5) && px < best) {
+        best = px;
+        remove = i;
+      }
+    });
+    if (remove >= 0) return { t: d.cannons[remove].t, side, ok: true, remove };
+    const fits = (t: number) => {
+      const mine: CannonFit = { t, side, level: this.gunLevel };
+      if (cannonProblem(d, mine) || cannonClash(d, mine) >= 0) return false;
+      if (!this.mirror) return true;
+      const twin: CannonFit = { t, side: -side as 1 | -1, level: this.gunLevel };
+      return !cannonProblem(d, twin) && cannonClash(d, twin) < 0;
+    };
+    const step = 0.1 / d.length;
+    for (let k = 0; k <= 14; k++) {
+      for (const sgn of k ? [1, -1] : [1]) {
+        const t = raw + sgn * k * step;
+        if (t < CANNON_T_RANGE[0] || t > CANNON_T_RANGE[1]) continue;
+        if (fits(t)) return { t, side, ok: true, remove: -1 };
+      }
+    }
+    return { t: raw, side, ok: false, remove: -1 };
+  }
+
+  /** Cannons tool: place a gun (and its twin) at a spot, or take one off. */
+  private gunAt(spot: { t: number; side: 1 | -1; ok: boolean; remove: number }, mode: 'place' | 'remove'): void {
+    const d = this.design;
+    this.warning = '';
+    if (mode === 'remove') {
+      if (spot.remove < 0) return;
+      const gone = d.cannons[spot.remove];
+      d.cannons = d.cannons.filter((c) => !(c.level === gone.level && Math.abs(c.t - gone.t) < 1e-6 && (c.side === gone.side || this.mirror)));
+    } else {
+      if (spot.remove >= 0) return;
+      if (!spot.ok) {
+        this.warning = cannonProblem(d, { t: spot.t, side: spot.side, level: this.gunLevel }) ?? 'No room for a gun there: too close to the next one.';
+        this.refreshPanel();
+        return;
+      }
+      d.cannons.push({ t: spot.t, side: spot.side, level: this.gunLevel });
+      if (this.mirror) d.cannons.push({ t: spot.t, side: -spot.side as 1 | -1, level: this.gunLevel });
+      d.cannons.sort((a, b) => a.level - b.level || a.t - b.t || b.side - a.side);
+    }
+    this.dirty = true;
+    this.hover = null;
+    this.drawTop();
+    this.drawSide();
+    this.refreshPanel();
   }
 
   /** Masts / cannons tool: a click on the top view. */
@@ -518,15 +615,17 @@ export class Shipyard {
       }
       c.setLineDash([]);
     }
-    for (const g of d.cannons) {
-      const x = this.xOf(g.t);
+    // lower decks first, so the open deck's guns draw over them
+    const order = [...d.cannons].sort((a, b) => b.level - a.level);
+    for (const g of order) {
       const active = this.tool !== 'cannons' || g.level === this.gunLevel;
-      c.fillStyle = active ? '#2f2c2a' : 'rgba(47,44,42,.45)';
-      if (g.level === 0) c.fillRect(x - 4, cy - g.side * (edge(g.t) - 11) - 8, 8, 16);
-      else {
-        const out = edge(g.t) + g.level * 5;
-        c.fillRect(x - 3, cy - g.side * out - (g.side > 0 ? 6 : 4), 6, 10);
-      }
+      const marked = this.hover && this.hover.remove >= 0 && Math.abs(d.cannons[this.hover.remove].t - g.t) < 1e-6 && g.level === d.cannons[this.hover.remove].level && (g.side === this.hover.side || this.mirror);
+      drawGun(c, this.xOf(g.t), cy, g.side, edge(g.t), g.level, active ? 1 : 0.4, marked ? 'remove' : 'gun');
+    }
+    // what a click would do
+    const h = this.hover;
+    if (this.tool === 'cannons' && h && h.remove < 0) {
+      for (const side of this.mirror ? [h.side, -h.side as 1 | -1] : [h.side]) drawGun(c, this.xOf(h.t), cy, side, edge(h.t), this.gunLevel, 0.75, h.ok ? 'ghost' : 'bad');
     }
     c.fillStyle = 'rgba(255,248,230,.75)';
     c.fillText('STARBOARD', W - 82, 14);
@@ -566,9 +665,26 @@ export class Shipyard {
     for (const g of d.cannons) {
       if (g.side !== 1 && d.cannons.some((o) => o.side === 1 && o.level === g.level && Math.abs(o.t - g.t) < 1e-6)) continue;
       const y = hPx(gunHeight(d, g.t, g.level));
-      c.fillStyle = '#1a0f08';
-      if (g.level === 0) c.fillRect(this.xOf(g.t) - 3, y - 2, 6, 4);
-      else c.fillRect(this.xOf(g.t) - 4, y - 4, 8, 8);
+      const x = this.xOf(g.t);
+      if (g.level > 0) {
+        // a gun port: dark opening, its lid propped open above
+        c.fillStyle = '#5e3518';
+        c.fillRect(x - 6, y - 12, 12, 4);
+        c.fillStyle = '#1a0f08';
+        c.fillRect(x - 5, y - 5, 10, 10);
+      }
+      // the muzzle looking out at you
+      c.beginPath();
+      c.arc(x, y, g.level ? 3.6 : 3.2, 0, Math.PI * 2);
+      c.fillStyle = '#4a4c52';
+      c.fill();
+      c.lineWidth = 1.5;
+      c.strokeStyle = '#121214';
+      c.stroke();
+      c.beginPath();
+      c.arc(x, y, 1.4, 0, Math.PI * 2);
+      c.fillStyle = '#050505';
+      c.fill();
     }
     c.strokeStyle = 'rgba(255,255,255,.7)';
     c.lineWidth = 1;
@@ -689,4 +805,62 @@ export class Shipyard {
     this.camera.lookAt(0, this.design.length * 0.16, 0);
     this.renderer.render(this.scene, this.camera);
   }
+}
+
+/**
+ * A cannon seen from above. On the open deck: a wooden carriage on four
+ * trucks with the barrel run out over the rail. On a gun deck below: just the
+ * muzzle poking out of its port in the hull side.
+ * @param edge distance from the centre line to the hull side (px)
+ */
+function drawGun(c: CanvasRenderingContext2D, x: number, cy: number, side: 1 | -1, edge: number, level: number, alpha: number, look: 'gun' | 'ghost' | 'bad' | 'remove'): void {
+  c.save();
+  c.globalAlpha = alpha;
+  // draw in a frame where +y points outboard
+  c.translate(x, cy - side * edge);
+  if (side > 0) c.scale(1, -1);
+  const metal = look === 'bad' ? '#c0392b' : look === 'remove' ? '#e0663a' : look === 'ghost' ? '#7fd67a' : '#43464d';
+  const dark = '#141416';
+  if (level === 0) {
+    // carriage inboard of the rail
+    c.fillStyle = look === 'gun' ? '#7a4a24' : 'rgba(255,255,255,.25)';
+    c.strokeStyle = dark;
+    c.lineWidth = 1.2;
+    c.fillRect(-5.5, -17, 11, 12);
+    c.strokeRect(-5.5, -17, 11, 12);
+    c.fillStyle = dark;
+    for (const wx of [-7.5, 5]) for (const wy of [-16, -9]) c.fillRect(wx, wy, 2.5, 4);
+    // barrel: breech knob, tapered tube, muzzle ring past the rail
+    tube(c, -14, 6, 3.4, 2.4, metal, dark);
+  } else {
+    // a gun port in the side and the muzzle sticking out of it
+    c.fillStyle = dark;
+    c.fillRect(-4.5, -2, 9, 3);
+    tube(c, -1, 3 + level * 2.5, 3, 2.4, metal, dark);
+  }
+  c.restore();
+}
+
+/** A tapered barrel from y0 to y1 (outboard), with a ring at the muzzle. */
+function tube(c: CanvasRenderingContext2D, y0: number, y1: number, r0: number, r1: number, fill: string, ink: string): void {
+  c.beginPath();
+  c.moveTo(-r0, y0);
+  c.lineTo(-r1, y1);
+  c.lineTo(r1, y1);
+  c.lineTo(r0, y0);
+  c.closePath();
+  c.fillStyle = fill;
+  c.fill();
+  c.lineWidth = 1.2;
+  c.strokeStyle = ink;
+  c.stroke();
+  // breech knob
+  c.beginPath();
+  c.arc(0, y0 - 1, r0 * 0.6, 0, Math.PI * 2);
+  c.fillStyle = fill;
+  c.fill();
+  c.stroke();
+  // muzzle ring
+  c.fillStyle = ink;
+  c.fillRect(-r1 - 0.8, y1 - 1.6, r1 * 2 + 1.6, 1.6);
 }
