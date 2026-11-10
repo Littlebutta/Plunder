@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T17:04:18Z",
+  "updated": "2026-11-10T17:04:22Z",
   "categories": [
     {
       "key": "feature",
@@ -2129,13 +2129,15 @@
       "id": "B-14",
       "cat": "bug",
       "title": "Merchant ships get stuck",
-      "status": "unresolved",
+      "status": "fixed",
       "tags": [],
       "notes": "Fixed in PR #25: a new order now clears 'arrived', trade runs accept the ship's own arrival, A* route planner (NavGrid).",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/25"
+      ],
       "created": "2026-11-10T17:03:48Z",
       "priority": "high",
-      "updated": "2026-11-10T17:03:48Z",
+      "updated": "2026-11-10T17:04:22Z",
       "by": "Claude"
     },
     {
