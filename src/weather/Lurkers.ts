@@ -15,11 +15,16 @@ export interface LurkerTarget {
   velocity: THREE.Vector3;
   /** Ship length in metres (a bigger ship is an easier target). */
   length: number;
+  /** The tentacle came down on her. */
+  hit(damage: number, at: THREE.Vector3, shove: THREE.Vector3): void;
 }
+
+/** How far a creature notices a ship (m); beyond that it roams. */
+const NOTICE = 210;
 
 export interface LurkerHooks {
   splash(at: THREE.Vector3, size: number): void;
-  hitShip(damage: number, at: THREE.Vector3, shove: THREE.Vector3): void;
+  hitShip?(damage: number, at: THREE.Vector3, shove: THREE.Vector3): void;
   /** A creature gave up the hunt for good (shot enough). */
   drivenOff(remaining: number): void;
 }
@@ -156,6 +161,12 @@ interface Lurker {
   strikeLength: number;
   struck: boolean;
   collider: Collider;
+  /** The ship it is after (by her position, which stays the same object), or null while it roams. */
+  prey: THREE.Vector3 | null;
+  /** Where it is wandering to when it has no prey. */
+  roam: THREE.Vector3;
+  /** Seconds until it looks round for prey again. */
+  think: number;
 }
 
 /**
@@ -190,7 +201,7 @@ export class Lurkers {
     return this.lurkers.filter((l) => l.state !== 'gone').length;
   }
 
-  start(level: number, target: LurkerTarget): void {
+  start(level: number, targets: LurkerTarget[]): void {
     this.clear();
     this.level = THREE.MathUtils.clamp(level, 1, 3);
     const n = Math.min(LEVELS.count[this.level - 1], MAX_LURKERS);
@@ -214,9 +225,12 @@ export class Lurkers {
         strikeLength: 12,
         struck: false,
         collider: { id: LURKER_ID_BASE + i, position: new THREE.Vector3(), radius: 3 },
+        prey: null,
+        roam: new THREE.Vector3(),
+        think: 0,
       };
       this.lurkers.push(l);
-      this.placeAway(l, target, 90);
+      this.surface(l, targets);
     }
   }
 
@@ -229,13 +243,35 @@ export class Lurkers {
     this.uniforms.uLurkCount.value = 0;
   }
 
-  /** Surface somewhere around the target, mostly behind it. */
-  private placeAway(l: Lurker, target: LurkerTarget, dist: number): void {
-    const back = Math.atan2(-target.velocity.z, -target.velocity.x);
-    const a = (target.velocity.lengthSq() > 0.5 ? back : Math.random() * Math.PI * 2) + (Math.random() - 0.5) * 2.2;
-    const r = dist + Math.random() * 30;
-    keepInside(l.pos.set(target.position.x + Math.cos(a) * r, 0, target.position.z + Math.sin(a) * r), 660);
+  /**
+   * Come up somewhere out at sea: near some ship or other (any of them, not
+   * the player's in particular), or anywhere when there are none.
+   */
+  private surface(l: Lurker, targets: LurkerTarget[]): void {
+    const near = targets.length ? targets[Math.floor(Math.random() * targets.length)].position : null;
+    const a = Math.random() * Math.PI * 2;
+    const r = near ? 110 + Math.random() * 60 : Math.random() * 420;
+    keepInside(l.pos.set((near?.x ?? 0) + Math.cos(a) * r, 0, (near?.z ?? 0) + Math.sin(a) * r), 660);
     l.heading = a + Math.PI;
+    l.prey = null;
+    l.think = 0;
+    l.roam.copy(l.pos);
+  }
+
+  /** Pick the nearest ship within notice, or keep roaming. */
+  private choose(l: Lurker, targets: LurkerTarget[]): LurkerTarget | null {
+    let best: LurkerTarget | null = null;
+    let bestD = NOTICE;
+    for (const t of targets) {
+      const d = Math.hypot(t.position.x - l.pos.x, t.position.z - l.pos.z);
+      // it keeps after what it was hunting unless something is a good deal closer
+      const k = t.position === l.prey ? d * 0.7 : d;
+      if (k < bestD) {
+        bestD = k;
+        best = t;
+      }
+    }
+    return best;
   }
 
   colliders(): Collider[] {
@@ -274,7 +310,7 @@ export class Lurkers {
     return at;
   }
 
-  update(dt: number, target: LurkerTarget): void {
+  update(dt: number, targets: LurkerTarget[]): void {
     this.time += dt;
     const lv = this.level - 1;
     const scale = LEVELS.scale[lv];
@@ -282,6 +318,19 @@ export class Lurkers {
     let shown = 0;
     for (const l of this.lurkers) {
       l.timer -= dt;
+      // look round now and then: hunt the nearest ship in reach, or wander the sea
+      l.think -= dt;
+      let hunted = l.prey ? (targets.find((t) => t.position === l.prey) ?? null) : null;
+      if (l.think <= 0 || (l.prey && !hunted)) {
+        l.think = 2.5 + Math.random() * 2;
+        hunted = this.choose(l, targets);
+        l.prey = hunted?.position ?? null;
+        if (!hunted && Math.hypot(l.roam.x - l.pos.x, l.roam.z - l.pos.z) < 25) {
+          const a = Math.random() * Math.PI * 2;
+          keepInside(l.roam.set(l.pos.x + Math.cos(a) * (90 + Math.random() * 120), 0, l.pos.z + Math.sin(a) * (90 + Math.random() * 120)), 640);
+        }
+      }
+      const target: LurkerTarget = hunted ?? { position: l.roam, velocity: _still, length: 0, hit: () => {} };
       const toX = target.position.x - l.pos.x;
       const toZ = target.position.z - l.pos.z;
       const dist = Math.hypot(toX, toZ);
@@ -291,7 +340,7 @@ export class Lurkers {
         case 'deep':
           l.strength = Math.max(0, l.strength - dt * 0.5);
           if (l.timer <= 0 && this.presence > 0.6) {
-            this.placeAway(l, target, 80);
+            this.surface(l, targets);
             l.state = 'stalk';
           }
           break;
@@ -299,11 +348,11 @@ export class Lurkers {
           l.strength = Math.min(Math.min(1, this.presence * 1.5), l.strength + dt * 0.3);
           const want = Math.atan2(toZ, toX);
           l.heading += THREE.MathUtils.clamp(wrap(want - l.heading), -0.7 * dt, 0.7 * dt);
-          const speed = LEVELS.speed[lv] * (dist > 120 ? 1.6 : 1);
+          const speed = LEVELS.speed[lv] * (!hunted ? 0.8 : dist > 120 ? 1.6 : 1);
           l.pos.x += Math.cos(l.heading) * speed * dt;
           l.pos.z += Math.sin(l.heading) * speed * dt;
           keepInside(l.pos);
-          if (dist < strikeRange && l.strength > 0.8) this.beginWindup(l, target);
+          if (hunted && dist < strikeRange && l.strength > 0.8) this.beginWindup(l, target);
           if (this.presence < 0.3) {
             l.state = 'retreat';
             l.timer = 6;
@@ -328,12 +377,14 @@ export class Lurkers {
           if (!l.struck && t >= 1.5) {
             l.struck = true;
             this.hooks.splash(l.strikeTarget, 2.2);
-            const reach = 3.2 + target.length * 0.45;
-            _v.copy(target.position).setY(0);
-            if (_v.distanceTo(_r.copy(l.strikeTarget).setY(0)) < reach) {
-              const shove = _s.copy(l.strikeDir).multiplyScalar(4);
-              shove.y = -1.5;
-              this.hooks.hitShip(LEVELS.damage[lv], target.position.clone(), shove);
+            // whatever ship is under the tentacle when it lands takes the blow
+            for (const t of targets) {
+              const reach = 3.2 + t.length * 0.45;
+              if (Math.hypot(t.position.x - l.strikeTarget.x, t.position.z - l.strikeTarget.z) < reach) {
+                const shove = _s.copy(l.strikeDir).multiplyScalar(4);
+                shove.y = -1.5;
+                t.hit(LEVELS.damage[lv], t.position.clone(), shove.clone());
+              }
             }
           }
           if (l.timer <= 0) {
@@ -448,5 +499,6 @@ const _n1 = new THREE.Vector3();
 const _n2 = new THREE.Vector3();
 const _t = new THREE.Vector3();
 const _v = new THREE.Vector3();
+const _still = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _s = new THREE.Vector3();

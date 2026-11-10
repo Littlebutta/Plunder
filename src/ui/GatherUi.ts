@@ -38,8 +38,8 @@ export class GatherUi {
     // Rebuild only when something visible changed.
     const key = [
       Math.round(income) + ':' + RESOURCE_IDS.map((id) => hold.stock[id]).join(','),
-      sel ? sel.name + RESOURCE_IDS.map((id) => sel.stock[id]).join(',') + g.status : '',
-      near?.name ?? '',
+      sel ? sel.name + RESOURCE_IDS.map((id) => sel.stock[id]).join(',') + g.status + g.plundered : '',
+      near ? near.name + RESOURCE_IDS.map((id) => near.stock[id]).join(',') + Math.ceil(g.bareFor(near)) : '',
     ].join('|');
     if (key !== this.last) {
       this.last = key;
@@ -48,9 +48,14 @@ export class GatherUi {
         RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i>${RESOURCES[id].label} <b>${hold.stock[id]}</b></span>`).join('') +
         (income > 0 ? `<span class="income" title="Sent in by the islands you hold">+${Math.round(income)}/min</span>` : '');
 
-      this.prompt.hidden = true; // gathering needs no key: the crew work whatever island the ship lies off
-      if (near && !sel) {
-        this.prompt.innerHTML = `<kbd>E</kbd> or click the island to gather at <b>${near.name}</b>${near.port ? ' (port)' : ''}`;
+      // alongside an island that is not yours: E sends the crew ashore to plunder it
+      const why = near ? g.plunderProblem(near) : 'none';
+      this.prompt.hidden = !near || !!g.plundering || (why !== '' && !g.canPlunder(near));
+      if (near && !g.plundering) {
+        const bare = g.bareFor(near);
+        this.prompt.innerHTML = why
+          ? `<b>${near.name}</b>: ${why}${bare > 0 ? ` It grows back in ${Math.ceil(bare)} s.` : ''}`
+          : `<kbd>E</kbd> Plunder <b>${near.name}</b>`;
       }
 
       this.panel.hidden = !sel;
@@ -61,6 +66,7 @@ export class GatherUi {
           'out-of-range': sel.port ? 'Out of range. Come alongside the pier.' : 'Out of range. Sail closer to the shore.',
           'hold-full': 'The hold is full.',
           empty: 'Nothing left here for now. It will regrow.',
+          plundering: `Plundering! ${g.plundered} carried off. Stay alongside.`,
         }[g.status];
         const rows = RESOURCE_IDS.filter((id) => sel.capacity[id] > 0)
           .map((id) => {

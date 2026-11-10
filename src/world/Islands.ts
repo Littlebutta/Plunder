@@ -33,6 +33,8 @@ export interface Island {
   topY: number;
   /** Where that highest point is, in the island's own space (y = topY). */
   summit: THREE.Vector3;
+  /** The crater a volcano erupts from, in the island's own space (on a peak: the main cone's crater floor; else the summit). */
+  vent: THREE.Vector3;
   name: string;
   /** Resources the island holds when untouched, and what is left right now. */
   capacity: Stock;
@@ -167,6 +169,7 @@ const COLORS = {
   grassDark: new THREE.Color(0x3f9a4a),
   rock: new THREE.Color(PALETTE.rock),
   rockDark: new THREE.Color(0x8a5d55),
+  basalt: new THREE.Color(0x5c4b4b),
   cliff: new THREE.Color(0xc29a7a),
   seabed: new THREE.Color(0x2f86b4),
 };
@@ -191,7 +194,8 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     z: (rand() - 0.5) * radius * (i ? 0.7 : 0.35),
     h: (i ? 0.55 : 1) * (26 + rand() * 22) * (radius / 45),
     r: radius * (0.55 + rand() * 0.25),
-    crater: rand() < 0.3,
+    // the main cone is a volcano: it always has a crater (it is where an eruption comes from)
+    crater: i === 0 || rand() < 0.3,
   }));
   const ridgeDir = rand() * Math.PI;
   const ridgeH = (18 + rand() * 16) * (radius / 45);
@@ -213,8 +217,16 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
           const d = Math.hypot(x - p.x, z - p.z) / p.r;
           if (d >= 1) continue;
           const ridge = noise.ridged(x * 0.04 + 5, z * 0.04 + 5);
-          let m = Math.pow(1 - d, 1.7) * p.h * (0.75 + ridge * 0.5);
-          if (p.crater && d < 0.18) m -= (0.18 - d) * p.h * 1.6;
+          // a volcano's profile, not a cone: steep near the top, flaring out into wide skirts at the foot
+          const fall = 1 - d;
+          let m = (Math.pow(fall, 2.4) * 0.62 + Math.pow(fall, 1.1) * 0.38) * p.h * (0.8 + ridge * 0.4);
+          // gullies running down the flanks, and lumpy shoulders where old flows set
+          const ang = Math.atan2(z - p.z, x - p.x);
+          const gully = 0.5 + 0.5 * Math.sin(ang * 9 + noise.fbm(x * 0.03 + 3, z * 0.03 + 3) * 7);
+          m *= 1 - 0.16 * gully * THREE.MathUtils.smoothstep(d, 0.12, 0.55) * (1 - THREE.MathUtils.smoothstep(d, 0.75, 1));
+          m += (noise.fbm(x * 0.09 + 9, z * 0.09 + 9, 3) - 0.5) * p.h * 0.12 * THREE.MathUtils.smoothstep(d, 0.2, 0.5);
+          // the crater: a rim, then a bowl
+          if (p.crater && d < 0.2) m -= Math.pow((0.2 - d) / 0.2, 0.7) * p.h * 0.32;
           h = Math.max(h, beach + m);
         }
         if (type === 'wreck') h = beach + Math.max(0, (1 - t) * 3 * noise.fbm(x * 0.06, z * 0.06));
@@ -308,7 +320,8 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     else if (y < sandLine) c.copy(COLORS.sand);
     else if (type === 'cay' || type === 'stacks') c.copy(COLORS.sand);
     else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : COLORS.rock);
-    else if ((type === 'peak' || type === 'ridge') && y > peakTop * 0.62 + n * 4) c.copy(COLORS.rockDark);
+    else if (type === 'peak' && y > peakTop * 0.5 + n * 5) c.copy(COLORS.basalt).lerp(COLORS.rockDark, Math.max(0, n * 2));
+    else if (type === 'ridge' && y > peakTop * 0.62 + n * 4) c.copy(COLORS.rockDark);
     else c.copy(n > 0.05 ? COLORS.grassDark : COLORS.grass);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
@@ -418,7 +431,8 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   };
   const capacity = islandCapacity(type, radius);
 
-  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, summit, name: '', capacity, stock: { ...capacity }, port: null, owner: -1, rocks };
+  const vent = peaks.length ? new THREE.Vector3(peaks[0].x, height(peaks[0].x, peaks[0].z), peaks[0].z) : summit.clone();
+  return { type, group: g, center: new THREE.Vector3(), radius, coastAt, heightAt: height, shoreAt, topY, summit, vent, name: '', capacity, stock: { ...capacity }, port: null, owner: -1, rocks };
 }
 
 const NAME_A = ['Skull', 'Parrot', 'Rum', 'Gull', 'Coral', 'Turtle', 'Crab', 'Mango', 'Thunder', 'Driftwood', 'Anchor', 'Lantern', 'Shark', 'Pelican', 'Barnacle', 'Monkey'];

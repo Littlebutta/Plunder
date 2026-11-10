@@ -20,6 +20,8 @@ export const BROADSIDE = {
   maxElevation: THREE.MathUtils.degToRad(28),
   elevateRate: 0.9, // rad/s
   traverseRate: 0.7, // rad/s
+  /** Reloading costs metal, not firing: one metal reloads this many guns. */
+  gunsPerMetal: 3,
   rippleDelay: 0.09, // s between guns in a ripple
   /** Random extra delay per gun (s): sequential fire, and all-at-once (so a volley is ragged, not one bang). */
   rippleJitter: 0.035,
@@ -95,6 +97,15 @@ export class Broadside {
   outOfRange = false;
   /** Reload timers by side, then by deck. */
   private readonly cooldown: Record<string, number[]> = { '1': [], '-1': [] };
+  /** Decks that have fired and whose reload is not paid for yet, by side. */
+  private readonly unpaid: Record<string, boolean[]> = { '1': [], '-1': [] };
+  /**
+   * Pays for reloading `guns` guns (1 metal per `BROADSIDE.gunsPerMetal`, rounded up).
+   * False when the owner cannot pay: that deck waits, empty, until they can. Null: free.
+   */
+  payReload: ((metal: number) => boolean) | null = null;
+  /** True while a deck is waiting for metal to reload (for the HUD). */
+  starved = false;
   /** How many gun decks the ship has. */
   decks = 1;
   /** The deck the last press fired, so the next press takes the one after. */
@@ -312,7 +323,22 @@ export class Broadside {
 
   /** Returns shots to spawn this frame (ripple fire is spread over a few frames). */
   update(dt: number, out: BroadsideShot[]): void {
-    for (const side of ['1', '-1']) for (let d = 0; d < this.decks; d++) this.cooldown[side][d] -= dt;
+    this.starved = false;
+    for (const side of ['1', '-1'] as const) {
+      for (let d = 0; d < this.decks; d++) {
+        if (this.unpaid[side][d]) {
+          // the crew need metal to reload this deck: 1 per three guns
+          const n = this.guns.filter((g) => String(g.side) === side && g.deck === d).length;
+          const metal = Math.ceil(n / BROADSIDE.gunsPerMetal);
+          if (!this.payReload || metal <= 0 || this.payReload(metal)) this.unpaid[side][d] = false;
+          else {
+            this.starved = true;
+            continue; // the guns stay empty
+          }
+        }
+        this.cooldown[side][d] -= dt;
+      }
+    }
     const step = (cur: number, target: number, rate: number) => cur + THREE.MathUtils.clamp(target - cur, -rate * dt, rate * dt);
     this.elevation = step(this.elevation, this.targetElevation, BROADSIDE.elevateRate);
 
@@ -360,7 +386,10 @@ export class Broadside {
     if (deck < 0) return false;
     const cd = this.cooldown[this.side];
     const firing = all ? this.armedDecks().filter((d) => cd[d] <= 0) : [deck];
-    for (const d of firing) cd[d] = this.reloadTime;
+    for (const d of firing) {
+      cd[d] = this.reloadTime;
+      this.unpaid[this.side][d] = true;
+    }
     this.lastDeck = all ? -1 : deck;
     const side = this.guns.filter((g) => g.side === this.side && firing.includes(g.deck)).sort((a, b) => a.root.position.z - b.root.position.z);
     if (side.length === 0) return false;

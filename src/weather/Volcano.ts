@@ -23,6 +23,10 @@ const LEVELS = [
 const RADIUS = 9;
 const MAX_BALLS = 24;
 const MAX_SMOKE = 40;
+const EMBERS = 90;
+const LAVA_HOT = new THREE.Color(0xffd25a);
+const LAVA_DEEP = new THREE.Color(0xe2380f);
+const CRUST = new THREE.Color(0x3a2622);
 
 interface Ball {
   from: THREE.Vector3;
@@ -54,7 +58,17 @@ export class Volcano {
   private next = 2;
   private puffIn = 0;
   private readonly glow: THREE.PointLight;
-  private readonly crater: THREE.Mesh;
+  /** The lit-up mountain: a lava lake in the crater, a glowing rim and rivers of lava down the gullies. Built per eruption, parented to the island. */
+  private vent: THREE.Group | null = null;
+  private readonly lavaMat = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  private readonly poolMat = new THREE.MeshBasicMaterial({ color: 0xffb03a, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  private readonly rimMat = new THREE.MeshBasicMaterial({ color: 0xff5a14 });
+  private rivers: { geo: THREE.BufferGeometry; count: number }[] = [];
+  private flow = 0;
+  private readonly embers: THREE.Points;
+  private readonly emberPos = new Float32Array(EMBERS * 3);
+  private readonly emberVel = new Float32Array(EMBERS * 3);
+  private readonly emberAge = new Float32Array(EMBERS);
   private readonly ballGeo = new THREE.IcosahedronGeometry(1.6, 1);
   private readonly ballMat = new THREE.MeshBasicMaterial({ color: 0xffa13a });
   private readonly ringGeo = new THREE.RingGeometry(0.92, 1, 40);
@@ -63,9 +77,12 @@ export class Volcano {
   constructor(private readonly waves: WaveField, private readonly hooks: VolcanoHooks) {
     this.group.name = 'volcano';
     this.glow = new THREE.PointLight(0xff5a1a, 0, 160, 1.6);
-    this.crater = new THREE.Mesh(new THREE.ConeGeometry(4, 3, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff4d12, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }));
-    this.crater.rotation.x = Math.PI;
-    this.group.add(this.glow, this.crater);
+    const eg = new THREE.BufferGeometry();
+    eg.setAttribute('position', new THREE.BufferAttribute(this.emberPos, 3));
+    this.embers = new THREE.Points(eg, new THREE.PointsMaterial({ color: 0xffa040, size: 0.9, transparent: true, opacity: 0.95, depthWrite: false }));
+    this.embers.frustumCulled = false;
+    this.embers.visible = false;
+    this.group.add(this.glow, this.embers);
     this.smokeMat = new THREE.SpriteMaterial({ map: puffTexture(), color: 0x3a3330, transparent: true, depthWrite: false, opacity: 0.8 });
   }
 
@@ -78,6 +95,10 @@ export class Volcano {
       new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xff3b1f, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide })),
       new THREE.Points(tg, _trailMat),
       new THREE.Sprite(this.smokeMat),
+      new THREE.Mesh(this.ringGeo, this.lavaMat),
+      new THREE.Mesh(this.ringGeo, this.poolMat),
+      new THREE.Mesh(this.ringGeo, this.rimMat),
+      new THREE.Points(tg, this.embers.material as THREE.PointsMaterial),
     ];
   }
 
@@ -90,6 +111,64 @@ export class Volcano {
     this.island = island;
     this.level = level;
     this.next = 3;
+    this.buildVent(island);
+  }
+
+  /** Light the mountain up: lava in the crater, a glowing rim, and rivers running down its gullies to the sea. */
+  private buildVent(island: Island): void {
+    const v = new THREE.Group();
+    v.name = 'volcano-vent';
+    const c = island.vent;
+    // how wide the crater is: walk out from the vent until the ground has risen to the rim
+    let craterR = 2;
+    for (let r = 1; r < island.radius * 0.5; r += 0.5) {
+      let h = 0;
+      for (let k = 0; k < 8; k++) h += island.heightAt(c.x + Math.cos((k / 8) * Math.PI * 2) * r, c.z + Math.sin((k / 8) * Math.PI * 2) * r);
+      craterR = r;
+      if (h / 8 < c.y - 0.5) break; // past the rim and going down the outside
+    }
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(Math.max(1.5, craterR * 0.7), 24), this.poolMat);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(c.x, c.y + 0.5, c.z);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(Math.max(1.8, craterR * 0.85), 0.35, 6, 32), this.rimMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(c.x, c.y + 0.9, c.z);
+    v.add(pool, rim);
+    // rivers of lava: each starts at the rim and runs downhill, picking the lowest ground a little to either side
+    this.rivers = [];
+    const n = 3 + this.level;
+    const a0 = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      let a = a0 + (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+      let x = c.x + Math.cos(a) * craterR * 0.8;
+      let z = c.z + Math.sin(a) * craterR * 0.8;
+      const pts: THREE.Vector3[] = [];
+      for (let step = 0; step < 140; step++) {
+        const y = island.heightAt(x, z);
+        pts.push(new THREE.Vector3(x, y + 0.3, z));
+        if (y < 0.4) break;
+        let best = a;
+        let low = Infinity;
+        for (const da of [-0.45, -0.2, 0, 0.2, 0.45]) {
+          const h = island.heightAt(x + Math.cos(a + da) * 1.6, z + Math.sin(a + da) * 1.6);
+          if (h < low) {
+            low = h;
+            best = a + da;
+          }
+        }
+        a = a * 0.4 + best * 0.6 + (Math.random() - 0.5) * 0.15;
+        x += Math.cos(a) * 1.4;
+        z += Math.sin(a) * 1.4;
+      }
+      if (pts.length < 4) continue;
+      const geo = ribbon(pts, 0.9, 2.2);
+      geo.setDrawRange(0, 0);
+      this.rivers.push({ geo, count: geo.index!.count });
+      v.add(new THREE.Mesh(geo, this.lavaMat));
+    }
+    this.flow = 0;
+    island.group.add(v);
+    this.vent = v;
   }
 
   clear(): void {
@@ -99,20 +178,37 @@ export class Volcano {
     this.puffs.length = 0;
     this.island = null;
     this.glow.intensity = 0;
-    this.crater.visible = false;
+    this.embers.visible = false;
+    if (this.vent) {
+      this.vent.removeFromParent();
+      this.vent.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+      this.vent = null;
+    }
+    this.rivers = [];
   }
 
+  /** The crater, in world space. */
   private top(out: THREE.Vector3): THREE.Vector3 {
     const i = this.island!;
-    return out.copy(i.summit).add(i.center);
+    return out.copy(i.vent).add(i.center).setY(Math.max(i.vent.y, 2) + 1);
   }
 
   update(dt: number, ship: ShipState): void {
     if (!this.island) return;
     const top = this.top(_top);
     const lv = LEVELS[this.level - 1];
-    this.crater.visible = this.presence > 0.05;
-    this.crater.position.copy(top).setY(top.y + 0.6);
+    // the lava: the rivers run further down as the eruption builds, glow while it lasts and crust over as it dies
+    if (this.vent) {
+      this.vent.visible = this.presence > 0.02 || this.flow > 0;
+      this.flow = this.presence > 0.3 ? Math.min(1, this.flow + dt / 9) : this.flow;
+      for (const r of this.rivers) r.geo.setDrawRange(0, Math.floor((r.count * this.flow) / 6) * 6);
+      const heat = THREE.MathUtils.clamp(this.presence * 1.4, 0, 1);
+      const flicker = 0.85 + Math.sin(performance.now() * 0.006) * 0.1 + Math.random() * 0.05;
+      this.lavaMat.color.setScalar(1).lerp(CRUST, 1 - heat).multiplyScalar(heat > 0 ? flicker : 1);
+      this.poolMat.color.copy(LAVA_HOT).lerp(CRUST, 1 - heat).multiplyScalar(flicker);
+      this.rimMat.color.copy(LAVA_DEEP).lerp(CRUST, 1 - heat);
+    }
+    this.updateEmbers(dt, top);
     this.glow.position.copy(top).setY(top.y + 6);
     this.glow.intensity = this.presence * (60 + Math.sin(performance.now() * 0.013) * 15) * this.level;
 
@@ -168,7 +264,9 @@ export class Volcano {
       if (k >= 1) {
         const at = _v.copy(b.to);
         at.y = this.waves.heightAt(at.x, at.z);
-        this.hooks.splash(at, 2.4);
+        // a hiss of steam where it hits, not a tall column of water (that read as a cone standing in the sea)
+        this.hooks.splash(at, 0.9);
+        this.steam(at);
         this.hooks.boom?.(at);
         this.hooks.blast(at, RADIUS, lv.damage);
         this.group.remove(b.mesh, b.ring, b.trail);
@@ -177,6 +275,52 @@ export class Volcano {
         this.balls.splice(i, 1);
       }
     }
+  }
+
+  /** White steam boiling off the sea where a fireball came down. */
+  private steam(at: THREE.Vector3): void {
+    for (let k = 0; k < 4 && this.puffs.length < MAX_SMOKE + 12; k++) {
+      const m = this.smokeMat.clone();
+      m.color.set(0xf4eee6);
+      const s = new THREE.Sprite(m);
+      s.position.set(at.x + (Math.random() - 0.5) * 4, at.y + 0.5, at.z + (Math.random() - 0.5) * 4);
+      s.scale.setScalar(3);
+      this.group.add(s);
+      this.puffs.push({ sprite: s, age: 0, life: 1.6 + Math.random(), vel: new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 2, (Math.random() - 0.5) * 2) });
+    }
+  }
+
+  /** Sparks thrown up out of the crater. */
+  private updateEmbers(dt: number, top: THREE.Vector3): void {
+    const on = this.presence > 0.2;
+    this.embers.visible = on || this.embers.visible;
+    let alive = 0;
+    for (let i = 0; i < EMBERS; i++) {
+      this.emberAge[i] -= dt;
+      const p = i * 3;
+      if (this.emberAge[i] <= 0) {
+        if (!on) {
+          this.emberPos[p + 1] = -1000;
+          continue;
+        }
+        this.emberAge[i] = 1.2 + Math.random() * 1.8;
+        this.emberPos[p] = top.x + (Math.random() - 0.5) * 3;
+        this.emberPos[p + 1] = top.y;
+        this.emberPos[p + 2] = top.z + (Math.random() - 0.5) * 3;
+        const a = Math.random() * Math.PI * 2;
+        const out = 2 + Math.random() * 6 * this.level;
+        this.emberVel[p] = Math.cos(a) * out;
+        this.emberVel[p + 1] = 12 + Math.random() * 10 * this.level;
+        this.emberVel[p + 2] = Math.sin(a) * out;
+      }
+      alive++;
+      this.emberVel[p + 1] -= 14 * dt;
+      this.emberPos[p] += this.emberVel[p] * dt;
+      this.emberPos[p + 1] += this.emberVel[p + 1] * dt;
+      this.emberPos[p + 2] += this.emberVel[p + 2] * dt;
+    }
+    if (!alive) this.embers.visible = false;
+    (this.embers.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
   }
 
   private launch(top: THREE.Vector3, ship: ShipState, lv: (typeof LEVELS)[number]): void {
@@ -212,6 +356,39 @@ export class Volcano {
 const _top = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _trailMat = new THREE.PointsMaterial({ color: 0xff7a2a, size: 1.6, transparent: true, opacity: 0.8, depthWrite: false });
+
+/**
+ * A flat strip along a path, laid on the ground: narrow at the start, wider
+ * where it spreads at the foot. Vertex colours run from white-hot to deep red.
+ */
+function ribbon(pts: THREE.Vector3[], w0: number, w1: number): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const c = new THREE.Color();
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const k = i / (pts.length - 1);
+    const w = (w0 + (w1 - w0) * k) * (0.8 + Math.random() * 0.4);
+    const p = pts[i];
+    pos.push(p.x - (dz / l) * w, p.y, p.z + (dx / l) * w, p.x + (dz / l) * w, p.y, p.z - (dx / l) * w);
+    c.copy(LAVA_HOT).lerp(LAVA_DEEP, Math.min(1, k * 1.3));
+    col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    if (i > 0) {
+      const q = (i - 1) * 2;
+      idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  return g;
+}
 
 let _puff: THREE.Texture | null = null;
 function puffTexture(): THREE.Texture {

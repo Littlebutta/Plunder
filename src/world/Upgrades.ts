@@ -31,7 +31,7 @@ export interface Mods {
   income: number;
   /** Salvage hauled from wreckage, and bounties. */
   salvage: number;
-  /** Share of broadside shots that cost no metal. */
+  /** Share of broadside reloads that cost no metal. */
   freeShot: number;
   /** Trade ships' takings. */
   trade: number;
@@ -62,7 +62,7 @@ export const UPGRADES: Upgrade[] = [
   { id: 'rudder', name: 'Balanced Rudder', text: '+10% turning', max: 3, apply: (m) => (m.turn += 0.1) },
   { id: 'tax', name: 'Tax Collector', text: '+8% island income', max: 4, apply: (m) => (m.income += 0.08) },
   { id: 'scavenger', name: 'Scavengers', text: '+20% salvage and bounties', max: 3, apply: (m) => (m.salvage += 0.2) },
-  { id: 'monkeys', name: 'Powder Monkeys', text: '1 shot in 6 costs no metal', max: 2, apply: (m) => (m.freeShot = Math.min(0.4, m.freeShot + 0.16)) },
+  { id: 'monkeys', name: 'Powder Monkeys', text: '1 reload in 6 costs no metal', max: 2, apply: (m) => (m.freeShot = Math.min(0.4, m.freeShot + 0.16)) },
   { id: 'charter', name: 'Merchant Charter', text: '+15% from trade ships', max: 3, apply: (m) => (m.trade += 0.15) },
 ];
 

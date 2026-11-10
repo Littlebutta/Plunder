@@ -31,7 +31,7 @@ export class Wake {
     private readonly waves: WaveField,
     private readonly maxPoints = 64,
     private readonly life = 7,
-    private readonly baseWidth = 1.6,
+    public baseWidth = 1.6,
   ) {
     const verts = maxPoints * 2;
     this.positions = new Float32Array(verts * 3);
@@ -99,6 +99,12 @@ export class Wake {
     );
     this.mesh.frustumCulled = false;
     this.mesh.name = 'wake';
+  }
+
+  /** Drop everything on the water (the ribbon is about to follow another hull). */
+  reset(): void {
+    this.points.length = 0;
+    this.geometry.setDrawRange(0, 0);
   }
 
   /**

@@ -368,6 +368,24 @@ export function computeStats(d: HullDesign): ShipStats {
   };
 }
 
+/**
+ * What AI captains start the match in, as everyone does: a raft. A flat,
+ * square little hull with one sail and a pair of guns. Ships come later.
+ */
+export const RAFT_DESIGN: HullDesign = {
+  name: 'Raft',
+  length: 6,
+  beam: 3.4,
+  depth: 0.5,
+  freeboard: 0.5,
+  plan: planShape(0.15, 0.95),
+  keel: keelShape(0.15),
+  masts: [sq(0.46)],
+  jib: false,
+  cannons: pairs(0, 0.5),
+  swivel: 'bow',
+};
+
 /** What it costs to build a design as an escort at the home dock. */
 export function escortCost(d: HullDesign): { wood: number; stone: number; salvage: number } {
   const s = computeStats(d);

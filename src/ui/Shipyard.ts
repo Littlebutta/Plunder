@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fitPage } from './fit';
 import { PALETTE } from '../render/palette';
 import { toonMaterial } from '../render/toon';
 import {
@@ -11,8 +12,6 @@ import {
   computeStats,
   escortCost,
   DESIGN_LIMITS,
-  FREE_CANNONS,
-  METALS_PER_CANNON,
   gunHeight,
   halfBeamAt,
   HullDesign,
@@ -37,8 +36,8 @@ export interface ShipyardActions {
   back(): void;
   /** What the player has in the hold, to compare against the cost. */
   stock(): Stock;
-  /** Extra cannons (beyond the free ones) already paid for. */
-  cannonsPaid(): number;
+  /** What sailing this design as the flagship would cost now (nothing if she is the ship you already sail). */
+  refitCost(design: HullDesign): Stock;
   /** Build the design as an escort. Returns why it could not be done, or ''. */
   escort(design: HullDesign): string;
   /** e.g. "2 of 4": escorts afloat out of the most allowed. */
@@ -93,6 +92,11 @@ export class Shipyard {
   private pitch = 0.42;
   private zoom = 1;
   private spin = true;
+  /** The preview sea: flat, or a rolling swell with the ship riding it. */
+  private waves = false;
+  private readonly water: THREE.Mesh;
+  private readonly waterGeo = new THREE.PlaneGeometry(160, 160, 64, 64);
+  private time = 0;
   private orbiting = false;
   private raf = 0;
   private lastTime = 0;
@@ -138,7 +142,7 @@ export class Shipyard {
         <div class="yard-view">
           <canvas data-preview></canvas>
           <div class="yard-viewbar">
-            <button data-view="quarter">3/4</button><button data-view="side">Side</button><button data-view="top">Top</button><button data-view="stern">Stern</button><button data-view="spin">Spin</button>
+            <button data-view="quarter">3/4</button><button data-view="side">Side</button><button data-view="top">Top</button><button data-view="stern">Stern</button><button data-view="spin">Spin</button><button data-view="waves" title="Show her riding a swell">Waves</button>
             <span>Drag to turn · wheel to zoom</span>
           </div>
         </div>
@@ -150,6 +154,8 @@ export class Shipyard {
         </div>
       </div>`;
     parent.append(this.root);
+    // no scroll bars: the whole yard shrinks to fit when the left column would overflow
+    fitPage(this.root, () => [this.root.querySelector('.yard-left') as HTMLElement]);
     const q = <T extends HTMLElement>(sel: string) => this.root.querySelector(sel) as T;
     this.top = q('[data-top]');
     this.side = q('[data-side]');
@@ -164,9 +170,9 @@ export class Shipyard {
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
     sun.position.set(-6, 9, 5);
     this.scene.add(sun, new THREE.HemisphereLight(0xbfe6ff, 0x1d5f99, 1.3));
-    const water = new THREE.Mesh(new THREE.CircleGeometry(120, 48), toonMaterial(PALETTE.oceanMid, { transparent: true, opacity: 0.82 }));
-    water.rotation.x = -Math.PI / 2;
-    this.scene.add(water);
+    this.waterGeo.rotateX(-Math.PI / 2);
+    this.water = new THREE.Mesh(this.waterGeo, toonMaterial(PALETTE.oceanMid, { transparent: true, opacity: 0.82 }));
+    this.scene.add(this.water);
 
     // --- events ---
     this.root.addEventListener('click', (e) => {
@@ -281,6 +287,11 @@ export class Shipyard {
   private setView(view: string): void {
     if (view === 'spin') {
       this.spin = !this.spin;
+      return;
+    }
+    if (view === 'waves') {
+      this.waves = !this.waves;
+      if (!this.waves) this.flatten();
       return;
     }
     this.spin = false;
@@ -711,13 +722,14 @@ export class Shipyard {
     this.root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === this.tool));
     (this.root.querySelector('[data-sliders]') as HTMLElement).hidden = this.tool !== 'draw';
     (this.root.querySelector('[data-view="spin"]') as HTMLElement).classList.toggle('on', this.spin);
+    (this.root.querySelector('[data-view="waves"]') as HTMLElement).classList.toggle('on', this.waves);
     const tip = this.root.querySelector('[data-tip]') as HTMLElement;
     tip.textContent =
       this.warning ||
       {
         draw: 'Drag on the top view to draw the outline, and on the side view to draw the keel.',
         masts: `Click a ring on the top view: square sail (best with the wind behind), then triangle sail (best with the wind on the beam or ahead), then none. Up to ${MAX_MASTS} masts.`,
-        cannons: `Click along either edge of the top view to place a cannon; click one to remove it. Fit as many as the hull has room for: the first ${FREE_CANNONS} are free, each one more costs ${METALS_PER_CANNON} metals. Lower decks need a tall enough hull (freeboard).`,
+        cannons: `Click along either edge of the top view to place a cannon; click one to remove it. Fit as many as the hull has room for: each one adds 2 metals to what the ship costs to build. Lower decks need a tall enough hull (freeboard).`,
       }[this.tool];
     tip.classList.toggle('warn', !!this.warning);
     // options for the current tool
@@ -749,8 +761,6 @@ export class Shipyard {
     const decks = new Set(d.cannons.map((c) => c.level)).size;
     const deckText = s.guns === 0 ? '' : ` on ${decks} deck${decks > 1 ? 's' : ''}`;
     const turn = s.agility > 0.9 ? 'Nimble' : s.agility > 0.65 ? 'Steady' : 'Heavy';
-    const extra = Math.max(0, s.guns - FREE_CANNONS);
-    const due = Math.max(0, extra - this.actions.cannonsPaid()) * METALS_PER_CANNON;
     const tile = (label: string, value: string, sub = '') => `<div class="tile"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
     this.statsEl.innerHTML =
       tile('Top speed', `${(s.speed * 1.94384).toFixed(1)} kn`) +
@@ -761,8 +771,9 @@ export class Shipyard {
       tile('Wind boost', pct(1), `astern · beam ${pct(0)} · close ${pct(-0.6)}`);
     const short = (ok: boolean, text: string) => `<span class="${ok ? '' : 'short'}">${text}</span>`;
     const ec = escortCost(d);
+    const fc = this.actions.refitCost(d);
     (this.root.querySelector('[data-launchcost]') as HTMLElement).innerHTML =
-      due === 0 ? (extra ? `${extra} extra cannons, paid for` : 'free') : short(have.salvage >= due, `${extra} extra cannons · ${due} metals`);
+      !fc.wood && !fc.salvage && !fc.stone ? 'already yours' : short(have.wood >= fc.wood, `${fc.wood} wood`) + (fc.salvage ? ' · ' + short(have.salvage >= fc.salvage, `${fc.salvage} metals`) : '');
     (this.root.querySelector('[data-escortcost]') as HTMLElement).innerHTML =
       short(have.wood >= ec.wood, `${ec.wood} wood`) + (ec.salvage ? ' · ' + short(have.salvage >= ec.salvage, `${ec.salvage} metals`) : '') + ` · fleet ${this.actions.fleet()}`;
     (this.root.querySelector('[data-stock]') as HTMLElement).innerHTML =
@@ -770,6 +781,44 @@ export class Shipyard {
   }
 
   // --- 3D preview ---------------------------------------------------------------
+
+  /** Height of the preview swell at a point: a few crossing waves, so it never looks like one pattern. */
+  private swell(x: number, z: number): number {
+    const t = this.time;
+    const L = Math.max(8, this.design.length);
+    return (
+      Math.sin(x * (2.1 / L) + z * (0.9 / L) - t * 1.3) * 0.34 +
+      Math.sin(-x * (1.1 / L) + z * (2.6 / L) - t * 1.7 + 1.3) * 0.22 +
+      Math.sin(x * (4.3 / L) - z * (3.1 / L) - t * 2.6 + 4.1) * 0.08
+    ) * Math.min(1.6, L / 9);
+  }
+
+  /** Move the preview sea and let the ship ride it: heave, pitch and roll from the water under her. */
+  private ride(): void {
+    const pos = this.waterGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, this.swell(pos.getX(i), pos.getZ(i)));
+    pos.needsUpdate = true;
+    this.waterGeo.computeVertexNormals();
+    if (!this.model) return;
+    const half = this.design.length * 0.4;
+    const beam = this.design.beam * 0.45;
+    const bow = this.swell(0, -half);
+    const stern = this.swell(0, half);
+    const port = this.swell(-beam, 0);
+    const star = this.swell(beam, 0);
+    this.model.position.y = (bow + stern + port + star) / 4;
+    this.model.rotation.set(Math.atan2(bow - stern, half * 2) * 0.8, 0, Math.atan2(port - star, beam * 2) * 0.6);
+  }
+
+  /** Back to a flat sea, the ship sitting level on it. */
+  private flatten(): void {
+    const pos = this.waterGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, 0);
+    pos.needsUpdate = true;
+    this.waterGeo.computeVertexNormals();
+    this.model?.position.set(0, 0, 0);
+    this.model?.rotation.set(0, 0, 0);
+  }
 
   private renderPreview(): void {
     const now = performance.now();
@@ -799,6 +848,8 @@ export class Shipyard {
       this.camera.updateProjectionMatrix();
     }
     if (!this.orbiting && this.spin) this.yaw += dt * 0.25;
+    this.time += dt;
+    if (this.waves) this.ride();
     const dist = (this.design.length * 1.9 + 6) * this.zoom;
     const cp = Math.cos(this.pitch);
     this.camera.position.set(Math.sin(this.yaw) * cp * dist, Math.sin(this.pitch) * dist + 1, Math.cos(this.yaw) * cp * dist);

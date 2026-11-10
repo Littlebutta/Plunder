@@ -16,7 +16,7 @@ import { ProjectileSystem, ImpactEvent, Collider } from './combat/ProjectileSyst
 import { SwivelGun, SWIVEL } from './combat/SwivelGun';
 import { Broadside, BROADSIDE, BroadsideShot } from './combat/Broadside';
 import { Effects } from './fx/Effects';
-import { Wake } from './fx/Wake';
+import { HullFoam } from './fx/HullFoam';
 import { WindStreaks } from './fx/WindStreaks';
 import { AudioManager } from './audio/AudioManager';
 import { Gathering } from './world/Gathering';
@@ -30,7 +30,7 @@ import { loadMatch, saveMatch, START_STOCK } from './world/Match';
 import { AiCaptain } from './world/AiCaptain';
 import { Lobby } from './ui/Lobby';
 import { FogOfWar, Lookout } from './world/FogOfWar';
-import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS, sanitizeDesign, randomDesign } from './ship/HullDesign';
+import { escortCost, HullDesign, loadDesign, PRESETS, RAFT_DESIGN, sanitizeDesign, randomDesign } from './ship/HullDesign';
 import { MAST, mastOwner } from './ship/Masts';
 import { TargetUi } from './ui/TargetUi';
 import { Territory, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
@@ -40,6 +40,7 @@ import { MapView, MiniMap, MapState, MapShip } from './ui/MapView';
 import { WorldEdge } from './world/WorldEdge';
 import { edgeCurrent, steerToward } from './world/navigation';
 import { ground, KnockTimer } from './world/Grounding';
+import { collideShips, Hull } from './world/ShipCollision';
 import { FlotsamField, FLOTSAM, wreckValue } from './world/Flotsam';
 const knocks = new KnockTimer();
 import { rollWorldSeed } from './world/worldConfig';
@@ -52,12 +53,15 @@ import { TradeRoutes, TRADE, MERCHANT } from './world/Trade';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
+import { UpgradesPanel } from './ui/UpgradesPanel';
 import { DesignedShip } from './ship/DesignedShip';
 import type { Vessel } from './ship/Vessel';
+import type { FloatingBody } from './physics/FloatingBody';
 import type { Island } from './world/Islands';
 // Weather events + day-night cycle
 import { DayNight } from './weather/DayNight';
 import { Weather, ShipState } from './weather/Weather';
+import type { LurkerTarget } from './weather/Lurkers';
 import { PlayerHull } from './weather/PlayerHull';
 import { WeatherUi, addWeatherControls } from './weather/WeatherUi';
 
@@ -141,6 +145,7 @@ scene.add(gun.preview);
 // Broadside battery: the raft carries a test battery (C to fit / remove);
 // a shipyard design carries the cannons it was drawn with.
 let broadside = new Broadside(ship.group, ship.gunMounts, waves);
+broadside.payReload = (metal) => payReload(metal);
 broadside.setVisible(false);
 scene.add(broadside.ribbon);
 const broadsideShots: BroadsideShot[] = [];
@@ -154,8 +159,8 @@ const effects = new Effects(waves);
 const flotsam = new FlotsamField(waves);
 scene.add(flotsam.group);
 scene.add(effects.group);
-const wake = new Wake(waves);
-scene.add(wake.mesh);
+const hullFoam = new HullFoam(waves);
+scene.add(hullFoam.group);
 const streaks = new WindStreaks(wind);
 scene.add(streaks.mesh);
 
@@ -199,6 +204,7 @@ function setShip(next: Vessel): void {
   ship.setColour(myColour());
   fitFlagship();
   broadside = new Broadside(ship.group, ship.gunMounts, waves);
+  broadside.payReload = (metal) => payReload(metal);
   broadside.fireMode = settings.settings.fireMode;
   // a designed ship shows the cannons it was built with; the raft's test battery stays off until C
   broadside.setVisible(ship instanceof DesignedShip && ship.gunMounts.length > 0);
@@ -294,6 +300,37 @@ const weather = new Weather({
   rainSound: (amount) => audio.setRain(amount),
 });
 scene.add(weather.group);
+// the kraken goes for any ship it comes across, the player's no more than anyone's
+weather.prey = () => {
+  const out: LurkerTarget[] = [];
+  if (sunkFor < 0 && mode === 'play')
+    out.push({
+      position: ship.body.position, velocity: ship.body.velocity, length: ship.length, hit: (d, at, shove) => {
+        hull.damage(d);
+        ship.body.velocity.add(shove);
+        effects.splinters(at, 14);
+        audio.woodHit(at);
+      },
+    });
+  if (authority) {
+    for (const w of ships) {
+      if (!w.alive || w.remote) continue;
+      out.push({
+        position: w.position,
+        velocity: w.ship.body.velocity,
+        length: w.ship.length,
+        hit: (d, at, shove) => {
+          effects.splinters(at, 14);
+          audio.woodHit(at);
+          w.ship.body.velocity.add(shove);
+          w.ship.crewHit(at, 1);
+          w.scrape(d);
+        },
+      });
+    }
+  }
+  return out;
+};
 const _zero = new THREE.Vector3();
 hull.onDamage = () => weatherUi.hit();
 hull.onBattered = () => sinkPlayer();
@@ -537,13 +574,18 @@ function followCourse(dt: number): boolean {
   ship.body.forward(fwd).setY(0).normalize();
   // ease the sail off on the approach so she does not overshoot
   const want = left < 70 ? 0.35 : 1;
-  ship.control(dt, ship.sail < want - 0.03 ? 1 : ship.sail > want + 0.05 ? -1 : 0, steerToward(p, fwd, course, world.islands));
+  ship.control(dt, ship.sail < want - 0.03 ? 1 : ship.sail > want + 0.05 ? -1 : 0, steerToward(p, fwd, course, world.islands, ship.body.angularVelocity.y));
   return true;
 }
 
 const islandMarkers = new IslandMarkers(world.islands);
 scene.add(islandMarkers.group);
-gathering.onHaul = () => audio.woodHit(ship.body.position);
+gathering.onHaul = (island) => {
+  audio.woodHit(ship.body.position);
+  if (gathering.plundering) effects.splinters(marker.position.clone().setY(Math.max(0, island.heightAt(marker.position.x - island.center.x, marker.position.z - island.center.z)) + 1), 5);
+};
+// your own islands send their goods in; anyone else's can be plundered
+gathering.canPlunder = (island) => territory.at(island)?.side !== ME;
 
 // --- Territory: home island, strongholds, raids, winning and losing -------------
 const territory = new Territory(world.islands, {
@@ -694,6 +736,8 @@ function buildEscort(design: HullDesign = PRESETS[1], faction = ME, free = false
 
 // --- AI captains (Vs) -----------------------------------------------------------------
 const captains: AiCaptain[] = [];
+/** AI captains still sailing the raft they started on. */
+const onRaft = new Set<number>();
 for (const f of factions.list) {
   if (f.kind !== 'ai' || !authority) continue;
   const flagship = addShip(
@@ -705,9 +749,12 @@ for (const f of factions.list) {
       respawn: true,
       berth: () => homeBerth(0, f.id),
       flagship: true,
-      design: randomDesign(Math.random, match.ai === 'hard' ? 0.75 : match.ai === 'easy' ? 0.25 : 0.45),
+      design: RAFT_DESIGN, // like everyone, they start on a raft and build a ship once they can pay for one
     }),
   );
+  onRaft.add(f.id);
+  /** The ship this captain means to build once the stores allow. */
+  const dream = randomDesign(Math.random, match.ai === 'hard' ? 0.75 : match.ai === 'easy' ? 0.25 : 0.45);
   const berth = homeBerth(0, f.id);
   if (berth) flagship.placeAt(berth.x, berth.z, berth.heading);
   captains.push(
@@ -720,6 +767,8 @@ for (const f of factions.list) {
         islands: world.islands,
         escortsOf,
         launchEscort: (id) => buildEscort(randomDesign(Math.random, match.ai === 'hard' ? 0.4 : 0.2), id) === '',
+        refitCost: () => (onRaft.has(f.id) ? escortCost(dream) : null),
+        refit: (id) => refitAi(id, dream),
         threatNear: (id, at, range) =>
           (factions.hostile(id, ME) && sunkFor < 0 && mode === 'play' && ship.body.position.distanceTo(at) < range) ||
           ships.some((w) => w.alive && factions.hostile(id, w.faction) && w.position.distanceTo(at) < range),
@@ -731,6 +780,26 @@ for (const f of factions.list) {
     // a taunt when they come for something of yours (now and then, not every time)
     if (target.side === ME && Math.random() < 0.7) say(f.id, pickLine(captainOf(f.id).lines.attack));
   };
+}
+
+/** An AI captain trades the raft for a proper ship at home, paid from their stores. */
+function refitAi(f: number, design: HullDesign): boolean {
+  const c = captains.find((x) => x.faction.id === f);
+  if (!c) return false;
+  const old = c.flagship;
+  const owner = factions.get(f)!;
+  const cost = escortCost(design);
+  if (!old.alive || !canAfford(cost, owner.stores, null)) return false;
+  pay(cost, owner.stores, null);
+  const w = addShip(new Warship(waves, wind, world.islands, warshipHooks, { id: warshipId(), name: owner.name, faction: f, colour: owner.colour, respawn: true, berth: () => homeBerth(0, f), flagship: true, design }));
+  const fw = old.ship.body.forward(new THREE.Vector3());
+  w.placeAt(old.position.x, old.position.z, Math.atan2(-fw.x, -fw.z));
+  scene.remove(old.group);
+  ships.splice(ships.indexOf(old), 1);
+  if (targeted === old) targeted = null;
+  c.flagship = w;
+  onRaft.delete(f);
+  return true;
 }
 
 // --- Online play ----------------------------------------------------------------------
@@ -1019,6 +1088,7 @@ function greet(): void {
 let matchTime = 0;
 /** This captain's upgrades (each copy keeps its own player's). */
 const upgrades = new UpgradeSet();
+const upgradesPanel = new UpgradesPanel(hudRoot, document.body);
 
 // each captain starts with their two upgrades and any extra stores
 {
@@ -1058,11 +1128,17 @@ function applyMods(): void {
   territory.incomeMul.set(ME, m.income);
 }
 
-/** Metal a salvo of `metal` shots really costs, with Powder Monkeys letting some go free. */
+/** Metal a reload of `metal` really costs, with Powder Monkeys letting some go free. */
 function freeShots(metal: number): number {
   let n = 0;
   for (let i = 0; i < metal; i++) if (Math.random() >= upgrades.mods.freeShot) n++;
   return n;
+}
+/** The flagship's guns reload on metal from the stores: 1 metal for every three guns. */
+function payReload(metal: number): boolean {
+  if (hold.stock.salvage < metal) return false;
+  hold.stock.salvage -= freeShots(metal);
+  return true;
 }
 
 function takeUpgrade(u: Upgrade, from: 'ghost' | 'hq'): void {
@@ -1188,6 +1264,40 @@ function berthFlagship(): void {
   ship.syncVisuals(0);
 }
 
+// --- Capsized: after a few seconds keel-up, the option to start again at home -----------
+/** Seconds the flagship has been lying over on her beam ends or keel-up. */
+let capsizedFor = 0;
+const CAPSIZE = { tilt: 0.25, wait: 3 };
+const capsizeEl = document.createElement('button');
+capsizeEl.className = 'hud-panel hud-capsize';
+capsizeEl.hidden = true;
+capsizeEl.innerHTML = '<b>Capsized!</b> <kbd>R</kbd> Return to your home island';
+capsizeEl.addEventListener('click', () => {
+  rightShip();
+  capsizeEl.blur();
+});
+hudRoot.append(capsizeEl);
+const _up = new THREE.Vector3();
+function updateCapsize(dt: number, active: boolean): void {
+  // how upright she is: 1 level, 0 on her side, below 0 keel-up
+  const upright = _up.set(0, 1, 0).applyQuaternion(ship.body.quaternion).y;
+  capsizedFor = active && upright < CAPSIZE.tilt ? capsizedFor + dt : 0;
+  const offer = capsizedFor >= CAPSIZE.wait && territory.homes.get(ME)?.side === ME;
+  capsizeEl.hidden = !offer;
+  if (offer && input.wasPressed('KeyR')) rightShip();
+}
+/** Back home, upright and whole, after a capsize. */
+function rightShip(): void {
+  if (capsizedFor < CAPSIZE.wait) return;
+  capsizedFor = 0;
+  capsizeEl.hidden = true;
+  course = null;
+  courseQueue = [];
+  berthFlagship();
+  follow.update(0, ship.body.position);
+  weatherUi.announce('Righted at home', `Your crew bring her back to ${territory.home.island.name}`, 'good');
+}
+
 // --- Fog of war and the charts that show it ----------------------------------------
 const fog = new FogOfWar();
 const lookouts: Lookout[] = [];
@@ -1305,7 +1415,7 @@ function updateGathering(dt: number): void {
     marker.position.set(target.center.x + lx, Math.max(0, target.heightAt(lx, lz)) + 7 + bob, target.center.z + lz);
   }
   marker.rotation.y += dt * 1.5;
-  markerMat.color.set(!gathering.selected ? 0xffffff : gathering.working ? 0x9be37a : 0xffb27a);
+  markerMat.color.set(gathering.plundering ? 0xff6a4a : !gathering.selected ? 0xffffff : gathering.working ? 0x9be37a : 0xffb27a);
 }
 
 // --- Main menu ------------------------------------------------------------
@@ -1388,23 +1498,24 @@ function leaveYard(): void {
   else openMenu();
 }
 
-/** Extra cannons (beyond the free ones) the player has already paid for. */
-let cannonsPaid = 0;
+/** What it costs to sail a design as the flagship: the same as building her (nothing if she is the ship you already sail). */
+function refitCost(design: HullDesign): Stock {
+  if (ship instanceof DesignedShip && JSON.stringify(sanitizeDesign(design)) === JSON.stringify(sanitizeDesign(ship.design))) return emptyStock();
+  return escortCost(design);
+}
 const yard = new Shipyard(document.body, {
   launch: (design) => {
     if (voyageStarted && !atHomeDock()) {
       yard.warn('Your flagship can only be refitted alongside your home. You can still build this design as an escort from here.');
       return;
     }
-    // cannons beyond the first few are paid for in metals, once each
-    const extra = Math.max(0, computeStats(design).guns - FREE_CANNONS);
-    const due = { wood: 0, stone: 0, salvage: Math.max(0, extra - cannonsPaid) * METALS_PER_CANNON };
+    // every ship but the starter raft is built from the stores
+    const due = refitCost(design);
     if (!canAfford(due, territory.stores, hold)) {
-      yard.warn(`The extra cannons need ${due.salvage} metals and you have ${hold.stock.salvage}. Gather more, or take some guns off.`);
+      yard.warn(`She needs ${costLabel(due)} and your stores are short. Sail the raft until you can afford her.`);
       return;
     }
     pay(due, territory.stores, hold);
-    cannonsPaid = Math.max(cannonsPaid, extra);
     setShip(new DesignedShip(design, waves, wind, myColour(), RAFT_ID));
     yard.close();
     startPlay();
@@ -1422,7 +1533,7 @@ const yard = new Shipyard(document.body, {
   escort: (design) => buildEscort(design),
   fleet: () => `${fleet.length}`,
   stock: () => hold.stock,
-  cannonsPaid: () => cannonsPaid,
+  refitCost,
 });
 
 /** In the menu the scene is shifted right, clear of the options column. */
@@ -1768,12 +1879,14 @@ const _playerSight: ShipSight = { position: ship.body.position, velocity: ship.b
 const sights: ShipSight[] = [];
 const _sightPool: ShipSight[] = [];
 const _colliders: Collider[] = [];
+const _hulls: Hull[] = [];
+let bumpIn = 0;
+const _bumpAt = new THREE.Vector3();
 const _playerCollider: Collider = { id: RAFT_ID, position: ship.body.position, radius: 2 };
 const muzzlePos = new THREE.Vector3();
 const muzzleDir = new THREE.Vector3();
 const shotVel = new THREE.Vector3();
-const stern = new THREE.Vector3();
-const starboard = new THREE.Vector3();
+const _foamBodies: FloatingBody[] = [];
 
 // --- Main loop ------------------------------------------------------------
 const timer = new THREE.Timer();
@@ -1809,6 +1922,8 @@ function step(rawDt: number): void {
   const active = playing && sunkFor < 0;
   if (input.wasPressed('Escape')) {
     if (settings.visible) settings.close();
+    else if (upgradesPanel.visible) upgradesPanel.close();
+    else if (lobby.pickerOpen) lobby.closePicker();
     else if (lobby.visible) {
       lobby.close();
       openMenu();
@@ -1820,7 +1935,8 @@ function step(rawDt: number): void {
   if (playing) {
     if (input.wasPressed('KeyG')) gui._hidden ? gui.show() : gui.hide();
     if (input.wasPressed('KeyH')) hud.toggleHelp();
-    if (input.wasPressed('KeyV')) settings.toggleFireMode();
+    if (input.wasPressed('KeyI')) upgradesPanel.toggle();
+    if (input.wasPressed('KeyV') || input.wasPressed('KeyX')) settings.toggleFireMode();
     if (input.wasPressed('Tab') || input.wasPressed('KeyM')) chart.visible ? chart.close() : chart.open();
     if (input.wasPressed('KeyO')) probeMarkers.visible = !probeMarkers.visible;
     if (input.wasPressed('KeyP')) settings.toggleMute();
@@ -1856,6 +1972,7 @@ function step(rawDt: number): void {
     }
   }
 
+  updateCapsize(dt, active);
   // --- Gun ---
   if (active) {
     updateAimPoint(dt);
@@ -1878,15 +1995,12 @@ function step(rawDt: number): void {
   if (active && broadside.visible) {
     broadside.aimAt(aimLevel, dt);
     // each press fires one gun deck; held down, the decks follow one another
-    const press = input.wasPressed('Space') || input.wasPressed('KeyF') || input.wasPressed('KeyX');
+    const press = input.wasPressed('Space') || input.wasPressed('KeyF');
     fireHeld = input.fire ? fireHeld + dt : 0;
     fireRepeat -= dt;
     if (press || (fireHeld > 0.45 && fireRepeat <= 0)) {
       fireRepeat = 0.3;
-      const metal = broadside.nextSalvo * ECONOMY.shotMetal;
-      if (metal > 0 && hold.stock.salvage >= metal) {
-        if (broadside.tryFire()) hold.stock.salvage -= freeShots(metal);
-      } else if (metal > 0 && press) weatherUi.announce('No metal for the guns', `That salvo needs ${metal} metals`, 'danger');
+      if (!broadside.tryFire() && press && broadside.starved) weatherUi.announce('No metal to reload', `Reloading takes 1 metal for every ${BROADSIDE.gunsPerMetal} guns`, 'danger');
     }
   }
   broadsideShots.length = 0;
@@ -1968,8 +2082,20 @@ function step(rawDt: number): void {
       }
     }
   }
+  // ships bump into each other rather than sliding together into one heap
+  _hulls.length = 0;
+  if (sunkFor < 0) _hulls.push({ body: ship.body });
+  for (const w of ships) if (w.alive) _hulls.push({ body: w.ship.body, fixed: w.remote });
+  collideShips(_hulls, (x, z) => {
+    if (bumpIn > 0) return;
+    bumpIn = 0.5;
+    _bumpAt.set(x, waves.heightAt(x, z) + 0.5, z);
+    audio.woodHit(_bumpAt);
+    effects.splinters(_bumpAt, 4);
+  });
+  bumpIn -= dt;
   // crews and villagers are hundreds of tiny meshes: only those near enough to make out are drawn
-  for (const w of ships) w.ship.crew.group.visible = w.ship.group.position.distanceToSquared(camera.position) < CREW_SEEN * CREW_SEEN;
+  for (const w of ships) w.ship.crew.group.visible = (w.faction === ME || (w.reveal >= 1 && !w.ghostly)) && w.ship.group.position.distanceToSquared(camera.position) < CREW_SEEN * CREW_SEEN;
   for (const s of territory.strongholds) s.crew.group.visible = s.site.distanceToSquared(camera.position) < CREW_SEEN * CREW_SEEN;
   flotsam.update(dt, running ? sights : [], authority, (item, by) => {
     if (by >= 0) credit(by, item.stock);
@@ -1995,6 +2121,11 @@ function step(rawDt: number): void {
     if (!playing) chart.close();
     else chart.draw(mapState());
   } else if (playing) miniMap.update(dt, mapState());
+  if (active && input.wasPressed('KeyE')) {
+    const why = gathering.plunder();
+    if (why) weatherUi.announce('Nothing to plunder', why, 'danger');
+    else weatherUi.announce(`Plundering ${gathering.plundering!.name}`, 'Stay alongside while the crew strip it', 'good');
+  }
   if (active) updateGathering(dt);
   // territory
   buildIsland = active ? territory.islandInReach(ship.body.position) : null;
@@ -2004,6 +2135,8 @@ function step(rawDt: number): void {
   if (running) matchTime += dt;
   weather.escalation = Math.min(1, matchTime / 1800);
   applyMods();
+  if (!playing && upgradesPanel.visible) upgradesPanel.close();
+  upgradesPanel.update(upgrades, upgrades.price(), territory.home.side === ME);
   if (running && authority) updateGhosts(dt);
   if (running && authority) trade.update(dt);
   buildWait -= dt;
@@ -2028,9 +2161,11 @@ function step(rawDt: number): void {
   netTick(dt);
 
   // --- Wake + wind FX ---
-  stern.set(0, 0, ship.length / 2 + 0.1).applyQuaternion(ship.body.quaternion).add(ship.body.position);
-  starboard.set(1, 0, 0).applyQuaternion(ship.body.quaternion).setY(0).normalize();
-  wake.update(dt, stern, starboard, ship.body.forwardSpeed);
+  // white water along the sides and astern of every hull under way near the camera
+  _foamBodies.length = 0;
+  _foamBodies.push(ship.body);
+  for (const w of ships) if (w.alive && w.reveal >= 1) _foamBodies.push(w.ship.body);
+  hullFoam.update(dt, sunkFor < 0 ? _foamBodies : _foamBodies.slice(1), follow.focusPoint);
 
   ship.body.forward(fwd);
   follow.update(dt, ship.body.position);
@@ -2066,12 +2201,8 @@ function step(rawDt: number): void {
   audio.updateAmbience(wind.strength, ship.sail, Math.abs(ship.body.forwardSpeed));
 }
 applySettings();
-if (vs) {
-  // a match begins at each captain's home, in a proper ship: your saved design if it needs no extra metals, else a Sloop
-  const own = loadDesign();
-  setShip(new DesignedShip(own && computeStats(own).guns <= FREE_CANNONS ? own : PRESETS[1], waves, wind, myColour(), RAFT_ID));
-  berthFlagship();
-}
+// everyone starts on a raft at home; ships come later, once they can be paid for
+if (vs) berthFlagship();
 openMenu();
 if (vs && match.autostart) {
   // straight from the lobby: to sea, and a plain reload afterwards comes back to the menu

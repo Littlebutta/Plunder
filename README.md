@@ -45,11 +45,14 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | S held with the sail struck | Back her with the sweeps, only for as long as it is held |
 | Mouse | Aim at the sea |
 | Right mouse button | Fire the swivel gun (dotted arc + impact ring). Hold to keep firing. |
-| Space | Fire the main guns: one gun deck per press (hold it and the decks follow one another), or the swivel when no broadside is run out. Each shell costs 1 metal. |
+| Space | Fire the main guns: one gun deck per press (hold it and the decks follow one another), or the swivel when no broadside is run out. Firing is free; reloading costs 1 metal for every 3 guns. |
 | Esc | Main menu / resume |
 | C | Fit / remove the broadside battery (the raft gets a test battery; a designed ship uses its own cannons) |
 | F | Also fires the broadside on the side you're aiming at (outlined ribbon) |
-| Middle mouse drag | Orbit the camera (it stays where you leave it) |
+| Middle mouse drag | Orbit the camera (it stays where you leave it); on the chart it pans the map |
+| E | Alongside an island that is not yours: send the crew ashore to plunder it |
+| I | Upgrades: every upgrade with its icon and how many you hold (also the button next to ?) |
+| R | When your ship has lain capsized for a few seconds: give her up and start again at your home island (or click the button) |
 | Mouse wheel | Zoom |
 | B | Barrage stress test: hundreds of shells land around you |
 | Click a ship / T | Mark the enemy ship as your target (again to let go). Red brackets show it on screen; a red arrow on the screen edge points to it when it is out of view. |
@@ -57,7 +60,7 @@ The game is served over an `app://` protocol with cross-origin isolation headers
 | Y | At your home dock: open the shipyard. |
 | T | Mark the nearest hostile ship, or let go of the one you have marked. |
 | M / Tab | Chart: an old paper map of what you have explored. Left click selects an island or one of your ships (Shift click adds more), right click sends the selection there (the flagship if none; touch the helm to cancel). Shift right click adds a waypoint, Ctrl right click is an attack move (they fight whatever comes in range on the way), right click on your flagship makes them follow it, and holding right and dragging draws a patrol zone. Selected ships can be made into a fleet, picked again from the bar at the top. Drag pans, wheel zooms. The small map in the corner of the HUD opens it too. |
-| V | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
+| X (or V) | Broadside fire mode: in sequence (bow to stern) or all at once, each with a little random delay per gun. Also in Settings. |
 | P | Mute (also in Settings: the gear button top right, or the main menu) |
 | G | Tuning panel: sea, waves, wind, combat, ocean colours, raft physics |
 | O | Show buoyancy probes (red = underwater) |
@@ -83,13 +86,13 @@ Generated from a seed: peaks (some with craters), ridges, terraced mesas, rollin
 
 ## Gathering and ports
 
-Each island holds resources that depend on its type and size (wood, stone, metals) and regrow. There is nothing to press: lie off an island's shore and a marker appears over it while the crew haul what it has into your stores. There is one pool of resources for everything (gathered, sent in by islands, spent on building, shot and repairs); it is not kept aboard a ship, and the cargo on your flagship's deck shows how full the pool is. Islands with a **port** (a pier and hut) must be worked from the pier head instead, and load faster. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
+Each island holds resources that depend on its type and size (wood, stone, metals) and regrow. Lie off the shore of an island that is not yours and press **E** to **plunder** it: the crew go ashore and carry off what it holds in quick loads while you stay alongside (up to 60 units, then the island is stripped bare and takes 75 s to grow back). Your own islands pay you through income instead. There is one pool of resources for everything (gathered, sent in by islands, spent on building, shot and repairs); it is not kept aboard a ship, and the cargo on your flagship's deck shows how full the pool is. Islands with a **port** (a pier and hut) must be worked from the pier head instead, and load faster. Rules and numbers are in `src/world/Gathering.ts` and `src/world/Resources.ts`.
 
 ## Economy
 
 Everything is paid for from the one pool (`ECONOMY` in `src/world/Resources.ts`):
 
-- **Metals** are shot: every cannon shell fired by a ship or a fort costs its owner 1 metal (the swivel gun is free). A ship or fort with no metal holds its fire.
+- **Metals** are shot: firing is free, but reloading a gun deck costs 1 metal for every 3 guns it reloads, and a fort pays 1 metal per 3 shots. A ship with no metal cannot reload (the swivel gun is free).
 - **Wood** builds, and mends ships: hull repairs take 1 wood per 8 points, a new mast 3.
 - **Stone** builds, and mends walls: strongholds repair slowly (1.2 points a second) at 1 stone per 12 points, and not at all without stone.
 - Every 10 s each stronghold you hold sends in 2 units of what its island yields, 2 more per level, and 1 metal.
@@ -110,7 +113,7 @@ The **chart** (Tab, `src/ui/MapView.ts`) is drawn as an old paper map: torn parc
 - **Trade ships** (`src/world/Trade.ts`): built from the home island's chart panel once you hold a second island. They sail from home to each of your islands in turn and bring back a cargo of that island's goods (more from far islands and trading posts). They carry no guns.
 - **Ghost ships** drift in every few minutes (more often as the match goes on), fight anyone they meet and fade away after three and a half minutes. Sinking one gives your flagship a random **upgrade** (`src/world/Upgrades.ts`): sight, cannon range, reload, hull, repairs, speed, turning, income, salvage, free shots, trade. Each is small; they stack up to a limit. The HQ (home island's chart panel) sells the same upgrades at random for a price that rises by half each time.
 - **Random enemy ships**: the Marauder, AI flagships and AI escorts are rolled by `randomDesign()` in `src/ship/HullDesign.ts`.
-- **The volcano** (`src/weather/Volcano.ts`): a mountain island erupts, the sky turns red and ash falls, and fireballs come down all over. A red ring on the water marks where each will land.
+- **The volcano** (`src/weather/Volcano.ts`): a volcanic peak (flared flanks, gullies and a crater) erupts: lava wells up in the crater and runs down its sides in glowing rivers that cool to crust, the sky turns red and ash falls, and fireballs come down all over. A red ring on the water marks where each will land.
 - **Match based**: there are no rounds. Weather events roll after calm spells that get shorter, and their level and kind (the volcano and armageddon) get worse the longer the match runs (`Weather.escalation`, full after 30 minutes).
 
 ## Territory
@@ -151,7 +154,7 @@ Numbers are in `LEVELS` and `STRONGHOLD`; the HUD is `src/ui/TerritoryUi.ts`.
 | Starting stores | Lean 15/4/0, Standard 40/12/8, Rich 120/50/40 (wood/stone/metals) |
 | AI captains | Easy, Normal, Hard: how well supplied and how aggressive they are (`AI` in `src/world/AiCaptain.ts`) |
 
-Every captain starts with a hut on a home island and a flagship in its berth. A captain whose home is taken is **out**: their ships go down and whatever else they held passes to the captor. The last team with a home wins. Teammates share vision, do not hurt each other, and show on the chart in their own colours. A scoreboard under the home chip lists who is still in and how many islands each holds.
+Every captain starts with a hut on a home island and a **raft** in its berth; real ships come later, when the stores can pay for a refit at the shipyard (AI captains refit as soon as they can afford it). Clicking a captain's portrait opens a window with all eight captains and what each one's perks do. A captain whose home is taken is **out**: their ships go down and whatever else they held passes to the captor. The last team with a home wins. Teammates share vision, do not hurt each other, and show on the chart in their own colours. A scoreboard under the home chip lists who is still in and how many islands each holds.
 
 Sides are **factions** (`src/world/Factions.ts`): an id, a colour, a team and a pool of stores. Strongholds, islands, warships and shots all carry a faction id, and `factions.hostile(a, b)` decides who may hurt whom, so the solo voyage is simply you against a "Raiders" faction. **AI captains** (`src/world/AiCaptain.ts`) play by the same rules as you: they settle the free islands near home, upgrade the home, build escorts, then take everything they have to the nearest hostile stronghold, and come home if theirs is attacked. Instead of gathering by hand they get a stipend of resources a minute. A sunk AI flagship is replaced at its home berth after 25 s.
 
@@ -172,11 +175,11 @@ How it stays in step (`src/net/`, and the "Online play" section of `src/main.ts`
 
 ## Sinking, masts and crew
 
-**Sinking.** The flagship has 100 hull. Raider shells, stronghold guns and weather hazards wear it down, and it mends itself after 8 s out of trouble. At zero she goes down; seven seconds later a fresh ship is waiting in your berth at the home island (`sinkPlayer` / `berthFlagship` in `src/main.ts`).
+**Sinking.** The flagship has 100 hull. Raider shells, stronghold guns and weather hazards wear it down, and it mends itself after 8 s out of trouble. Ships bump off each other instead of overlapping (`src/world/ShipCollision.ts`). A ship that lies capsized for 3 s offers to send you back to your home island (R). At zero hull she goes down; seven seconds later a fresh ship is waiting in your berth at the home island (`sinkPlayer` / `berthFlagship` in `src/main.ts`).
 
 **Masts** (`src/ship/Masts.ts`). Every mast of a designed ship has its own hit points (40) and two hitboxes up its height; a shell through the hull also has a 30% chance of damaging the nearest mast. A mast shot away topples over the side with its sail and rigging, and the ship loses that mast's share of her drive (down to 30% with none standing). Ten seconds after the last hit the crew start repairs; stepping a new mast costs 3 wood from the stores (free for NPC ships) and takes about 16 s.
 
-**Crew** (`src/crew/Crew.ts`). Sailors in shirts of their owner's colour walk the deck between the guns, the wheel, the masts and the cargo, and villagers do the same around every stronghold. A shell landing among them throws some clear (with a splash) and leaves others lying where they fell; replacements turn up after a while. They are for show: crew losses do not change how a ship fights.
+**Crew** (`src/crew/Crew.ts`). Sailors in shirts of their owner's colour walk the deck between the guns, the wheel, the masts and the cargo, and villagers do the same around every stronghold. They take turns at the guns and the wheel (the helm is never left empty). A shell landing among them throws some clear (with a splash) and leaves others lying where they fell; replacements turn up after a while. They are for show: crew losses do not change how a ship fights.
 
 ## Enemy ship
 
@@ -191,7 +194,7 @@ Open it from the main menu. On the **top view** drag to draw the hull's outline 
 - **Swivel**: stands at the bow or the stern.
  The design is lofted into 3D live on the right, with its weight, draft, speed, handling, hold and cost. The shipyard only works **at your home dock**: press **Y** with the flagship alongside your home island (or use the menu before the voyage starts, when she is still in her berth). **Sail her as your flagship** swaps your vessel for the design; **Build as an escort** adds it to your fleet; the cannons you placed become the broadside. The last design is remembered.
 
-A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, masts with their sail type, a jib flag, individually placed cannons (`{t, side, level}`) and the swivel's position. Older saved designs are upgraded when loaded. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Hull and sails are free for now (their costs are shown for balancing). **Cannons** have no limit beyond the room on the hull: the first 4 come with the ship and each one more costs 4 metals, paid once at launch from your stores. The 3D preview shows the guns where they will stand, with Side, Top, Stern and 3/4 views, and deck guns fire through gaps cut in the rail. What is in your stores shows as cargo on deck (timber, stone blocks, metal ingots).
+A design is plain data (`src/ship/HullDesign.ts`): two curves, four sizes, masts with their sail type, a jib flag, individually placed cannons (`{t, side, level}`) and the swivel's position. Older saved designs are upgraded when loaded. The model (`ShipVisual.ts`), the buoyancy probes and drag (`designToHullSpec`), and the sail and rudder forces (`designToDrive`) are all derived from it. Hull and sails are free for now (their costs are shown for balancing). **Cannons** have no limit beyond the room on the hull. Refitting the flagship to a new design costs the same as building it as an escort. A **Waves** toggle rocks the preview on a moving sea. The 3D preview shows the guns where they will stand, with Side, Top, Stern and 3/4 views, and deck guns fire through gaps cut in the rail. What is in your stores shows as cargo on deck (timber, stone blocks, metal ingots).
 
 ## Weather and day-night
 
@@ -201,8 +204,8 @@ round loop exists), each at level I, II or III:
 
 - **Fog**: sea mist to blinding fog; the horizon and islands vanish.
 - **Storm**: squall, storm, tempest. Rain, lightning and thunder, rougher seas and stronger wind.
-- **Eyes in the deep**: one to three sea creatures, glowing eyes under the surface, follow your ship.
-  Get close and one rears a tentacle and smashes it down where you were heading; steer away during the
+- **Eyes in the deep** (night only, gone by dawn): one to three sea creatures roam and go for whatever ship
+  is nearest, yours or anyone else's. Get close and one rears a tentacle and smashes it down where you were heading; steer away during the
   wind-up to dodge. Shoot the eyes or tentacle to make it dive, enough hits drive it off.
 - **Armageddon**: the sky and sea turn blood red and a cursed fleet rises out of the sea, circles you
   and fires volleys. Sink them all to end it early.

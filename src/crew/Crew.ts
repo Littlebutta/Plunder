@@ -7,8 +7,12 @@ import { addOutline, toonMaterial } from '../render/toon';
  * the local space of whatever the crew's group is parented to.
  */
 export interface CrewSurface {
-  /** Places worth walking to (guns, the wheel, the masts, cargo, a hut door). */
-  stations: { at: THREE.Vector3; work: boolean }[];
+  /**
+   * Places worth walking to (guns, the wheel, the masts, cargo, a hut door).
+   * On a deck the crew take turns at the guns and the helm (`kind`), facing
+   * the way the job needs (`face`, a heading in the crew's space).
+   */
+  stations: { at: THREE.Vector3; work: boolean; kind?: 'gun' | 'helm'; face?: number }[];
   /** Height of the floor under a point. */
   height(x: number, z: number): number;
   /** Pull a point back inside the walkable area. */
@@ -93,6 +97,10 @@ class Sailor {
   phase = Math.random() * 6;
   readonly target = new THREE.Vector3();
   working = false;
+  /** The station they are at or making for (index), or -1. */
+  station = -1;
+  /** Heading to turn to while working a station. */
+  facing: number | null = null;
   readonly vel = new THREE.Vector3();
   readonly spin = new THREE.Vector3();
 
@@ -281,6 +289,28 @@ export class Crew {
     return n;
   }
 
+  /**
+   * Where a sailor goes next. On a deck with guns and a helm they swap between
+   * the two: whoever leaves the wheel is relieved by someone from the guns, and
+   * the empty guns are filled first. Elsewhere, anywhere.
+   */
+  private pickStation(s: Sailor): number {
+    const st = this.surface.stations;
+    const taken = (i: number) => this.sailors.some((o) => o !== s && o.station === i && (o.state === 'walk' || o.state === 'idle'));
+    const helm = st.findIndex((x) => x.kind === 'helm');
+    const guns = st.map((x, i) => (x.kind === 'gun' ? i : -1)).filter((i) => i >= 0);
+    if (helm >= 0 || guns.length) {
+      const was = st[s.station]?.kind;
+      // the wheel is never left empty for long
+      if (helm >= 0 && !taken(helm) && was !== 'helm') return helm;
+      const free = guns.filter((i) => i !== s.station && !taken(i));
+      if (free.length && Math.random() < 0.85) return free[Math.floor(Math.random() * free.length)];
+      if (helm >= 0 && was === 'gun' && Math.random() < 0.5) return helm;
+      if (guns.length && Math.random() < 0.6) return guns[Math.floor(Math.random() * guns.length)];
+    }
+    return Math.floor(Math.random() * st.length);
+  }
+
   update(dt: number): void {
     const surf = this.surface;
     this.sailors.forEach((s, i) => {
@@ -288,8 +318,15 @@ export class Crew {
       switch (s.state) {
         case 'idle':
           s.timer -= dt;
+          // at a station: turn to face the work (out over the gun, or forward at the wheel)
+          if (s.facing !== null) {
+            const d = Math.atan2(Math.sin(s.facing - s.root.rotation.y), Math.cos(s.facing - s.root.rotation.y));
+            s.root.rotation.y += d * Math.min(1, dt * 6);
+          }
           if (s.timer <= 0 && surf.stations.length) {
-            let st = surf.stations[Math.floor(Math.random() * surf.stations.length)];
+            const pick = this.pickStation(s);
+            let st = surf.stations[pick];
+            s.station = pick;
             if (surf.nearby) {
               const near = [...surf.stations].sort((a, b) => a.at.distanceToSquared(p) - b.at.distanceToSquared(p));
               st = near[1 + Math.floor(Math.random() * Math.min(3, near.length - 1))] ?? st;
@@ -299,6 +336,7 @@ export class Crew {
             s.target.z += (Math.random() - 0.5) * 0.4;
             surf.clamp(s.target);
             s.working = st.work;
+            s.facing = null;
             s.state = 'walk';
           }
           s.pose(dt);
@@ -309,7 +347,10 @@ export class Crew {
           const left = Math.hypot(dx, dz);
           if (left < 0.12) {
             s.state = 'idle';
-            s.timer = 2 + Math.random() * 6;
+            const st = surf.stations[s.station];
+            // a turn at the guns or the wheel lasts a while; then someone else takes over
+            s.timer = st?.kind ? 6 + Math.random() * 8 : 2 + Math.random() * 4;
+            s.facing = st?.face ?? null;
           } else {
             const step = Math.min(left, CREW.walkSpeed * dt);
             p.x += (dx / left) * step;

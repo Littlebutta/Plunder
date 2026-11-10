@@ -4,6 +4,9 @@ import { defaultVsMatch, loadLobby, MatchConfig, MatchSlot, saveLobby, TEAM_NAME
 import { PLAYER_COLOURS } from './Settings';
 import { CAPTAINS, captainById } from '../world/Captains';
 import { portraitUrl } from './Portrait';
+import { upgradeById } from '../world/Upgrades';
+import { upgradeIcon } from './UpgradeIcons';
+import { fitCard } from './fit';
 
 export interface LobbyActions {
   /** Start the match that was set up. */
@@ -30,6 +33,12 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
  */
 export class Lobby {
   private readonly root: HTMLElement;
+  /** The card is made once and only its insides are redrawn, so it does not pop in again on every change. */
+  private readonly card: HTMLElement;
+  /** The captain picker: a window over the lobby with every captain and what they bring. */
+  private readonly picker: HTMLElement;
+  /** Which seat the picker is choosing for, or -1 while it is shut. */
+  private picking = -1;
   private match: MatchConfig;
   private readonly session: LobbySession;
   /** Which link an online match uses: Steam, or windows on this computer (for trying it out alone). */
@@ -48,7 +57,15 @@ export class Lobby {
     this.root = document.createElement('div');
     this.root.className = 'lobby';
     this.root.hidden = true;
+    this.card = document.createElement('div');
+    this.card.className = 'lobby-card';
+    this.picker = document.createElement('div');
+    this.picker.className = 'lobby-picker';
+    this.picker.hidden = true;
+    this.root.append(this.card, this.picker);
     parent.append(this.root);
+    fitCard(this.card);
+    fitCard(this.picker);
 
     this.session = new LobbySession(() => ({ colour: actions.colour(), captain: actions.captain() }));
     this.session.onChange = () => this.sync();
@@ -81,17 +98,25 @@ export class Lobby {
       const btn = (e.target as HTMLElement).closest('button');
       if (!btn || btn.disabled) return;
       const m = this.match;
+      if (btn.dataset.pick !== undefined) {
+        // a captain chosen in the picker
+        const slot = m.slots[this.picking];
+        const next = captainById(btn.dataset.pick);
+        if (slot) {
+          slot.captain = next.id;
+          if (slot === m.slots[0]) actions.setCaptain(next.id);
+          else if (slot.kind === 'ai' || slot.kind === 'closed') slot.name = next.name;
+        }
+        this.closePicker();
+        return this.sync();
+      }
+      if (btn.dataset.pickClose !== undefined) return this.closePicker();
       const slot = btn.dataset.slot ? m.slots[Number(btn.dataset.slot)] : null;
       if (slot && btn.dataset.kind) {
         slot.kind = btn.dataset.kind as MatchSlot['kind'];
         delete slot.peer; // an AI or closed seat sends its player back to the next open one
       } else if (slot && btn.dataset.team) slot.team = (slot.team + 1) % TEAM_NAMES.length;
-      else if (slot && btn.dataset.captain !== undefined) {
-        const next = CAPTAINS[(CAPTAINS.findIndex((c) => c.id === slot.captain) + 1) % CAPTAINS.length];
-        slot.captain = next.id;
-        if (slot === m.slots[0]) actions.setCaptain(next.id);
-        else if (slot.kind === 'ai' || slot.kind === 'closed') slot.name = next.name;
-      }
+      else if (slot && btn.dataset.captain !== undefined) return this.openPicker(Number(btn.dataset.slot));
       else if (slot && 'colour' in btn.dataset) slot.colour = this.nextColour(slot);
       else if (btn.dataset.islands) m.islands = Number(btn.dataset.islands);
       else if (btn.dataset.stock) m.stock = btn.dataset.stock as MatchConfig['stock'];
@@ -121,6 +146,10 @@ export class Lobby {
         return actions.start({ ...m, slots: m.slots.map((s) => ({ ...s, kind: s.kind === 'open' ? 'closed' : s.kind })), autostart: true });
       }
       this.sync();
+    });
+    // a click on the dimmed lobby around the picker shuts it
+    this.picker.addEventListener('click', (e) => {
+      if (e.target === this.picker) this.closePicker();
     });
     this.root.addEventListener('change', (e) => {
       const el = e.target as HTMLInputElement;
@@ -168,7 +197,47 @@ export class Lobby {
 
   close(): void {
     this.session.leave();
+    this.closePicker();
     this.root.hidden = true;
+  }
+
+  /** True while the captain picker is open (Esc shuts it before the lobby). */
+  get pickerOpen(): boolean {
+    return this.picking >= 0;
+  }
+
+  closePicker(): void {
+    this.picking = -1;
+    this.picker.hidden = true;
+  }
+
+  /** Open the captain picker for a seat: every captain, with their portrait and what they start with. */
+  private openPicker(seat: number): void {
+    const slot = this.match.slots[seat];
+    if (!slot) return;
+    this.picking = seat;
+    const cards = CAPTAINS.map((c) => {
+      // the same upgrade twice shows once, doubled
+      const ups = [...new Set(c.upgrades)]
+        .map((id) => ({ u: upgradeById(id), n: c.upgrades.filter((x) => x === id).length }))
+        .filter((x) => !!x.u)
+        .map(({ u, n }) => `<li>${upgradeIcon(u!.id, 18)}<span><b>${esc(u!.name)}${n > 1 ? ` ×${n}` : ''}</b> ${esc(u!.text)}${n > 1 ? ' each' : ''}</span></li>`)
+        .join('');
+      const extra = c.stock ? Object.entries(c.stock).filter(([, n]) => n).map(([id, n]) => `${n} ${id === 'salvage' ? 'metals' : id}`).join(', ') : '';
+      return `<button class="pick-card ${c.id === slot.captain ? 'on' : ''}" data-pick="${c.id}">
+        <img src="${portraitUrl(c, slot.colour)}" alt="" width="64" height="64">
+        <span class="pick-body">
+          <b class="pick-name">${esc(c.name)}</b>
+          <span class="pick-title">${esc(c.title)}</span>
+          <ul class="pick-ups">${ups}${extra ? `<li class="pick-stock"><span>Starts with ${esc(extra)} more in the stores</span></li>` : ''}</ul>
+        </span>
+      </button>`;
+    }).join('');
+    this.picker.innerHTML = `<div class="pick-box">
+      <div class="pick-head"><div class="pick-heading">Choose a captain</div><div class="pick-sub">Each starts the match with two small upgrades. Their hat flies the seat's colour.</div><button data-pick-close>Close</button></div>
+      <div class="pick-grid">${cards}</div>
+    </div>`;
+    this.picker.hidden = false;
   }
 
   /** Run something that talks to the network, showing what went wrong if it does. */
@@ -274,7 +343,7 @@ export class Lobby {
         const canPick = mine || (!guest && slot.kind === 'ai');
         return `
           <div class="lobby-slot ${closed ? 'closed' : ''}">
-            <button class="lobby-face" data-slot="${i}" data-captain ${canPick ? '' : 'disabled'} title="${esc(`${cap.name}, ${cap.title}: ${cap.perk}`)}"><img src="${portraitUrl(cap, slot.colour)}" alt=""></button>
+            <button class="lobby-face" data-slot="${i}" data-captain ${canPick ? '' : 'disabled'} title="${esc(`${cap.name}, ${cap.title}: ${cap.perk}${canPick ? ' (click to choose a captain)' : ''}`)}"><img src="${portraitUrl(cap, slot.colour)}" alt="" width="36" height="36"></button>
             <button class="lobby-colour" data-slot="${i}" data-colour style="background:${slot.colour}" ${i === 0 || closed || guest ? 'disabled' : ''} title="${i === 0 ? 'Your colour is set in Settings' : 'Change colour'}"></button>
             <div class="lobby-name">${esc(name)}${closed ? '' : `<small>${esc(cap.title)} · ${esc(cap.perk)}</small>`}</div>
             ${kind}
@@ -284,8 +353,7 @@ export class Lobby {
       .join('');
     const problem = guest ? 'Waiting for the host to start the match.' : this.problem();
     const ro = guest ? 'disabled' : '';
-    this.root.innerHTML = `
-      <div class="lobby-card">
+    this.card.innerHTML = `
         <div class="lobby-head">
           <div class="lobby-title">Vs match</div>
           <div class="lobby-sub">Last team with a home island wins. Take a captain's home and they are out.</div>
@@ -312,7 +380,6 @@ export class Lobby {
           <span class="lobby-problem">${problem}</span>
           <button data-act="back">Back</button>
           ${guest ? '' : `<button data-act="start" class="primary" ${problem ? 'disabled' : ''}>Start match</button>`}
-        </div>
-      </div>`;
+        </div>`;
   }
 }

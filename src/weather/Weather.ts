@@ -4,7 +4,7 @@ import { DayNight } from './DayNight';
 import { Rain, Lightning, ASH } from './Rain';
 import { Volcano } from './Volcano';
 import type { Island } from '../world/Islands';
-import { Lurkers, LURKER_ID_BASE } from './Lurkers';
+import { LurkerTarget, Lurkers, LURKER_ID_BASE } from './Lurkers';
 import { CursedFleet, CURSED_ID_BASE } from './CursedFleet';
 import type { WaveField } from '../ocean/waves';
 import type { Wind } from '../world/Wind';
@@ -27,7 +27,7 @@ export const WEATHER_INFO: Record<WeatherKind, { names: [string, string, string]
   },
   lurker: {
     names: ['Eyes in the Deep', 'The Lurkers Hunt', 'The Lurkers Swarm'],
-    hint: ['Something is following you. Keep moving.', 'Two pairs of eyes below. Steer clear of the tentacles.', 'They are everywhere. Shoot the eyes to drive them off.'],
+    hint: ['Something roams the dark water, hunting any ship it finds.', 'Two pairs of eyes prowl the sea. Steer clear of the tentacles.', 'They are everywhere tonight. Shoot the eyes to drive them off.'],
   },
   volcano: {
     names: ['The Mountain Rumbles', 'Eruption', 'Fire from the Sky'],
@@ -184,7 +184,10 @@ export class Weather {
     level = THREE.MathUtils.clamp(Math.round(level), 1, 3);
     const [lo, hi] = DURATION[kind];
     this.event = { kind, level, time: 0, duration: lo + Math.random() * (hi - lo), ending: false, weight: this.event?.weight ?? 0 };
-    if (kind === 'lurker') this.lurkers.start(level, ship);
+    if (kind === 'lurker') {
+      const prey = this.prey();
+      this.lurkers.start(level, prey.length ? prey : [{ ...ship, hit: (d, at, shove) => this.hooks.hitShip(d, at, shove) }]);
+    }
     if (kind === 'armageddon') this.fleet.start(level);
     if (kind === 'volcano') {
       const mount = this.mountainNear(ship.position);
@@ -214,9 +217,21 @@ export class Weather {
    * climbs the strong levels and the worst kinds (the volcano, armageddon)
    * come up more often.
    */
+  /** Dark enough for the kraken. */
+  get isNight(): boolean {
+    return this.dayNight.daylight < 0.2;
+  }
+
+  /**
+   * Everything the kraken may go for: every ship afloat (the player's among
+   * them, but no more than any other). Set by the game; empty = only `ship`.
+   */
+  prey: () => LurkerTarget[] = () => [];
+
   nextEvent(ship: ShipState): void {
     const e = this.escalation;
-    const weights: Record<WeatherKind, number> = { fog: 1.2 - e * 0.6, storm: 1, lurker: 0.8 + e * 0.2, volcano: 0.5 + e, armageddon: 0.2 + e * 1.2 };
+    // the kraken only rises in the dark
+    const weights: Record<WeatherKind, number> = { fog: 1.2 - e * 0.6, storm: 1, lurker: this.isNight ? 1.4 + e * 0.4 : 0, volcano: 0.5 + e, armageddon: 0.2 + e * 1.2 };
     let roll = Math.random() * WEATHER_KINDS.reduce((n, k) => n + weights[k], 0);
     let kind: WeatherKind = 'fog';
     for (const k of WEATHER_KINDS) {
@@ -303,8 +318,11 @@ export class Weather {
 
     // --- creatures and cursed ships ---
     this.lurkers.presence = ev?.kind === 'lurker' ? ev.weight : 0;
+    // dawn sends the kraken back down
+    if (ev?.kind === 'lurker' && !ev.ending && this.dayNight.daylight > 0.45) this.stop();
     if (this.lurkers.active) {
-      this.lurkers.update(dt, ship);
+      const prey = this.prey();
+      this.lurkers.update(dt, prey.length ? prey : [{ ...ship, hit: (d, at, shove) => this.hooks.hitShip(d, at, shove) }]);
       if (!ev || ev.kind !== 'lurker') this.lurkers.clear();
     }
     this.fleet.update(dt, ship, ev?.kind === 'armageddon' ? ev.weight : 0);
