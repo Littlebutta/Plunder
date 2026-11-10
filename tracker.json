@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:52:40Z",
+  "updated": "2026-11-10T02:52:42Z",
   "categories": [
     {
       "key": "feature",
@@ -1628,13 +1628,15 @@
       "id": "F-71",
       "cat": "feature",
       "title": "AI fights properly with cannons on only one side",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/19"
+      ],
       "created": "2026-11-10T02:33:34Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:33:34Z",
+      "updated": "2026-11-10T02:52:42Z",
       "by": "Claude"
     },
     {
