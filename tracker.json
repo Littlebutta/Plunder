@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-09T23:46:02Z",
+  "updated": "2026-11-10T01:45:32Z",
   "categories": [
     {
       "key": "feature",
@@ -1431,6 +1431,19 @@
       "created": "2026-11-09T23:45:46Z",
       "priority": "low",
       "updated": "2026-11-09T23:46:02Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-58",
+      "cat": "feature",
+      "title": "Player ship can be sunk and respawns at home",
+      "status": "idea",
+      "tags": [],
+      "notes": "Batch 4 (Devin 2026-11-10). PR #16.",
+      "links": [],
+      "created": "2026-11-10T01:45:32Z",
+      "priority": "high",
+      "updated": "2026-11-10T01:45:32Z",
       "by": "Claude"
     }
   ],
