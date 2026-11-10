@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:27:12Z",
+  "updated": "2026-11-10T03:27:15Z",
   "categories": [
     {
       "key": "feature",
@@ -1902,6 +1902,19 @@
       "created": "2026-11-10T03:27:12Z",
       "priority": "high",
       "updated": "2026-11-10T03:27:12Z",
+      "by": "Claude"
+    },
+    {
+      "id": "B-9",
+      "cat": "bug",
+      "title": "Mild hitching in game: profile performance",
+      "status": "unresolved",
+      "tags": [],
+      "notes": "",
+      "links": [],
+      "created": "2026-11-10T03:27:15Z",
+      "priority": "high",
+      "updated": "2026-11-10T03:27:15Z",
       "by": "Claude"
     }
   ],
