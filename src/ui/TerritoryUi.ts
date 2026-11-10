@@ -1,6 +1,6 @@
 import { ECONOMY } from '../world/Resources';
 import { ME } from '../world/Factions';
-import { Hold, RESOURCE_IDS } from '../world/Resources';
+import { Hold, RESOURCE_IDS, Stock } from '../world/Resources';
 import { canAfford, costLabel, STRONGHOLD, Stronghold, Territory } from '../world/Strongholds';
 import { escortCost, HullDesign } from '../ship/HullDesign';
 import type { Island } from '../world/Islands';
@@ -83,7 +83,7 @@ export class TerritoryUi {
   }
 
   /** Extra rows for the chart's island panel. */
-  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number, designs: HullDesign[] = []): string {
+  chartRows(territory: Territory, island: Island, near: Island | null, hold: Hold, fleet: number, designs: HullDesign[] = [], hq?: { price: Stock; summary: string; count: number }): string {
     const s = territory.at(island);
     const offer = territory.offer(island);
     const here = near === island;
@@ -107,6 +107,11 @@ export class TerritoryUi {
     }
     if (s && s === territory.home && s.side === ME) {
       html += `<button data-island-act="yard">Shipyard <small>design a ship, then build her here</small></button>`;
+      if (hq) {
+        const can = canAfford(hq.price, territory.stores, null);
+        html += `<button data-island-act="upgrade" ${can ? '' : 'disabled'}>Buy a random upgrade <small>${costLabel(hq.price)}</small></button>`;
+        html += `<div class="chart-hint">${hq.count ? `Upgrades (${hq.count}): ${hq.summary}` : 'No upgrades yet. Sink a ghost ship for a free one.'}</div>`;
+      }
       html += `<div class="chart-sub">Build an escort (${fleet} afloat)</div><div class="chart-ships">`;
       designs.forEach((d, n) => {
         const cost = escortCost(d);

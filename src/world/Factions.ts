@@ -10,7 +10,8 @@ export const NONE = -1;
  */
 export const ME = loadMatch().net?.me ?? 0;
 
-export type FactionKind = 'human' | 'ai' | 'raiders';
+/** Raiders and ghosts are the sea's own: they hold no home and are never in the running. */
+export type FactionKind = 'human' | 'ai' | 'raiders' | 'ghosts';
 
 /** One side in a game: a player (human or AI) or the neutral raiders. */
 export interface Faction {
@@ -66,6 +67,6 @@ export class Factions {
 
   /** The player factions still in the game (not the raiders). */
   get contenders(): Faction[] {
-    return this.list.filter((f) => f.alive && f.kind !== 'raiders');
+    return this.list.filter((f) => f.alive && f.kind !== 'raiders' && f.kind !== 'ghosts');
   }
 }

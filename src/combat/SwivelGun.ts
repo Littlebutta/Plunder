@@ -29,6 +29,8 @@ export const SWIVEL = {
  * the swell would otherwise throw every shot (and the preview) around.
  */
 export class SwivelGun {
+  /** Upgrades: reload time as a multiple. */
+  reloadMul = 1;
   readonly mount = new THREE.Group();
   private readonly yawPivot = new THREE.Group();
   private readonly pitchPivot = new THREE.Group();
@@ -126,7 +128,7 @@ export class SwivelGun {
 
   /** 0..1 reload progress for the HUD. */
   get reloadProgress(): number {
-    return 1 - Math.max(this.cooldown, 0) / SWIVEL.reload;
+    return 1 - Math.max(this.cooldown, 0) / (SWIVEL.reload * this.reloadMul);
   }
 
   /**
@@ -183,7 +185,7 @@ export class SwivelGun {
   /** Returns true if it fired. */
   tryFire(): boolean {
     if (!this.ready) return false;
-    this.cooldown = SWIVEL.reload;
+    this.cooldown = SWIVEL.reload * this.reloadMul;
     this.recoil = 1;
     return true;
   }

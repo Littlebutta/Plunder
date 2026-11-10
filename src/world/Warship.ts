@@ -121,6 +121,8 @@ export class Warship {
   /** True once she has been put on the water somewhere. */
   private placed = false;
   private fadeMats: THREE.Material[] | null = null;
+  /** A ghost ship (see `haunt`). */
+  ghostly = false;
   private readonly fadeOutlines: THREE.Object3D[] = [];
   /** Which way she circles a target: chosen so the side that carries her guns faces it. */
   private circle = 1;
@@ -193,6 +195,26 @@ export class Warship {
    * Set how much of her shows (see `reveal`). She fades in and out at the edge
    * of what the player's ships and islands can see. Call every frame.
    */
+  /** A ghost ship: pale, see-through and glowing faintly. */
+  haunt(): void {
+    this.ghostly = true;
+    this.ship.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || o.name.endsWith('-outline')) return;
+      const ms = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
+        const c = m.clone() as THREE.MeshToonMaterial;
+        c.color?.lerp(_ghostTint, 0.65);
+        if (c.emissive) c.emissive.set(0x2a7a5a);
+        return c;
+      });
+      mesh.material = Array.isArray(mesh.material) ? ms : ms[0];
+    });
+    this.fadeMats = null;
+    const k = this.reveal;
+    this.reveal = -1;
+    this.showAs(k);
+  }
+
   showAs(k: number): void {
     const group = this.ship.group;
     group.visible = this.placed && this.state !== 'gone' && k > 0.02;
@@ -208,10 +230,10 @@ export class Warship {
       });
       this.fadeMats = [...mats];
     }
-    const solid = k >= 1;
+    const solid = k >= 1 && !this.ghostly;
     for (const m of this.fadeMats) {
       m.transparent = !solid;
-      m.opacity = solid ? 1 : k;
+      m.opacity = solid ? 1 : k * (this.ghostly ? 0.62 : 1);
       m.depthWrite = solid || k > 0.5;
     }
     // outlines share their material between ships, so they simply wait until she is solid
@@ -503,6 +525,7 @@ export class Warship {
   }
 }
 
+const _ghostTint = new THREE.Color(0xbfffe6);
 const NET_STATES: Warship['state'][] = ['patrol', 'fight', 'raid', 'sinking', 'gone'];
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const r2 = (v: number) => Math.round(v * 100) / 100;

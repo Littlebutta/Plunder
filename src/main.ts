@@ -30,7 +30,7 @@ import { loadMatch, saveMatch, START_STOCK } from './world/Match';
 import { AiCaptain } from './world/AiCaptain';
 import { Lobby } from './ui/Lobby';
 import { FogOfWar, Lookout } from './world/FogOfWar';
-import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS, sanitizeDesign } from './ship/HullDesign';
+import { computeStats, escortCost, FREE_CANNONS, HullDesign, loadDesign, METALS_PER_CANNON, PRESETS, sanitizeDesign, randomDesign } from './ship/HullDesign';
 import { MAST, mastOwner } from './ship/Masts';
 import { TargetUi } from './ui/TargetUi';
 import { Territory, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
@@ -44,6 +44,8 @@ import { FlotsamField, FLOTSAM, wreckValue } from './world/Flotsam';
 const knocks = new KnockTimer();
 import { rollWorldSeed } from './world/worldConfig';
 import { NPC_COLOUR } from './ui/Settings';
+import { UpgradeSet, upgradeById, UPGRADES, Upgrade } from './world/Upgrades';
+import { WORLD_RADIUS } from './world/worldConfig';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
@@ -311,14 +313,15 @@ const warshipHooks: WarshipHooks = {
  */
 function credit(faction: number, stock: Stock): void {
   const f = factions.get(faction);
-  if (!f || f.kind === 'raiders') return;
+  if (!f || f.kind === 'raiders' || f.kind === 'ghosts') return;
   if (link?.host && f.kind === 'human' && faction !== ME) {
     link.send(['k', stock.wood, stock.stone, stock.salvage], true, faction);
     return;
   }
-  f.stores.wood += stock.wood;
-  f.stores.stone += stock.stone;
-  f.stores.salvage += stock.salvage;
+  const k = faction === ME ? upgrades.mods.salvage : 1;
+  f.stores.wood += Math.round(stock.wood * k);
+  f.stores.stone += Math.round(stock.stone * k);
+  f.stores.salvage += Math.round(stock.salvage * k);
 }
 const stockLabel = (k: Stock) => [k.wood && `${k.wood} wood`, k.stone && `${k.stone} stone`, k.salvage && `${k.salvage} metals`].filter(Boolean).join(', ');
 
@@ -338,7 +341,7 @@ const owed = new Map<number, Stock>();
 function charge(faction: number, id: ResourceId, n: number): boolean {
   if (n <= 0) return true;
   const f = factions.get(faction);
-  if (!f || f.kind === 'raiders') return true;
+  if (!f || f.kind === 'raiders' || f.kind === 'ghosts') return true;
   if (f.stores[id] < n) return false;
   f.stores[id] -= n;
   if (link?.host && f.kind === 'human' && faction !== ME) {
@@ -362,6 +365,8 @@ if (vs) {
   factions.add('You', myColour(), 0, 'human', hold.stock);
   factions.add('Raiders', NPC_COLOUR, 99, 'raiders');
 }
+// ghost ships belong to nobody and fight everybody (added last, so the id is the same on every copy)
+const GHOSTS = factions.add('Ghosts', '#bfffe6', 98, 'ghosts').id;
 const RAIDERS = factions.list.find((f) => f.kind === 'raiders')?.id ?? -1;
 
 /** Every ship that sails itself: the raiders' Marauder, AI captains' flagships, and everyone's escorts. */
@@ -369,13 +374,14 @@ const ships: Warship[] = [];
 /** Whose each warship is, by collider id (kept after she sinks, for shots still in the air). */
 const shipFaction = new Map<number, number>();
 function addShip(w: Warship): Warship {
+  if (w.faction === GHOSTS) w.haunt();
   ships.push(w);
   shipFaction.set(w.id, w.faction);
   scene.add(w.group);
   return w;
 }
 /** Classic voyage: the raiders' ship, which patrols the middle of the map and raids the player's home. */
-const marauder = vs ? null : addShip(new Warship(waves, wind, world.islands, warshipHooks, { id: warshipId(), name: 'Marauder', faction: RAIDERS, colour: NPC_COLOUR, respawn: true }));
+const marauder = vs ? null : addShip(new Warship(waves, wind, world.islands, warshipHooks, { id: warshipId(), name: 'Marauder', faction: RAIDERS, colour: NPC_COLOUR, respawn: true, design: randomDesign(Math.random, 0.45) }));
 /** The player's escorts: built at home, ordered about from the chart. */
 const fleet: Warship[] = [];
 const fleetBuilt = new Map<number, number>();
@@ -596,9 +602,10 @@ function tryBuild(island: Island): void {
   const s = territory.at(island)!;
   weatherUi.announce(s.levelName, s.home ? `Your home at ${island.name} grows stronger` : `${island.name} flies your colours`, 'good');
 }
-chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length, escortDesigns());
+chart.islandActions = (island) => territoryUi.chartRows(territory, island, buildIsland, hold, fleet.length, escortDesigns(), { price: upgrades.price(), summary: upgrades.summary(), count: upgrades.count });
 chart.onIslandAction = (island, act) => {
   if (act === 'yard') return openYard(true);
+  if (act === 'upgrade') return buyUpgrade();
   if (!act.startsWith('ship:')) return tryBuild(island);
   const why = buildEscort(escortDesigns()[Number(act.slice(5))]);
   if (why) weatherUi.announce('Cannot build her yet', why, 'danger');
@@ -673,7 +680,7 @@ for (const f of factions.list) {
       respawn: true,
       berth: () => homeBerth(0, f.id),
       flagship: true,
-      preset: match.ai === 'hard' ? 2 : 1,
+      design: randomDesign(Math.random, match.ai === 'hard' ? 0.75 : match.ai === 'easy' ? 0.25 : 0.45),
     }),
   );
   const berth = homeBerth(0, f.id);
@@ -687,7 +694,7 @@ for (const f of factions.list) {
         factions,
         islands: world.islands,
         escortsOf,
-        launchEscort: (id) => buildEscort(PRESETS[1], id) === '',
+        launchEscort: (id) => buildEscort(randomDesign(Math.random, match.ai === 'hard' ? 0.4 : 0.2), id) === '',
         threatNear: (id, at, range) =>
           (factions.hostile(id, ME) && sunkFor < 0 && mode === 'play' && ship.body.position.distanceTo(at) < range) ||
           ships.some((w) => w.alive && factions.hostile(id, w.faction) && w.position.distanceTo(at) < range),
@@ -812,10 +819,15 @@ if (link) {
     on.set('k', (from, m) => {
       // the host paid us: salvage hauled or a bounty
       if (from !== 0) return;
-      const n = (i: number) => Math.max(0, Math.min(500, Number(m[i]) || 0));
+      const n = (i: number) => Math.round(Math.max(0, Math.min(500, Number(m[i]) || 0)) * upgrades.mods.salvage);
       hold.stock.wood += n(1);
       hold.stock.stone += n(2);
       hold.stock.salvage += n(3);
+    });
+    on.set('u', (from, m) => {
+      // the host says we sank a ghost ship: this is what she gave up
+      const u = from === 0 ? upgradeById(String(m[1])) : undefined;
+      if (u) takeUpgrade((upgrades.taken.get(u.id) ?? 0) < u.max ? u : (upgrades.roll() ?? u), 'ghost');
     });
     on.set('f', (from, m) => {
       if (from === 0) flotsam.spawn(_flot.set(Number(m[2]), 0, Number(m[3])), { wood: Number(m[4]), stone: Number(m[5]), salvage: Number(m[6]) }, Number(m[1]));
@@ -900,6 +912,126 @@ function netTick(dt: number): void {
   if (!netEl.hidden) netEl.textContent = quiet ? 'The host has gone. Leave the match from the menu (Esc).' : 'Waiting for the host...';
 }
 
+// --- Upgrades and ghost ships ------------------------------------------------------
+/** Seconds the match has been running: events and ghosts come thicker as it goes on. */
+let matchTime = 0;
+/** This captain's upgrades (each copy keeps its own player's). */
+const upgrades = new UpgradeSet();
+
+/** Push the upgrade multipliers into the flagship, her guns and the islands. */
+function applyMods(): void {
+  const m = upgrades.mods;
+  broadside.speedMul = m.range;
+  broadside.reloadMul = m.reload;
+  gun.reloadMul = m.swivelReload;
+  ship.speedMul = m.speed;
+  ship.windMul = m.windBoost;
+  ship.turnMul = m.turn;
+  const max = Math.round(100 * m.hull);
+  if (hull.max !== max) {
+    hull.hp = (hull.hp / hull.max) * max;
+    hull.max = max;
+  }
+  hull.repairRate = 2.5 * m.repair;
+  territory.incomeMul.set(ME, m.income);
+}
+
+/** Metal a salvo of `metal` shots really costs, with Powder Monkeys letting some go free. */
+function freeShots(metal: number): number {
+  let n = 0;
+  for (let i = 0; i < metal; i++) if (Math.random() >= upgrades.mods.freeShot) n++;
+  return n;
+}
+
+function takeUpgrade(u: Upgrade, from: 'ghost' | 'hq'): void {
+  upgrades.take(u);
+  audio.woodHit(ship.body.position);
+  weatherUi.announce(from === 'ghost' ? `Ghost banished: ${u.name}` : `Upgrade: ${u.name}`, u.text, 'good');
+}
+
+/** A captain sank a ghost ship: they get an upgrade (an AI captain takes a purse instead). */
+function grantUpgrade(faction: number): void {
+  const f = factions.get(faction);
+  if (!f) return;
+  if (faction === ME) {
+    const u = upgrades.roll();
+    if (u) takeUpgrade(u, 'ghost');
+    else credit(ME, { wood: 30, stone: 15, salvage: 30 });
+  } else if (f.kind === 'human' && link?.host) {
+    // the guest's own copy keeps their upgrades and swaps a maxed one for another
+    link.send(['u', UPGRADES[Math.floor(Math.random() * UPGRADES.length)].id], true, faction);
+  } else if (f.kind === 'ai') {
+    f.stores.wood += 30;
+    f.stores.stone += 15;
+    f.stores.salvage += 30;
+  }
+}
+
+/** The HQ's upgrade button: a random upgrade for a price that climbs each time. */
+function buyUpgrade(): void {
+  const price = upgrades.price();
+  if (!canAfford(price, territory.stores, null)) {
+    weatherUi.announce('Not enough in your stores', `The next upgrade needs ${costLabel(price)}`, 'danger');
+    return;
+  }
+  const u = upgrades.roll();
+  if (!u) {
+    weatherUi.announce('Nothing left to learn', 'Every upgrade is as good as it gets', 'danger');
+    return;
+  }
+  pay(price, territory.stores, null);
+  upgrades.bought++;
+  takeUpgrade(u, 'hq');
+}
+
+/** Ghost ships: now and then one drifts in somewhere, sails about, and fades away if nobody sinks her. */
+const GHOST = { first: 150, every: [240, 110] as const, life: 210, most: 2 };
+let ghostIn = GHOST.first;
+const ghostBorn = new Map<Warship, number>();
+function updateGhosts(dt: number): void {
+  // the longer the match, the more often they come (from every 4 minutes down to under 2)
+  const k = Math.min(1, matchTime / 1800);
+  ghostIn -= dt;
+  const afloat = ships.filter((w) => w.faction === GHOSTS && !w.lost);
+  if (ghostIn <= 0 && afloat.length < GHOST.most) {
+    ghostIn = THREE.MathUtils.lerp(GHOST.every[0], GHOST.every[1], k) * (0.8 + Math.random() * 0.4);
+    const at = openWater(0.3, 0.8);
+    const w = addShip(new Warship(waves, wind, world.islands, warshipHooks, { id: warshipId(), name: 'Ghost Ship', faction: GHOSTS, colour: '#d8fff0', respawn: false, design: randomDesign(Math.random, 0.3 + Math.random() * 0.5) }));
+    w.placeAt(at.x, at.z, Math.random() * Math.PI * 2);
+    ghostBorn.set(w, matchTime);
+    weatherUi.announce('A ghost ship is abroad', 'Sink her for an upgrade', 'calm');
+  }
+  for (const w of afloat) {
+    if (!w.alive) {
+      ghostBorn.delete(w);
+      continue;
+    }
+    // wander from one stretch of open sea to the next
+    if (!w.order || Math.hypot(w.order.x - w.position.x, w.order.z - w.position.z) < 40) {
+      const to = openWater(0.15, 0.85);
+      w.order = new THREE.Vector3(to.x, 0, to.z);
+      w.attackMove = true;
+    }
+    // her time is up: she fades away
+    if (matchTime - (ghostBorn.get(w) ?? matchTime) > GHOST.life) {
+      ghostBorn.delete(w);
+      w.scuttle();
+    }
+  }
+}
+
+/** A random point at sea, between these shares of the world's radius, clear of islands. */
+function openWater(lo: number, hi: number): { x: number; z: number } {
+  for (let tries = 0; tries < 40; tries++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = WORLD_RADIUS * (lo + Math.random() * (hi - lo));
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (world.islands.every((i) => Math.hypot(x - i.center.x, z - i.center.z) > i.radius * 1.8 + 40)) return { x, z };
+  }
+  return { x: 0, z: 0 };
+}
+
 // --- Sinking and coming back ---------------------------------------------------------
 /** Seconds since the flagship went down; below zero while she is afloat. */
 let sunkFor = -1;
@@ -939,7 +1071,7 @@ const fog = new FogOfWar();
 const lookouts: Lookout[] = [];
 function updateFog(dt: number): void {
   lookouts.length = 0;
-  lookouts.push({ x: ship.body.position.x, z: ship.body.position.z, range: 210 });
+  lookouts.push({ x: ship.body.position.x, z: ship.body.position.z, range: 210 * upgrades.mods.sight });
   // allies share what they see
   for (const w of ships) if (w.alive && factions.allied(ME, w.faction)) lookouts.push({ x: w.position.x, z: w.position.z, range: 170 });
   for (const s of territory.strongholds) if (factions.allied(ME, s.side)) lookouts.push({ x: s.site.x, z: s.site.z, range: 150 + s.level * 25 });
@@ -1098,7 +1230,7 @@ hudRoot.append(teamsEl);
 let teamsKey = '';
 function updateScoreboard(): void {
   if (!vs) return;
-  const rows = factions.list.filter((f) => f.kind !== 'raiders').map((f) => ({ f, held: territory.held(f.id).length }));
+  const rows = factions.list.filter((f) => f.kind !== 'raiders' && f.kind !== 'ghosts').map((f) => ({ f, held: territory.held(f.id).length }));
   const key = rows.map((r) => `${r.f.alive}${r.held}${r.f.colour}`).join('|');
   if (key === teamsKey) return;
   teamsKey = key;
@@ -1293,6 +1425,7 @@ Object.assign(window, {
       return course;
     },
     flotsam,
+    upgrades,
     audio,
     barrage,
     weather,
@@ -1362,7 +1495,8 @@ projectiles.onImpact = (e: ImpactEvent) => {
         const v = wreckValue(w.maxHp);
         const bounty = { wood: 0, stone: 0, salvage: Math.round(v.salvage * FLOTSAM.bounty) + 2 };
         credit(by, bounty);
-        if (by === ME) weatherUi.announce(`${w.name} sunk`, `Bounty: ${stockLabel(bounty)}. Sail over her wreckage for more`, 'good');
+        if (w.faction === GHOSTS) grantUpgrade(by);
+        if (by === ME && w.faction !== GHOSTS) weatherUi.announce(`${w.name} sunk`, `Bounty: ${stockLabel(bounty)}. Sail over her wreckage for more`, 'good');
       }
     }
     return;
@@ -1490,7 +1624,7 @@ let fireRepeat = 0;
 /** Timber owed for hull repairs under way. */
 let hullWood = 0;
 hull.spend = (hp) => {
-  hullWood += hp / ECONOMY.hullPerWood;
+  hullWood += (hp / ECONOMY.hullPerWood) * upgrades.mods.repairWood;
   if (hullWood < 1) return true;
   if (hold.stock.wood < 1) {
     hullWood = 1;
@@ -1616,14 +1750,14 @@ function step(rawDt: number): void {
       fireRepeat = 0.3;
       const metal = broadside.nextSalvo * ECONOMY.shotMetal;
       if (metal > 0 && hold.stock.salvage >= metal) {
-        if (broadside.tryFire()) hold.stock.salvage -= metal;
+        if (broadside.tryFire()) hold.stock.salvage -= freeShots(metal);
       } else if (metal > 0 && press) weatherUi.announce('No metal for the guns', `That salvo needs ${metal} metals`, 'danger');
     }
   }
   broadsideShots.length = 0;
   broadside.update(dt, broadsideShots);
   for (const shot of broadsideShots) {
-    shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed);
+    shotVel.copy(shot.direction).multiplyScalar(BROADSIDE.muzzleSpeed * broadside.speedMul);
     projectiles.spawn(shot.position, shotVel, BROADSIDE.kind, RAFT_ID);
     tellShot(RAFT_ID, BROADSIDE.kind, shot.position, shotVel);
     effects.muzzle(shot.position, shot.direction, ship.body.velocity, 1.5);
@@ -1728,6 +1862,9 @@ function step(rawDt: number): void {
   buildIsland = active ? territory.islandInReach(ship.body.position) : null;
   if (active && buildIsland && input.wasPressed('KeyU')) tryBuild(buildIsland);
   if (playing) updateRaids(dt);
+  if (running) matchTime += dt;
+  applyMods();
+  if (running && authority) updateGhosts(dt);
   buildWait -= dt;
   territory.update(dt, sights, running);
   territoryUi.update(territory, buildIsland, hold, fleet.length, active && atHomeDock());
