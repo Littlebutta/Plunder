@@ -42,6 +42,8 @@ export abstract class Vessel {
   trim = 0;
   /** 0..1, how much the wind is boosting you right now (for HUD/audio/FX). */
   windBoost = 0;
+  /** Share of her drive the rig can deliver: below 1 with masts shot away. */
+  driveFactor = 1;
   /** Called once each time the sail fills: full sail AND a good wind. */
   onSailFilled: (() => void) | null = null;
 
@@ -112,7 +114,7 @@ export abstract class Vessel {
       const along = fwd.dot(this.wind.direction);
       this.windBoost = this.rigBoost(along) * Math.min(this.wind.strength, 1.2);
       const headwind = Math.max(0, -along) * this.wind.strength * this.drive.headwindPenalty;
-      b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost);
+      b.thrust = this.sail * (this.drive.baseThrust * (1 - headwind) + this.drive.windBoost * this.windBoost) * this.driveFactor;
       b.sideForce = 0;
     } else {
       b.thrust = (this.sail / 0.4) * this.drive.reverseThrust;

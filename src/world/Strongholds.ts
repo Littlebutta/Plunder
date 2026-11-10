@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Crew, CrewSurface } from '../crew/Crew';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
 import { PALETTE } from '../render/palette';
@@ -69,7 +70,7 @@ export function costLabel(cost: Stock): string {
 
 /** Can `cost` be met from the stores, plus the hold of a ship alongside (if one is)? */
 export function canAfford(cost: Stock, stores: Stock, hold: Hold | null): boolean {
-  return RESOURCE_IDS.every((id) => stores[id] + (hold ? hold.stock[id] : 0) >= cost[id]);
+  return RESOURCE_IDS.every((id) => stores[id] + (hold && hold.stock !== stores ? hold.stock[id] : 0) >= cost[id]);
 }
 
 /** Take `cost` from the hold first (if a ship is alongside), then from the stores. */
@@ -82,7 +83,11 @@ export function pay(cost: Stock, stores: Stock, hold: Hold | null): void {
 }
 
 /** A settlement on an island: the thing that holds it, and what a raider must break to take it. */
+const padRadius = (level: number) => (level === 3 ? 8.6 : level === 0 ? 4.4 : 6.6);
+
 export class Stronghold {
+  /** The people who live and work here, in their owner's colours. */
+  readonly crew: Crew;
   readonly group = new THREE.Group();
   /** World position of the ground it stands on. */
   readonly site = new THREE.Vector3();
@@ -120,7 +125,53 @@ export class Stronghold {
     this.barBack.renderOrder = 8;
     this.barFill.renderOrder = 9;
     this.group.add(this.body, this.barBack, this.barFill);
+    this.crew = new Crew(home ? 5 : 3, 0xffffff, this.groundSurface());
+    this.group.add(this.crew.group);
     this.setLevel(0);
+  }
+
+  /** The ground around the buildings as somewhere for the villagers to walk (metres, in the stronghold's frame). */
+  private groundSurface(): CrewSurface {
+    const island = this.island;
+    const yaw = this.group.rotation.y;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    const ox = this.site.x - island.center.x;
+    const oz = this.site.z - island.center.z;
+    const ground = (x: number, z: number) => island.heightAt(ox + x * cos + z * sin, oz - x * sin + z * cos) - this.site.y;
+    const height = (x: number, z: number) => {
+      const onPad = Math.hypot(x, z) < padRadius(this.level) * this.scale;
+      return Math.max(ground(x, z), onPad ? 0.1 * this.scale : -99);
+    };
+    const stations: CrewSurface['stations'] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const r = 3.4 + (i % 3) * 1.1;
+      stations.push({ at: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), work: i % 4 === 1 });
+    }
+    return {
+      stations,
+      nearby: true,
+      height,
+      clamp: (p) => {
+        // stay clear of the walls and out of the sea
+        const min = (this.level === 0 ? 3.1 : this.level === 3 ? 7.6 : 5.9) * this.scale;
+        let r = Math.hypot(p.x, p.z) || 1;
+        if (r < min) p.multiplyScalar(min / r);
+        for (let n = 0; n < 6 && ground(p.x, p.z) + this.site.y < 0.3; n++) {
+          r = Math.hypot(p.x, p.z) || 1;
+          if (r <= min) break;
+          p.multiplyScalar(Math.max(min, r - 0.8) / r);
+        }
+      },
+      floor: -0.3,
+    };
+  }
+
+  /** A shot burst here (world position): villagers near it are thrown about. */
+  crewBlast(at: THREE.Vector3): void {
+    this.group.updateMatrixWorld();
+    this.crew.blast(this.crew.group.worldToLocal(_blast.copy(at)).setY(0), 1.4);
   }
 
   get scale(): number {
@@ -161,6 +212,7 @@ export class Stronghold {
 
   setColour(colour: THREE.ColorRepresentation): void {
     this.flagMat.color.set(colour);
+    this.crew.setColour(colour);
   }
 
   /** Take a hit. Returns true if that reduced it to ruins. */
@@ -177,6 +229,7 @@ export class Stronghold {
   /** Per-frame upkeep. `contested`: a hostile ship is close enough to stop repairs. */
   update(dt: number, contested: boolean): void {
     this.sinceHit += dt;
+    this.crew.update(dt);
     if (!contested && this.sinceHit > STRONGHOLD.repairDelay && this.hp < this.maxHp) {
       const was = this.ruined;
       this.hp = Math.min(this.maxHp, this.hp + STRONGHOLD.repairRate * dt);
@@ -216,6 +269,8 @@ export class Stronghold {
     this.top = buildStronghold(this.body, this.level, this.flagMat) * this.scale;
     this.body.scale.setScalar(1);
     this.group.scale.setScalar(this.scale);
+    this.crew.group.scale.setScalar(1 / this.scale);
+    this.crew.reset();
     this.showRuin(false);
     const y = this.top / this.scale + 2.4;
     this.barBack.position.set(0, y, 0);
@@ -248,6 +303,8 @@ function findSite(island: Island, preferAngle: number, out: THREE.Vector3): THRE
   }
   return out.set(island.center.x + best.x, Math.max(0.4, best.h), island.center.z + best.z);
 }
+
+const _blast = new THREE.Vector3();
 
 const mats = {
   wall: toonMaterial(PALETTE.woodLight),
@@ -382,14 +439,16 @@ export class Territory {
   /** The raiders' home island, if the map has a port for them. */
   readonly enemyHome: Stronghold | null = null;
   /** The player's stores: income from held islands lands here, and building draws on it from anywhere. */
-  readonly stores = emptyStock();
+  readonly stores: Stock;
   private incomeTimer = 0;
   private playerColour: THREE.ColorRepresentation = 0xd8343a;
 
   constructor(
     private readonly islands: Island[],
     private readonly hooks: TerritoryHooks,
+    stores: Stock = emptyStock(),
   ) {
+    this.stores = stores;
     this.group.name = 'territory';
     // Home: the unsettled island nearest the start.
     const free = islands.filter((i) => !i.port);
@@ -492,6 +551,7 @@ export class Territory {
   hit(colliderId: number, kind: number, by: Side | null): Stronghold | null {
     const s = this.strongholds.find((x) => x.id === colliderId);
     if (!s || !by || by === s.side) return null;
+    s.crewBlast(s.site);
     if (s.damage(STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0])) this.hooks.ruined(s);
     return s;
   }
@@ -502,6 +562,7 @@ export class Territory {
     for (const s of this.strongholds) {
       if (s.side === by || s.ruined) continue;
       if (Math.hypot(at.x - s.site.x, at.z - s.site.z) > s.collider.radius + STRONGHOLD.nearMiss) continue;
+      s.crewBlast(at);
       if (s.damage((STRONGHOLD.damage[kind] ?? STRONGHOLD.damage[0]) * 0.5)) this.hooks.ruined(s);
     }
   }

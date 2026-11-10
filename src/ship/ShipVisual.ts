@@ -25,6 +25,18 @@ export interface ShipVisual {
   flagMaterial: THREE.MeshToonMaterial;
   /** Places on deck where cargo can be stacked, in the order they fill. */
   cargoPlaces: THREE.Vector3[];
+  /**
+   * One per mast, in design order. `group` holds the mast with its yard, sail
+   * and rigging and is hinged at the deck, so a shot-away mast can topple.
+   */
+  masts: MastVisual[];
+}
+
+export interface MastVisual {
+  group: THREE.Group;
+  /** Foot of the mast in ship space, and its height above that. */
+  foot: THREE.Vector3;
+  height: number;
 }
 
 /** Points around half a cross-section, keel to rail. */
@@ -272,37 +284,61 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   // --- Masts, yards, sails, rigging ----------------------------------------------
   const sails: ShipVisual['sails'] = [];
   let flag: THREE.Mesh | null = null;
+  const masts: MastVisual[] = [];
   d.masts.forEach((fit, i) => {
     const t = fit.t;
     const m = mastSize(d, i);
     const base = deckAt(d, t);
     const z = zAt(d, t);
     const r = 0.06 + m.height * 0.012;
+    // everything this mast carries hangs off one group hinged at its foot
+    const mg = new THREE.Group();
+    mg.position.set(0, base, z);
+    group.add(mg);
+    masts.push({ group: mg, foot: mg.position.clone(), height: m.height });
+    const add = <T extends THREE.Object3D>(o: T, outline = 0, shadow = true): T => {
+      const mesh = o as unknown as THREE.Mesh;
+      if (mesh.isMesh) {
+        if (outline > 0) addOutline(mesh, outline, PALETTE.outline);
+        mesh.castShadow = shadow;
+      }
+      mg.add(o);
+      return o;
+    };
+    /** Place something given in ship space into the mast's own frame. */
+    const rel = <T extends THREE.Object3D>(o: T): T => {
+      o.position.sub(mg.position);
+      return o;
+    };
     const mast = add(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.65, r, m.height, 8), woodDark), 0.03);
     mast.position.set(0, base + m.height / 2, z);
+    rel(mast);
     const truck = add(new THREE.Mesh(new THREE.SphereGeometry(r * 0.95, 8, 6), woodDark), 0, false);
     truck.position.set(0, base + m.height, z);
+    rel(truck);
 
     // shrouds: two ropes a side from the rail up to the mast
     for (const side of [-1, 1]) {
       for (const dt of [-0.02, 0.035]) {
         const foot = hullPoint(d, THREE.MathUtils.clamp(t + dt, 0.02, 0.98), 1, side, new THREE.Vector3());
-        add(strut(foot, new THREE.Vector3(0, base + m.height * 0.8, z), 0.022, rope, 4), 0, false);
+        rel(add(strut(foot, new THREE.Vector3(0, base + m.height * 0.8, z), 0.022, rope, 4), 0, false));
       }
     }
     // crow's nest on a tall main mast
     if (i === 0 && m.height >= 9) {
       const nest = add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.38, 0.4, 10, 1, true), toonMaterial(PALETTE.woodDark, { side: THREE.DoubleSide })), 0.025);
       nest.position.set(0, base + m.height * 0.82, z);
+      rel(nest);
       const floor = add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 10), woodLight), 0, false);
       floor.position.set(0, base + m.height * 0.82 - 0.18, z);
+      rel(floor);
     }
 
     const pivot = new THREE.Group();
-    group.add(pivot);
+    mg.add(pivot);
     let sail: THREE.Mesh;
     if (fit.sail === 'square') {
-      pivot.position.set(0, base + m.height * 0.9, z + r + 0.08);
+      pivot.position.set(0, m.height * 0.9, r + 0.08);
       const yard = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.5, m.yard, 6), woodDark);
       yard.rotation.z = Math.PI / 2;
       yard.castShadow = true;
@@ -322,7 +358,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
       pivot.add(sail);
     } else {
       // Lateen: a long yard raked up toward the stern with a triangle of sail under it.
-      pivot.position.set(0, base + m.height * 0.78, z);
+      pivot.position.set(0, m.height * 0.78, 0);
       const rig = new THREE.Group();
       rig.rotation.x = -LATEEN_RAKE; // local +z (aft) tips upward
       rig.position.x = r + 0.06;
@@ -346,8 +382,8 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
       const flagGeo = new THREE.PlaneGeometry(1.1, 0.45, 6, 1);
       flagGeo.translate(0.55, 0, 0);
       flag = new THREE.Mesh(flagGeo, flagMaterial);
-      flag.position.set(0, base + m.height + 0.25, z);
-      group.add(flag);
+      flag.position.set(0, m.height + 0.25, 0);
+      mg.add(flag);
     }
   });
 
@@ -358,13 +394,17 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
     const ft = d.masts[fi].t;
     const fm = mastSize(d, fi);
     const head = new THREE.Vector3(0, deckAt(d, ft) + fm.height * 0.86, zAt(d, ft) - 0.15);
-    add(strut(spritTip, head, 0.02, rope, 4), 0, false);
+    const fg = masts[fi].group;
+    const stay = add(strut(spritTip, head, 0.02, rope, 4), 0, false);
+    stay.position.sub(fg.position);
+    fg.add(stay);
     const tack = spritTip.clone().lerp(head, 0.06);
     const top = spritTip.clone().lerp(head, 0.82);
     const clew = new THREE.Vector3(0, deckAt(d, ft) + 1.0 + fm.height * 0.05, zAt(d, ft) - 0.7);
     jib = new THREE.Mesh(triangleSail(tack, top, clew, tack.distanceTo(top) * 0.09), sailMaterial);
     jib.castShadow = true;
-    group.add(jib);
+    jib.position.sub(fg.position);
+    fg.add(jib);
   }
 
   // --- Deck fittings ---------------------------------------------------------------
@@ -459,7 +499,7 @@ export function buildShipVisual(d: HullDesign, colour: THREE.ColorRepresentation
   const gunMounts = d.cannons.map((c) => cannonMount(d, c));
   void hull;
 
-  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces };
+  return { group, sails, jib, flag, rudder, swivelMount, swivelFacing: atStern ? Math.PI : 0, gunMounts, sailMaterial, flagMaterial, cargoPlaces, masts };
 }
 
 /** Free the GPU memory of a built ship (the shipyard rebuilds its preview on every edit). */

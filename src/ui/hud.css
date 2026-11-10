@@ -334,3 +334,57 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc0ee; col
 .yard-actions { justify-content: flex-end; }
 .yard-actions .primary { order: 3; }
 .yard-left > * { flex-shrink: 0; }
+
+/* --- Batch 4: help behind a question mark, one resource pool ------------------- */
+.hud-title { display: none; }
+.hud-helpbtn {
+  position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 18px; width: 38px; height: 38px;
+  border-radius: 50%; border: 2px solid #c0814a; background: rgba(42, 23, 8, .78); color: #fff8e6;
+  font: 800 20px 'Nunito', sans-serif; cursor: pointer; pointer-events: auto; box-shadow: 0 3px 0 rgba(0, 0, 0, .25);
+}
+.hud-helpbtn:hover, .hud-helpbtn:focus-visible { background: #c0814a; color: #2a1708; outline: none; }
+.hud-help { top: 62px; left: 18px; z-index: 5; max-width: min(560px, 80vw); }
+.hud-help .help-head { font-family: 'Pirata One', serif; font-size: 22px; margin-bottom: 2px; }
+.hud-help .help-dev { opacity: .55; font-size: 12px; }
+.hud-home { top: 62px; }
+.hud-hold .income { color: #b7e89a; font-weight: 800; margin-left: 4px; }
+
+/* --- Shipyard v4: top bar, everything on one screen, stat tiles ------------------------ */
+.yard { grid-template-rows: auto minmax(0, 1fr); overflow: hidden; row-gap: 12px; }
+.yard-top { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.yard-top .yard-title { font-size: 40px; }
+.yard-top .yard-name { flex: 0 1 240px; }
+.yard-top [data-presets] { flex: 1; }
+.yard-stock { display: flex; gap: 12px; align-items: center; font-size: 13px; background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 999px; padding: 6px 14px; }
+.yard-stock > span:first-child { font-weight: 800; color: #ffd27a; }
+.yard-stock .res i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.yard-left { overflow-y: auto; padding-right: 4px; }
+.yard-opts { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.yard-opts[hidden] { display: none; }
+.yard-opts .yard-row > span { min-width: 76px; opacity: .8; }
+.yard-opts button { padding: 5px 10px; font-size: 13px; }
+.yard button:disabled { opacity: .4; cursor: default; background: rgba(192, 129, 74, .1); color: #fff8e6; }
+.yard button.quiet { background: transparent; border-color: rgba(192, 129, 74, .5); font-weight: 700; }
+.yard button.quiet:hover { background: rgba(192, 129, 74, .3); color: #fff8e6; }
+.yard-board canvas { max-height: 30vh; }
+.yard-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; background: none; border: 0; padding: 0; }
+.yard-stats .tile { display: flex; flex-direction: column; justify-content: flex-start; gap: 0; background: rgba(255, 248, 230, .06); border: 1px solid rgba(192, 129, 74, .45); border-radius: 10px; padding: 7px 10px; min-width: 0; }
+.yard-stats .tile span { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; opacity: .7; }
+.yard-stats .tile b { font-size: 19px; line-height: 1.2; white-space: nowrap; }
+.yard-stats .tile small { font-size: 11px; opacity: .75; line-height: 1.25; }
+@media (max-width: 1500px) { .yard-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.yard-actions { align-items: stretch; }
+.yard-actions button { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; text-align: left; }
+.yard-actions button small { font-size: 12px; font-weight: 700; opacity: .85; }
+.yard-actions button.quiet { margin-right: auto; }
+.yard-actions .primary { font-size: 16px; padding: 8px 18px; }
+.yard-actions .short { color: #7a1c08; }
+.yard-actions button:not(.primary) .short { color: #ffb27a; }
+
+/* chart: escort buttons */
+.chart-sub { margin-top: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .75; }
+.chart-ships { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+.chart-ships button { display: flex; flex-direction: column; align-items: flex-start; padding: 5px 8px; }
+.chart-ships button small { font-size: 11px; opacity: .8; font-weight: 600; }
+.hud-help { background: rgba(42, 23, 8, .94); }
+.yard-board canvas { max-height: 27vh; }

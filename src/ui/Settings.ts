@@ -175,7 +175,7 @@ export class SettingsPanel {
     this.gear.hidden = !v;
   }
 
-  /** Flip mute (the M key) and remember it. */
+  /** Flip mute (the P key) and remember it. */
   toggleMute(): boolean {
     this.settings.muted = !this.settings.muted;
     this.commit();

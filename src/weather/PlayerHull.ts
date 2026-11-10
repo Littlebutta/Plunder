@@ -1,9 +1,8 @@
 /**
  * The player's hull health. Weather hazards (tentacle smacks, cursed ships'
  * cannon fire) knock it down; it patches itself up slowly once you're out of
- * trouble. Hitting zero doesn't end the game yet: the ship is "battered",
- * loses its sail and limps on with some hull back, in keeping with the
- * forgiving arcade feel.
+ * trouble. At zero the ship is sunk (`onBattered`); the game brings her back
+ * at the home island a few seconds later.
  */
 export class PlayerHull {
   max = 100;
@@ -20,18 +19,19 @@ export class PlayerHull {
   }
 
   damage(amount: number): void {
-    if (amount <= 0) return;
+    if (amount <= 0 || this.hp <= 0) return;
     this.hp -= amount;
     this.sinceHit = 0;
     this.onDamage?.(amount);
     if (this.hp <= 0) {
-      this.hp = this.max * 0.4;
+      // sunk: the game brings the ship back at home and refills the hull
+      this.hp = 0;
       this.onBattered?.();
     }
   }
 
   update(dt: number): void {
     this.sinceHit += dt;
-    if (this.sinceHit > this.repairDelay) this.hp = Math.min(this.max, this.hp + this.repairRate * dt);
+    if (this.hp > 0 && this.sinceHit > this.repairDelay) this.hp = Math.min(this.max, this.hp + this.repairRate * dt);
   }
 }

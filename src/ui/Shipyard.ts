@@ -8,6 +8,7 @@ import {
   CANNON_T_RANGE,
   cloneDesign,
   computeStats,
+  escortCost,
   DESIGN_LIMITS,
   FREE_CANNONS,
   METALS_PER_CANNON,
@@ -27,7 +28,7 @@ import {
 } from '../ship/HullDesign';
 import { buildShipVisual, disposeShipVisual } from '../ship/ShipVisual';
 import { buildGunModel } from '../combat/Broadside';
-import type { Stock } from '../world/Resources';
+import { RESOURCE_IDS, RESOURCES, Stock } from '../world/Resources';
 
 export interface ShipyardActions {
   launch(design: HullDesign): void;
@@ -37,6 +38,10 @@ export interface ShipyardActions {
   stock(): Stock;
   /** Extra cannons (beyond the free ones) already paid for. */
   cannonsPaid(): number;
+  /** Build the design as an escort. Returns why it could not be done, or ''. */
+  escort(design: HullDesign): string;
+  /** e.g. "2 of 4": escorts afloat out of the most allowed. */
+  fleet(): string;
 }
 
 type Tool = 'draw' | 'masts' | 'cannons';
@@ -100,15 +105,17 @@ export class Shipyard {
     const slider = (key: keyof typeof DESIGN_LIMITS, label: string) =>
       `<label>${label} <b data-val="${key}"></b><input type="range" data-dim="${key}" min="${DESIGN_LIMITS[key][0]}" max="${DESIGN_LIMITS[key][1]}" step="0.1"></label>`;
     this.root.innerHTML = `
-      <div class="yard-left">
-        <div class="yard-head">
-          <div class="yard-title">Shipyard</div>
-          <input class="yard-name" data-name maxlength="24" aria-label="Ship name">
-        </div>
+      <div class="yard-top">
+        <div class="yard-title">Shipyard</div>
+        <input class="yard-name" data-name maxlength="24" aria-label="Ship name">
         <div class="yard-row" data-presets>
           <span class="yard-label">Start from</span>
           ${PRESETS.map((p, i) => `<button data-preset="${i}">${p.name}</button>`).join('')}
         </div>
+        <div class="yard-stock" data-stock></div>
+        <button data-act="back" class="yard-back">Back to sea</button>
+      </div>
+      <div class="yard-left">
         <div class="yard-tabs" data-tools>
           <button data-tool="draw"><i>1</i>Hull</button>
           <button data-tool="masts"><i>2</i>Sails</button>
@@ -118,7 +125,7 @@ export class Shipyard {
           <div class="yard-sliders" data-sliders>
             ${slider('length', 'Length')}${slider('beam', 'Beam')}${slider('depth', 'Keel depth')}${slider('freeboard', 'Freeboard')}
           </div>
-          <div class="yard-row yard-opts" data-opts></div>
+          <div class="yard-opts" data-opts></div>
           <div class="yard-tip" data-tip></div>
         </div>
         <div class="yard-board"><span>Top view</span><canvas data-top width="${W}" height="${TOP_H}"></canvas></div>
@@ -134,9 +141,9 @@ export class Shipyard {
         </div>
         <div class="yard-stats" data-stats></div>
         <div class="yard-actions">
-          <button data-act="launch" class="primary">Launch this ship</button>
-          <button data-act="raft">Use the starter raft</button>
-          <button data-act="back">Back</button>
+          <button data-act="raft" class="quiet">Use the starter raft</button>
+          <button data-act="escort"><b>Build as an escort</b><small data-escortcost></small></button>
+          <button data-act="launch" class="primary"><b>Sail her as your flagship</b><small data-launchcost></small></button>
         </div>
       </div>`;
     parent.append(this.root);
@@ -186,6 +193,10 @@ export class Shipyard {
       } else if (btn.dataset.act === 'launch') {
         saveDesign(this.design);
         actions.launch(cloneDesign(this.design));
+      } else if (btn.dataset.act === 'escort') {
+        saveDesign(this.design);
+        const why = actions.escort(cloneDesign(this.design));
+        this.warn(why || `${this.design.name} launched as an escort. She waits for you off the dock.`);
       } else if (btn.dataset.act === 'raft') actions.useRaft();
       else if (btn.dataset.act === 'back') actions.back();
       btn.blur();
@@ -602,10 +613,10 @@ export class Shipyard {
       this.tool === 'masts'
         ? `<label><input type="checkbox" data-jib ${d.jib ? 'checked' : ''} ${d.masts.length ? '' : 'disabled'}> Jib (headsail: helps when sailing across or into the wind)</label>`
         : this.tool === 'cannons'
-          ? `<span>Place on</span>${Array.from({ length: MAX_GUN_LEVEL + 1 }, (_, n) => `<button data-level="${n}" class="${n === this.gunLevel ? 'on' : ''}" ${n > deepest ? 'disabled title="Under the waterline on this hull"' : ''}>${levelName(n)}</button>`).join('')}
-             <label><input type="checkbox" data-mirror ${this.mirror ? 'checked' : ''}> Both sides</label>
-             <span>Swivel</span><button data-swivel="bow" class="${d.swivel === 'bow' ? 'on' : ''}">Bow</button><button data-swivel="stern" class="${d.swivel === 'stern' ? 'on' : ''}">Stern</button>
-             <button data-act="clear-guns">Clear guns</button>`
+          ? `<div class="yard-row"><span>Place on</span>${Array.from({ length: MAX_GUN_LEVEL + 1 }, (_, n) => `<button data-level="${n}" class="${n === this.gunLevel ? 'on' : ''}" ${n > deepest ? 'disabled title="Under the waterline on this hull"' : ''}>${levelName(n)}</button>`).join('')}
+             <label><input type="checkbox" data-mirror ${this.mirror ? 'checked' : ''}> Both sides</label></div>
+             <div class="yard-row"><span>Swivel gun</span><button data-swivel="bow" class="${d.swivel === 'bow' ? 'on' : ''}">Bow</button><button data-swivel="stern" class="${d.swivel === 'stern' ? 'on' : ''}">Stern</button>
+             <button data-act="clear-guns" class="quiet">Clear all guns</button></div>`
           : '';
     if (opts.dataset.html !== optsHtml) {
       opts.dataset.html = optsHtml;
@@ -622,22 +633,24 @@ export class Shipyard {
     const decks = new Set(d.cannons.map((c) => c.level)).size;
     const deckText = s.guns === 0 ? '' : ` on ${decks} deck${decks > 1 ? 's' : ''}`;
     const turn = s.agility > 0.9 ? 'Nimble' : s.agility > 0.65 ? 'Steady' : 'Heavy';
-    const cost = (label: string, need: number, got: number) => `<span class="${got >= need ? '' : 'short'}">${label} ${need}</span>`;
     const extra = Math.max(0, s.guns - FREE_CANNONS);
     const due = Math.max(0, extra - this.actions.cannonsPaid()) * METALS_PER_CANNON;
-    const gunCost = extra === 0 ? 'included with the hull' : due === 0 ? `${extra} extra, paid for` : `${extra} extra · <span class="${have.salvage >= due ? '' : 'short'}">${due} metals due at launch (you have ${have.salvage})</span>`;
-    this.statsEl.innerHTML = `
-      <div><span>Length × beam</span><b>${d.length.toFixed(1)} × ${d.beam.toFixed(1)} m</b></div>
-      <div><span>Draft</span><b>${s.draft.toFixed(1)} m</b></div>
-      <div><span>Weight</span><b>${(s.mass / 1000).toFixed(1)} t</b></div>
-      <div><span>Top speed</span><b>${(s.speed * 1.94384).toFixed(1)} kn</b></div>
-      <div><span>Handling</span><b>${turn}</b></div>
-      <div><span>Sails</span><b>${rigText}</b></div>
-      <div><span>Wind boost</span><b>astern ${pct(1)} · beam ${pct(0)} · close-hauled ${pct(-0.6)}</b></div>
-      <div><span>Cannons</span><b>${s.guns}${deckText}</b></div>
-      <div><span>Hold</span><b>${s.hold}</b></div>
-      <div class="cost"><span>Cannon cost</span><b>${gunCost}</b></div>
-      <div class="cost"><span>Hull cost (not charged yet)</span><b>${cost('Wood', s.cost.wood, have.wood)} · ${cost('Stone', s.cost.stone, have.stone)}</b></div>`;
+    const tile = (label: string, value: string, sub = '') => `<div class="tile"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    this.statsEl.innerHTML =
+      tile('Top speed', `${(s.speed * 1.94384).toFixed(1)} kn`) +
+      tile('Handling', turn) +
+      tile('Cannons', String(s.guns), s.guns ? `${s.gunsPerSide} a side${deckText}` : 'none fitted') +
+      tile('Sails', String(d.masts.length), rigText) +
+      tile('Size', `${d.length.toFixed(1)} × ${d.beam.toFixed(1)} m`, `${(s.mass / 1000).toFixed(1)} t · draws ${s.draft.toFixed(1)} m`) +
+      tile('Wind boost', pct(1), `astern · beam ${pct(0)} · close ${pct(-0.6)}`);
+    const short = (ok: boolean, text: string) => `<span class="${ok ? '' : 'short'}">${text}</span>`;
+    const ec = escortCost(d);
+    (this.root.querySelector('[data-launchcost]') as HTMLElement).innerHTML =
+      due === 0 ? (extra ? `${extra} extra cannons, paid for` : 'free') : short(have.salvage >= due, `${extra} extra cannons · ${due} metals`);
+    (this.root.querySelector('[data-escortcost]') as HTMLElement).innerHTML =
+      short(have.wood >= ec.wood, `${ec.wood} wood`) + (ec.salvage ? ' · ' + short(have.salvage >= ec.salvage, `${ec.salvage} metals`) : '') + ` · fleet ${this.actions.fleet()}`;
+    (this.root.querySelector('[data-stock]') as HTMLElement).innerHTML =
+      `<span>Stores</span>` + RESOURCE_IDS.map((id) => `<span class="res"><i style="background:${RESOURCES[id].color}"></i>${RESOURCES[id].label} <b>${have[id]}</b></span>`).join('');
   }
 
   // --- 3D preview ---------------------------------------------------------------

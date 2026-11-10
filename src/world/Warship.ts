@@ -3,7 +3,8 @@ import { Broadside, BROADSIDE, BroadsideShot } from '../combat/Broadside';
 import type { Collider } from '../combat/ProjectileSystem';
 import { WaveField } from '../ocean/waves';
 import { DesignedShip } from '../ship/DesignedShip';
-import { cloneDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
+import { cloneDesign, HullDesign, PRESETS, sanitizeDesign } from '../ship/HullDesign';
+import { MAST } from '../ship/Masts';
 import type { Island } from './Islands';
 import { Wind } from './Wind';
 
@@ -49,6 +50,8 @@ export interface WarshipOptions {
   respawn: boolean;
   /** Index into the shipyard presets. */
   preset?: number;
+  /** Or a design of the player's own. */
+  design?: HullDesign;
 }
 
 /**
@@ -69,7 +72,7 @@ export class Warship {
   /** With no order: keep station on this point (the flagship). */
   escort: THREE.Vector3 | null = null;
   hp = ENEMY.hp;
-  readonly maxHp = ENEMY.hp;
+  readonly maxHp: number;
   /** 'patrol' | 'fight' | 'raid' while afloat; 'sinking' on the way down; 'gone' until the next one arrives. */
   state: 'patrol' | 'fight' | 'raid' | 'sinking' | 'gone' = 'patrol';
   /** A place ashore to bombard (a stronghold). While set, it sails there instead of patrolling. */
@@ -93,8 +96,11 @@ export class Warship {
     this.name = opts.name;
     this.id = opts.id;
     this.side = opts.side;
-    const design = sanitizeDesign({ ...cloneDesign(PRESETS[opts.preset ?? 1]), name: this.name });
-    this.ship = new DesignedShip(design, waves, wind, opts.colour);
+    const design = sanitizeDesign({ ...cloneDesign(opts.design ?? PRESETS[opts.preset ?? 1]), name: this.name });
+    this.ship = new DesignedShip(design, waves, wind, opts.colour, opts.id);
+    // bigger hulls take more sinking
+    this.maxHp = Math.round(ENEMY.hp * THREE.MathUtils.clamp(design.length / 11, 0.6, 2.2));
+    this.hp = this.maxHp;
     this.ship.group.name = 'warship';
     this.battery = new Broadside(this.ship.group, this.ship.gunMounts, waves);
     this.battery.ribbon.visible = false; // NPCs show no aiming ribbon
@@ -108,6 +114,8 @@ export class Warship {
     this.ship.body.velocity.set(0, 0, 0);
     this.ship.sail = 0.4;
     this.ship.group.visible = true;
+    this.ship.rig.restore();
+    this.ship.crew.reset();
     this.ship.syncVisuals(0);
     this.hp = this.maxHp;
     this.state = 'patrol';
@@ -128,12 +136,22 @@ export class Warship {
 
   /** Colliders for the projectile sim: nothing while it is sinking or gone. */
   colliders(): Collider[] {
-    return this.alive ? [this.collider] : [];
+    return this.alive ? this.ship.rig.colliders([this.collider]) : [];
+  }
+
+  /** A projectile struck one of her mast hitboxes. Returns true if the mast came down. */
+  hitMast(mast: number, kind: number): boolean {
+    return this.alive && this.ship.rig.hit(mast, kind);
   }
 
   /** A projectile of `kind` hit it. Returns true if that sank it. */
   hit(kind: number): boolean {
     if (!this.alive) return false;
+    // a shell through the hull sometimes carries rigging away with it
+    if (kind === 1 && Math.random() < MAST.hullHitChance) {
+      const m = this.ship.rig.nearest((Math.random() - 0.5) * this.ship.length);
+      if (m >= 0) this.ship.rig.hit(m, 0);
+    }
     this.hp -= ENEMY.damage[kind] ?? ENEMY.damage[0];
     if (this.hp > 0) return false;
     this.hp = 0;
@@ -270,6 +288,8 @@ export class Warship {
     this.ship.body.velocity.set(0, 0, 0);
     this.ship.sail = 0.5;
     this.ship.group.visible = true;
+    this.ship.rig.restore();
+    this.ship.crew.reset();
     this.ship.syncVisuals(0);
     this.hp = this.maxHp;
     this.state = 'patrol';

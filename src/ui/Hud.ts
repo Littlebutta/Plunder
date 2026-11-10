@@ -20,18 +20,21 @@ export class Hud {
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
-      <div class="hud-title">Plunder</div>
-      <div class="hud-panel hud-help">
+      <button class="hud-helpbtn" data-helpbtn title="Controls (H)" aria-label="Show or hide the controls">?</button>
+      <div class="hud-panel hud-help hidden">
+        <div class="help-head">Controls</div>
         <div><kbd>W</kbd><kbd>S</kbd> raise / lower sail (wind behind you = boost; hold S at zero to back-paddle)</div>
         <div><kbd>A</kbd><kbd>D</kbd> steer</div>
         <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire broadside</div>
-        <div><kbd>C</kbd> fit / stow broadside cannons (turn the ship to bring them to bear) · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
-        <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go): a red arrow points to it when it is off screen</div>
-        <div><kbd>Tab</kbd> chart: the whole map; right click on it to set a course</div>
+        <div><kbd>C</kbd> fit / stow broadside cannons · <kbd>V</kbd> fire <span data-firemode>in sequence</span></div>
+        <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go)</div>
+        <div><kbd>M</kbd> or <kbd>Tab</kbd> chart: right click on it to send a ship somewhere</div>
         <div><kbd>U</kbd> alongside an island: build an outpost or upgrade your stronghold</div>
         <div><kbd>E</kbd> gather at an island in range (at its port if it has one)</div>
+        <div><kbd>Y</kbd> at your home dock: open the shipyard</div>
         <div><kbd>Middle mouse drag</kbd> orbit camera · <kbd>Wheel</kbd> zoom · <kbd>Esc</kbd> menu</div>
-        <div><kbd>B</kbd> barrage test · <kbd>M</kbd> mute · <kbd>G</kbd> tuning · <kbd>P</kbd> probes · <kbd>H</kbd> hide help</div>
+        <div><kbd>P</kbd> mute · <kbd>H</kbd> or <kbd>?</kbd> show / hide this</div>
+        <div class="help-dev"><kbd>B</kbd> barrage test · <kbd>G</kbd> tuning · <kbd>O</kbd> probes</div>
       </div>
       <div class="hud-panel hud-stats">
         <div class="stat"><b data-speed>0.0</b><span>knots</span></div>
@@ -60,6 +63,10 @@ export class Hud {
     this.shotsEl = q('[data-shots]');
     this.threadEl = q('[data-thread]');
     this.fireModeEl = q('[data-firemode]');
+    q('[data-helpbtn]').addEventListener('click', (e) => {
+      this.toggleHelp();
+      (e.currentTarget as HTMLElement).blur();
+    });
   }
 
   setFireMode(mode: 'ripple' | 'volley'): void {

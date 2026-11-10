@@ -368,6 +368,12 @@ export function computeStats(d: HullDesign): ShipStats {
   };
 }
 
+/** What it costs to build a design as an escort at the home dock. */
+export function escortCost(d: HullDesign): { wood: number; stone: number; salvage: number } {
+  const s = computeStats(d);
+  return { wood: Math.round(s.cost.wood * 0.5), stone: 0, salvage: s.guns * 2 };
+}
+
 const GRAVITY = 9.81;
 
 /** Physics description of a drawn hull: buoyancy probes follow its footprint. */
