@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T03:50:13Z",
+  "updated": "2026-11-10T03:50:15Z",
   "categories": [
     {
       "key": "feature",
@@ -1872,13 +1872,15 @@
       "id": "F-87",
       "cat": "feature",
       "title": "Events grow more drastic the longer a match runs",
-      "status": "idea",
+      "status": "in-progress",
       "tags": [],
       "notes": "Devin 2026-11-10 batch 5",
-      "links": [],
+      "links": [
+        "https://github.com/Littlebutta/Plunder/pull/21"
+      ],
       "created": "2026-11-10T02:34:09Z",
       "priority": "medium",
-      "updated": "2026-11-10T02:34:09Z",
+      "updated": "2026-11-10T03:50:15Z",
       "by": "Claude"
     },
     {
