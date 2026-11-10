@@ -6,14 +6,16 @@ import { Volcano } from './Volcano';
 import type { Island } from '../world/Islands';
 import { LurkerTarget, Lurkers, LURKER_ID_BASE } from './Lurkers';
 import { CursedFleet, CURSED_ID_BASE } from './CursedFleet';
+import { Tsunami } from './Tsunami';
+import { Waterspouts } from './Waterspouts';
 import type { WaveField } from '../ocean/waves';
 import type { Wind } from '../world/Wind';
 import type { Collider } from '../combat/ProjectileSystem';
 import type { Sky } from '../sky/Sky';
 import type { Ocean } from '../ocean/Ocean';
 
-export type WeatherKind = 'fog' | 'storm' | 'lurker' | 'armageddon' | 'volcano';
-export const WEATHER_KINDS: WeatherKind[] = ['fog', 'storm', 'lurker', 'armageddon', 'volcano'];
+export type WeatherKind = 'fog' | 'storm' | 'lurker' | 'armageddon' | 'volcano' | 'tsunami' | 'tornado';
+export const WEATHER_KINDS: WeatherKind[] = ['fog', 'storm', 'lurker', 'armageddon', 'volcano', 'tsunami', 'tornado'];
 
 /** Names and one-line hints for the banner, per level 1..3. */
 export const WEATHER_INFO: Record<WeatherKind, { names: [string, string, string]; hint: [string, string, string] }> = {
@@ -33,6 +35,14 @@ export const WEATHER_INFO: Record<WeatherKind, { names: [string, string, string]
     names: ['The Mountain Rumbles', 'Eruption', 'Fire from the Sky'],
     hint: ['Smoke and the odd fireball. Watch for red rings on the water.', 'Fireballs rain down. Steer out of the red rings.', 'The mountain tears itself open. Keep moving.'],
   },
+  tsunami: {
+    names: ['Rogue Swell', 'Tsunami', 'The Great Wave'],
+    hint: ['A great swell rolls across the sea. Meet it bow on.', 'A wall of water is loose on the map. Do not let it catch you broadside.', 'A monstrous wave wanders the sea, smashing what it catches.'],
+  },
+  tornado: {
+    names: ['Waterspout', 'Twin Waterspouts', 'Tornado Season'],
+    hint: ['A funnel touches down and wanders the sea. Keep clear of its foot.', 'Two funnels roam the sea, lifting any ship that strays too close.', 'Funnels everywhere. Get caught and you will fly.'],
+  },
   armageddon: {
     names: ['Blood Tide', 'Armageddon', 'Armageddon Unleashed'],
     hint: ['The sea turns red. Cursed ships rise.', 'A cursed fleet climbs out of the deep.', 'The damned fleet hunts you. Sink them all.'],
@@ -46,6 +56,8 @@ const DURATION: Record<WeatherKind, [number, number]> = {
   lurker: [90, 130],
   armageddon: [150, 200],
   volcano: [80, 120],
+  tsunami: [70, 100],
+  tornado: [80, 120],
 };
 const FADE_IN = 10;
 const FADE_OUT = 10;
@@ -114,6 +126,8 @@ export class Weather {
   escalation = 0;
   readonly lurkers: Lurkers;
   readonly fleet: CursedFleet;
+  readonly tsunami: Tsunami;
+  readonly spouts: Waterspouts;
   readonly group = new THREE.Group();
 
   event: ActiveEvent | null = null;
@@ -131,7 +145,7 @@ export class Weather {
 
   /** Props for every effect that only appears mid-game, so main can compile their shaders up front. */
   warmup(): THREE.Object3D[] {
-    return this.volcano.warmup();
+    return [...this.volcano.warmup(), ...this.spouts.warmup()];
   }
 
   constructor(private readonly hooks: WeatherHooks) {
@@ -164,6 +178,9 @@ export class Weather {
       },
     });
     this.group.add(this.lurkers.group, this.fleet.group);
+    this.tsunami = new Tsunami(hooks.waves, { splash: hooks.splash });
+    this.spouts = new Waterspouts(hooks.waves, hooks.islands, { splash: hooks.splash });
+    this.group.add(this.spouts.group);
     this.windBase = this.windSet = hooks.wind.baseStrength;
   }
 
@@ -189,6 +206,8 @@ export class Weather {
       this.lurkers.start(level, prey.length ? prey : [{ ...ship, hit: (d, at, shove) => this.hooks.hitShip(d, at, shove) }]);
     }
     if (kind === 'armageddon') this.fleet.start(level);
+    if (kind === 'tsunami') this.tsunami.start(level, ship.position);
+    if (kind === 'tornado') this.spouts.start(level, ship.position);
     if (kind === 'volcano') {
       const mount = this.mountainNear(ship.position);
       if (!mount) {
@@ -231,7 +250,7 @@ export class Weather {
   nextEvent(ship: ShipState): void {
     const e = this.escalation;
     // the kraken only rises in the dark
-    const weights: Record<WeatherKind, number> = { fog: 1.2 - e * 0.6, storm: 1, lurker: this.isNight ? 1.4 + e * 0.4 : 0, volcano: 0.5 + e, armageddon: 0.2 + e * 1.2 };
+    const weights: Record<WeatherKind, number> = { fog: 1.2 - e * 0.6, storm: 1, lurker: this.isNight ? 1.4 + e * 0.4 : 0, volcano: 0.5 + e, armageddon: 0.2 + e * 1.2, tsunami: 0.35 + e * 0.8, tornado: 0.6 + e * 0.6 };
     let roll = Math.random() * WEATHER_KINDS.reduce((n, k) => n + weights[k], 0);
     let kind: WeatherKind = 'fog';
     for (const k of WEATHER_KINDS) {
@@ -326,6 +345,15 @@ export class Weather {
       if (!ev || ev.kind !== 'lurker') this.lurkers.clear();
     }
     this.fleet.update(dt, ship, ev?.kind === 'armageddon' ? ev.weight : 0);
+    // tsunami and waterspouts: they go for nobody, they just wander, and whatever is in the way suffers
+    if (this.tsunami.active || this.spouts.active) {
+      const prey = this.prey();
+      const all = prey.length ? prey : [{ ...ship, hit: (d: number, at: THREE.Vector3, shove: THREE.Vector3) => this.hooks.hitShip(d, at, shove) }];
+      this.tsunami.presence = ev?.kind === 'tsunami' ? ev.weight : 0;
+      this.tsunami.update(dt, all);
+      this.spouts.presence = ev?.kind === 'tornado' ? ev.weight : 0;
+      this.spouts.update(dt, all);
+    }
     const erupting = ev?.kind === 'volcano' ? ev.weight : 0;
     this.volcano.presence = erupting;
     this.volcano.update(dt, ship);
@@ -432,6 +460,41 @@ export class Weather {
         t.windScale = 1.1;
         break;
       }
+      case 'tornado': {
+        // a low, bruised green-grey sky and a hard wind
+        const k = THREE.MathUtils.clamp(bright, 0.3, 1);
+        t.skyTop.set(0x39443f).multiplyScalar(k);
+        t.skyMid.set(0x5d6b63).multiplyScalar(k);
+        t.horizon.set(0x8c9a8e).multiplyScalar(k);
+        t.sunGlow.copy(t.horizon);
+        t.sunVis *= 0.25;
+        t.moonVis *= 0.25;
+        t.stars = 0;
+        t.cloudColor.set(0x56605a).multiplyScalar(k);
+        t.cloudGlow.set(0x2a302c).multiplyScalar(k);
+        t.fogColor.copy(t.horizon);
+        t.fogNear = 60;
+        t.fogFar = [1100, 950, 800][lv];
+        t.skyFog = 0.25;
+        t.lightIntensity *= [0.7, 0.6, 0.5][lv];
+        t.waterTint.set(0x2e4a44);
+        t.waterTintAmount = [0.2, 0.3, 0.4][lv];
+        t.waveScale = [1.1, 1.2, 1.3][lv];
+        t.windScale = [1.4, 1.6, 1.8][lv];
+        break;
+      }
+      case 'tsunami': {
+        // an eerie stillness: pale sky, the ordinary sea drawn down flat ahead of the great wave
+        t.horizon.lerp(_c.set(0xb8c4c4), 0.4);
+        t.skyMid.lerp(t.horizon, 0.3);
+        t.fogColor.lerp(_c.set(0xa9b6b8), 0.4);
+        t.lightIntensity *= 0.85;
+        t.waterTint.set(0x1d4a5a);
+        t.waterTintAmount = [0.15, 0.22, 0.3][lv];
+        t.waveScale = [0.75, 0.65, 0.55][lv];
+        t.windScale = 0.8;
+        break;
+      }
       case 'armageddon': {
         const k = THREE.MathUtils.clamp(bright, 0.45, 1);
         t.skyTop.set(0x2a0505).multiplyScalar(k);
@@ -482,6 +545,8 @@ export class Weather {
 
   private endEffects(): void {
     this.volcano.clear();
+    this.tsunami.clear();
+    this.spouts.clear();
     this.lurkers.clear();
     this.fleet.clear();
   }

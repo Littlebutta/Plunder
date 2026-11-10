@@ -4,6 +4,8 @@
 export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<string>();
+  /** Keys that went down this frame with Ctrl (or Cmd) held: read from the event, so a quick tap still counts. */
+  private readonly pressedCtrl = new Set<string>();
 
   /** Middle-button drag delta accumulated since last `consumeMouse()` (pixels). */
   private dx = 0;
@@ -23,8 +25,11 @@ export class Input {
   constructor(private readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
+      if (e.ctrlKey || e.metaKey) this.pressedCtrl.add(e.code);
       this.keys.add(e.code);
       if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+      // Ctrl + a number makes a fleet: keep the browser from switching tabs instead
+      if ((e.ctrlKey || e.metaKey) && e.code.startsWith('Digit')) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => {
@@ -139,8 +144,14 @@ export class Input {
   }
 
   /** Call at the end of each frame. */
+  /** Did this key go down this frame with Ctrl (or Cmd) held? */
+  wasPressedWithCtrl(code: string): boolean {
+    return this.pressedCtrl.has(code);
+  }
+
   endFrame(): void {
     this.pressed.clear();
+    this.pressedCtrl.clear();
     this.clickedNow = false;
   }
 

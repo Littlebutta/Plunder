@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Island } from './Islands';
 import type { Warship } from './Warship';
 import type { Stronghold } from './Strongholds';
+import { navGrid } from './NavGrid';
 import { RESOURCE_IDS, Stock, emptyStock } from './Resources';
 import { CannonFit, HullDesign, sanitizeDesign } from '../ship/HullDesign';
 
@@ -41,6 +42,8 @@ export const MERCHANT: HullDesign = sanitizeDesign({
 });
 
 export interface TradeHooks {
+  /** Every island on the map (to find open water to lie in). */
+  islands: Island[];
   /** The faction's home stronghold, if it still has one. */
   home(faction: number): Stronghold | null;
   /** Islands the faction holds. */
@@ -96,12 +99,12 @@ export class TradeRoutes {
         // the island may have been lost on the way
         if (!r.target || r.target.owner !== w.faction) r.target = this.next(r, home);
         if (!r.target) {
-          w.order = offShore(home.island, pos, 40);
+          w.order = this.offShore(home.island, pos, 40);
           continue;
         }
-        const to = offShore(r.target, home.site, 34);
+        const to = this.offShore(r.target, home.site, 34);
         if (!w.order || w.order.distanceToSquared(to) > 4) w.order = to;
-        if (Math.hypot(to.x - pos.x, to.z - pos.z) < 42) {
+        if (alongside(w, to)) {
           r.leg = 'load';
           r.wait = TRADE.loadTime;
           r.cargo = cargoFrom(r.target, home.island);
@@ -110,9 +113,9 @@ export class TradeRoutes {
         r.wait -= dt;
         if (r.wait <= 0) r.leg = 'back';
       } else {
-        const to = offShore(home.island, r.target?.center ?? pos, 34);
+        const to = this.offShore(home.island, r.target?.center ?? pos, 34);
         if (!w.order || w.order.distanceToSquared(to) > 4) w.order = to;
-        if (Math.hypot(to.x - pos.x, to.z - pos.z) < 42) {
+        if (alongside(w, to)) {
           if (r.target) this.hooks.deliver(w.faction, r.cargo, r.target);
           r.cargo = emptyStock();
           r.leg = 'out';
@@ -120,6 +123,23 @@ export class TradeRoutes {
         }
       }
     }
+  }
+
+  /**
+   * Open water off an island's shore on the side facing `from`, or the nearest
+   * open water round the coast from there: the side facing home can be all reef,
+   * or under the shore of a neighbour, and a merchant sent there would never arrive.
+   */
+  private offShore(island: Island, from: THREE.Vector3, gap: number): THREE.Vector3 {
+    const grid = navGrid(this.hooks.islands);
+    const a = Math.atan2(from.z - island.center.z, from.x - island.center.x);
+    for (let k = 0; k < 18; k++) {
+      // 0, +20, -20, +40, -40 … degrees round the coast
+      const turn = Math.ceil(k / 2) * (k % 2 ? 1 : -1) * (Math.PI / 9);
+      const p = offShore(island, a + turn, gap);
+      if (grid.free(p.x, p.z) && grid.free((p.x + island.center.x * 0.15) / 1.15, (p.z + island.center.z * 0.15) / 1.15)) return p;
+    }
+    return offShore(island, a, gap);
   }
 
   private next(r: Run, home: Stronghold): Island | null {
@@ -130,9 +150,18 @@ export class TradeRoutes {
   }
 }
 
-/** A point off an island's shore, on the side facing `from`. */
-function offShore(island: Island, from: THREE.Vector3, gap: number): THREE.Vector3 {
-  const a = Math.atan2(from.z - island.center.z, from.x - island.center.x);
+/**
+ * Close enough to load or unload: within hail, or lying where the ship herself
+ * reckons she has arrived (a broad hull that slid a little past the mark stops
+ * there rather than turning back, and used to wait for ever).
+ */
+function alongside(w: Warship, to: THREE.Vector3): boolean {
+  const d = Math.hypot(to.x - w.position.x, to.z - w.position.z);
+  return d < 42 || (w.arrived && d < 95);
+}
+
+/** A point `gap` off an island's shore at angle `a` from its centre. */
+function offShore(island: Island, a: number, gap: number): THREE.Vector3 {
   const r = island.shoreAt(a) + gap;
   return new THREE.Vector3(island.center.x + Math.cos(a) * r, 0, island.center.z + Math.sin(a) * r);
 }

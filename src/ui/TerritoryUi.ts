@@ -51,7 +51,7 @@ export class TerritoryUi {
     const stores = territory.stores;
     const held = territory.held(ME).length;
     const taking = territory.strongholds.find((s) => s.capture > 0 && territory.factions.hostile(ME, s.side));
-    const key = [fleet, ...RESOURCE_IDS.map((id) => stores[id]), home.level, Math.ceil(home.hp), Math.ceil(home.capture), held, near?.name, offer?.label, can, dock, taking ? Math.ceil(taking.capture) : ''].join('|');
+    const key = [fleet, ...RESOURCE_IDS.map((id) => stores[id]), home.level, Math.ceil(home.hp), Math.ceil(home.capture), held, near?.name, offer?.label, can, dock, taking ? Math.ceil(taking.capture) : '', taking?.contested, home.contested].join('|');
     if (key === this.last) return;
     this.last = key;
 
@@ -63,11 +63,13 @@ export class TerritoryUi {
       <div class="home-row"><b>${home.levelName}</b><span>${held} island${held === 1 ? '' : 's'} held</span></div>
       <div class="home-bar"><i style="width:${Math.round(f * 100)}%"></i></div>
       ${fleet > 0 ? `<div class="home-fleet">Fleet: ${fleet} escort${fleet === 1 ? '' : 's'}</div>` : ''}
-      ${losing ? `<div class="home-warn">Being taken! ${Math.max(0, Math.ceil(STRONGHOLD.captureTime - home.capture))}s</div>` : home.ruined ? '<div class="home-warn">In ruins</div>' : ''}`;
+      ${losing && home.contested ? '<div class="home-warn">Contested: your ships are holding them off</div>' : losing ? `<div class="home-warn">Being taken! ${Math.max(0, Math.ceil(STRONGHOLD.captureTime - home.capture))}s</div>` : home.ruined ? '<div class="home-warn">In ruins</div>' : ''}`;
 
     if (taking) {
       this.prompt.hidden = false;
-      this.prompt.innerHTML = `Taking <b>${taking.island.name}</b>… hold close for ${Math.max(0, Math.ceil(STRONGHOLD.captureTime - taking.capture))}s`;
+      this.prompt.innerHTML = taking.contested
+        ? `<b>${taking.island.name}</b> is contested: drive off the enemy ship to keep taking it`
+        : `Taking <b>${taking.island.name}</b>… hold close for ${Math.max(0, Math.ceil(STRONGHOLD.captureTime - taking.capture))}s`;
     } else if (offer && near) {
       this.prompt.hidden = false;
       this.prompt.innerHTML = can

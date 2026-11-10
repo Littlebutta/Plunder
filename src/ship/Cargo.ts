@@ -12,6 +12,20 @@ const mats = {
   band: toonMaterial(0x33363c),
 };
 
+/** Cargo pieces come in a handful of shapes: one geometry per shape, shared by every ship. */
+const geos = new Map<string, THREE.BufferGeometry>();
+function box(w: number, h: number, d: number): THREE.BufferGeometry {
+  const k = `b${w},${h},${d}`;
+  let g = geos.get(k);
+  if (!g) geos.set(k, (g = new THREE.BoxGeometry(w, h, d)));
+  return g;
+}
+function shared(k: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  let g = geos.get(k);
+  if (!g) geos.set(k, (g = make()));
+  return g;
+}
+
 /** One piece of cargo for a resource: timber crates, cut stone, bound metal ingots. */
 function piece(id: ResourceId, n: number): THREE.Object3D {
   const g = new THREE.Group();
@@ -26,24 +40,24 @@ function piece(id: ResourceId, n: number): THREE.Object3D {
   if (id === 'wood') {
     if (n % 3 === 2) {
       // a stack of planks
-      for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.5, 0.1, 0.78), i % 2 ? mats.crate : mats.plank, 0.06 + i * 0.11, 0.015).rotation.y = (i - 1) * 0.08;
+      for (let i = 0; i < 3; i++) add(box(0.5, 0.1, 0.78), i % 2 ? mats.crate : mats.plank, 0.06 + i * 0.11, 0.015).rotation.y = (i - 1) * 0.08;
     } else if (n % 3 === 1) {
-      const barrel = add(new THREE.CylinderGeometry(0.23, 0.23, 0.54, 10), mats.plank, 0.27);
+      const barrel = add(shared('barrel', () => new THREE.CylinderGeometry(0.23, 0.23, 0.54, 10)), mats.plank, 0.27);
       for (const y of [-0.15, 0.15]) {
-        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.022, 4, 14), mats.band);
+        const hoop = new THREE.Mesh(shared('hoop', () => new THREE.TorusGeometry(0.235, 0.022, 4, 14)), mats.band);
         hoop.rotation.x = Math.PI / 2;
         hoop.position.y = y;
         barrel.add(hoop);
       }
-    } else add(new THREE.BoxGeometry(0.48, 0.42, 0.48), mats.crate, 0.21);
+    } else add(box(0.48, 0.42, 0.48), mats.crate, 0.21);
   } else if (id === 'stone') {
-    add(new THREE.BoxGeometry(0.5, 0.3, 0.42), mats.stone, 0.15);
-    if (n % 2) add(new THREE.BoxGeometry(0.36, 0.24, 0.34), mats.stone, 0.42).rotation.y = 0.5;
+    add(box(0.5, 0.3, 0.42), mats.stone, 0.15);
+    if (n % 2) add(box(0.36, 0.24, 0.34), mats.stone, 0.42).rotation.y = 0.5;
   } else {
     // metal: ingots stacked on a pallet
-    add(new THREE.BoxGeometry(0.5, 0.06, 0.5), mats.plank, 0.03, 0);
-    for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.14, 0.1, 0.42), mats.metal, 0.11, 0.012).position.x = (i - 1) * 0.16;
-    for (let i = 0; i < 2; i++) add(new THREE.BoxGeometry(0.14, 0.1, 0.42), mats.metal, 0.21, 0.012).position.x = (i - 0.5) * 0.16;
+    add(box(0.5, 0.06, 0.5), mats.plank, 0.03, 0);
+    for (let i = 0; i < 3; i++) add(box(0.14, 0.1, 0.42), mats.metal, 0.11, 0.012).position.x = (i - 1) * 0.16;
+    for (let i = 0; i < 2; i++) add(box(0.14, 0.1, 0.42), mats.metal, 0.21, 0.012).position.x = (i - 0.5) * 0.16;
   }
   g.rotation.y = ((n * 37) % 10) * 0.06 - 0.3;
   return g;

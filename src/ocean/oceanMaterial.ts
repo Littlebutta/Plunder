@@ -69,10 +69,13 @@ export function createOceanMaterial(waves: WaveField, sunDir: THREE.Vector3, sho
         float dist = distance(world.xz, uCenter);
         float fade = 1.0 - smoothstep(uFade.x, uFade.y, dist);
         // calm the sea in shallow water so waves lap at beaches instead of cutting through them
-        float scale = fade * shoreScale(terrainHeight(world.xz));
+        float shore = shoreScale(terrainHeight(world.xz));
+        float scale = fade * shore;
         vec3 n;
         float env;
         vec3 d = gerstner(world.xz, scale, n, env);
+        // a tsunami is seen from afar: it does not fade with distance like the ordinary sea
+        d += swell(world.xz, shore, n, env);
         vEnv = env;
         world.xyz += d;
         vWorldPos = world.xyz;

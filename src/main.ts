@@ -17,6 +17,7 @@ import { SwivelGun, SWIVEL } from './combat/SwivelGun';
 import { Broadside, BROADSIDE, BroadsideShot } from './combat/Broadside';
 import { Effects } from './fx/Effects';
 import { HullFoam } from './fx/HullFoam';
+import { Gulls } from './fx/Gulls';
 import { WindStreaks } from './fx/WindStreaks';
 import { AudioManager } from './audio/AudioManager';
 import { Gathering } from './world/Gathering';
@@ -33,7 +34,7 @@ import { FogOfWar, Lookout } from './world/FogOfWar';
 import { escortCost, HullDesign, loadDesign, PRESETS, RAFT_DESIGN, sanitizeDesign, randomDesign } from './ship/HullDesign';
 import { MAST, mastOwner } from './ship/Masts';
 import { TargetUi } from './ui/TargetUi';
-import { Territory, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
+import { warmStrongholds, Territory, canAfford, costLabel, pay, ShipSight, Side } from './world/Strongholds';
 import { TerritoryUi } from './ui/TerritoryUi';
 import { ballisticVelocity } from './combat/ballistics';
 import { MapView, MiniMap, MapState, MapShip } from './ui/MapView';
@@ -50,6 +51,7 @@ import { captainById, pickLine, Captain } from './world/Captains';
 import { UpgradeSet, upgradeById, UPGRADES, Upgrade } from './world/Upgrades';
 import { WORLD_RADIUS } from './world/worldConfig';
 import { TradeRoutes, TRADE, MERCHANT } from './world/Trade';
+import { shipVisualFor } from './ship/ShipVisual';
 import { MainMenu } from './ui/MainMenu';
 import { SettingsPanel } from './ui/Settings';
 import { Shipyard } from './ui/Shipyard';
@@ -116,7 +118,10 @@ const myColour = (): string => (online ? captainSlots[ME].colour : settings.sett
 const outShots: number[] = [];
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const r2 = (v: number) => Math.round(v * 100) / 100;
+/** Seconds since the player last fired (gulls keep off a ship that is shooting). */
+let sinceFired = 99;
 function tellShot(owner: number, kind: number, from: THREE.Vector3, vel: THREE.Vector3): void {
+  if (owner === RAFT_ID) sinceFired = 0;
   if (link) outShots.push(owner === RAFT_ID ? HUMAN_ID_BASE + ME : owner, kind, r2(from.x), r2(from.y), r2(from.z), r2(vel.x), r2(vel.y), r2(vel.z));
 }
 const world = createIslands(match.seed, match.islands, 640, vs && match.fair ? captainSlots.length : 0);
@@ -160,6 +165,24 @@ const flotsam = new FlotsamField(waves);
 scene.add(flotsam.group);
 scene.add(effects.group);
 const hullFoam = new HullFoam(waves);
+const gulls = new Gulls(world.islands);
+scene.add(gulls.group);
+/** Where a gull may sit on a ship (ship space): mastheads, the cargo, the swivel. */
+const perchCache = new WeakMap<object, THREE.Vector3[]>();
+function perchesOf(v: typeof ship): THREE.Vector3[] {
+  let out = perchCache.get(v);
+  if (!out) {
+    out = [];
+    if (v instanceof DesignedShip) {
+      v.visual.masts.forEach((m) => out!.push(new THREE.Vector3(m.foot.x, m.foot.y + m.height + 0.05, m.foot.z)));
+      for (const c of v.visual.cargoPlaces.slice(0, 3)) out.push(c.clone().setY(c.y + 0.5));
+    } else out.push(v.swivelMount.clone().setY(v.swivelMount.y + 0.35), new THREE.Vector3(0.6, 0.55, 0.8), new THREE.Vector3(-0.5, 0.55, -0.4));
+    perchCache.set(v, out);
+  }
+  // not on a mast that has been shot away
+  if (v instanceof DesignedShip) return out.filter((_, i) => i >= v.visual.masts.length || !(v.rig.downMask & (1 << i)));
+  return out;
+}
 scene.add(hullFoam.group);
 const streaks = new WindStreaks(wind);
 scene.add(streaks.mesh);
@@ -305,7 +328,7 @@ weather.prey = () => {
   const out: LurkerTarget[] = [];
   if (sunkFor < 0 && mode === 'play')
     out.push({
-      position: ship.body.position, velocity: ship.body.velocity, length: ship.length, hit: (d, at, shove) => {
+      position: ship.body.position, velocity: ship.body.velocity, length: ship.length, body: ship.body, hit: (d, at, shove) => {
         hull.damage(d);
         ship.body.velocity.add(shove);
         effects.splinters(at, 14);
@@ -319,6 +342,7 @@ weather.prey = () => {
         position: w.position,
         velocity: w.ship.body.velocity,
         length: w.ship.length,
+        body: w.ship.body,
         hit: (d, at, shove) => {
           effects.splinters(at, 14);
           audio.woodHit(at);
@@ -738,6 +762,8 @@ function buildEscort(design: HullDesign = PRESETS[1], faction = ME, free = false
 const captains: AiCaptain[] = [];
 /** AI captains still sailing the raft they started on. */
 const onRaft = new Set<number>();
+/** Designs that will be built mid-match: built once at load (see `warmShaders`). */
+const prebuild: HullDesign[] = [];
 for (const f of factions.list) {
   if (f.kind !== 'ai' || !authority) continue;
   const flagship = addShip(
@@ -755,6 +781,9 @@ for (const f of factions.list) {
   onRaft.add(f.id);
   /** The ship this captain means to build once the stores allow. */
   const dream = randomDesign(Math.random, match.ai === 'hard' ? 0.75 : match.ai === 'easy' ? 0.25 : 0.45);
+  // a few escort designs per captain, built once at load: a fresh design for every escort was a hitch each launch
+  const escortDesigns = [0, 1, 2].map(() => randomDesign(Math.random, match.ai === 'hard' ? 0.4 : 0.2));
+  prebuild.push(dream, ...escortDesigns);
   const berth = homeBerth(0, f.id);
   if (berth) flagship.placeAt(berth.x, berth.z, berth.heading);
   captains.push(
@@ -766,7 +795,7 @@ for (const f of factions.list) {
         factions,
         islands: world.islands,
         escortsOf,
-        launchEscort: (id) => buildEscort(randomDesign(Math.random, match.ai === 'hard' ? 0.4 : 0.2), id) === '',
+        launchEscort: (id) => buildEscort(escortDesigns[Math.floor(Math.random() * escortDesigns.length)], id) === '',
         refitCost: () => (onRaft.has(f.id) ? escortCost(dream) : null),
         refit: (id) => refitAi(id, dream),
         threatNear: (id, at, range) =>
@@ -1018,6 +1047,7 @@ function netTick(dt: number): void {
 
 // --- Trade ships ---------------------------------------------------------------------
 const trade = new TradeRoutes({
+  islands: world.islands,
   home: (f) => {
     const h = territory.homes.get(f);
     return h && h.side === f ? h : null;
@@ -1637,6 +1667,9 @@ Object.assign(window, {
     humanShips,
     fog,
     buildEscort,
+    buildTrader,
+    gulls,
+    trade,
     tryBuild,
     presets: PRESETS,
     /** Tests: put to sea in one of the stock designs. */
@@ -1646,13 +1679,18 @@ Object.assign(window, {
     /** Tests: run the game ahead by this many seconds without drawing. */
     fastForward: async (seconds: number) => {
       fastForwarding = true;
+      const times: number[] = [];
       for (let i = 0; i < seconds * 20; i++) {
+        const t0 = performance.now();
         step(0.05);
+        times.push(performance.now() - t0);
         input.endFrame();
         // let the projectile worker answer between steps
         await new Promise((r) => setTimeout(r, 0));
       }
       fastForwarding = false;
+      times.sort((a, b) => a - b);
+      return { steps: times.length, mean: times.reduce((a, b) => a + b, 0) / times.length, p95: times[Math.floor(times.length * 0.95)], max: times[times.length - 1] };
     },
     openYard,
     get sunkFor() {
@@ -1944,6 +1982,19 @@ function step(rawDt: number): void {
     if (input.wasPressed('KeyY')) openYard();
     if (online && input.wasPressed('Enter')) chat.openInput();
     if (input.wasPressed('KeyB')) fireBarrage(barrage.size);
+    // control groups, RTS style: Ctrl + a number makes a fleet of the ships picked on the chart, the number alone picks it again
+    for (let d = 1; d <= 9; d++) {
+      if (!input.wasPressed(`Digit${d}`)) continue;
+      const ctrl = input.wasPressedWithCtrl(`Digit${d}`);
+      if (ctrl) {
+        if (chart.visible && chart.assignFleet(d - 1)) weatherUi.announce(`Fleet ${d}`, `Press ${d} to pick it again`, 'good');
+      } else if (chart.visible) chart.selectFleet(d - 1);
+      else if (chart.hasFleet(d - 1)) {
+        // at sea: open the chart on that fleet, ready for orders
+        chart.open();
+        chart.selectFleet(d - 1, true);
+      }
+    }
   }
 
   wind.update(dt);
@@ -2169,6 +2220,11 @@ function step(rawDt: number): void {
 
   ship.body.forward(fwd);
   follow.update(dt, ship.body.position);
+  // gulls: they settle on the ship only when no one is shooting near her
+  sinceFired += dt;
+  const foeNear = sights.some((o) => o.alive && o !== _playerSight && factions.hostile(ME, o.faction) && o.position.distanceToSquared(ship.body.position) < 260 * 260);
+  const calm = sunkFor < 0 && hull.quietFor > 10 && sinceFired > 10 && !foeNear && !weather.spouts.carrying(ship.body.position);
+  gulls.update(dt, sunkFor < 0 ? { group: ship.group, perches: perchesOf(ship) } : null, calm, follow.focusPoint);
   updateTargeting(playing);
 
   // weather + day-night: lights, fog, sky and sea colours, events
@@ -2222,6 +2278,9 @@ requestAnimationFrame(frame);
  * for the moment of the call, and effects that only exist mid-game lend a prop.
  */
 function warmShaders(): void {
+  // ships and forts that will be built mid-match are built once now, so building them later is a cheap copy
+  for (const d of [...prebuild, MERCHANT, ...PRESETS]) shipVisualFor(d);
+  warmStrongholds();
   const hidden: THREE.Object3D[] = [];
   scene.traverse((o) => {
     if (!o.visible) {

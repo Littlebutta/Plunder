@@ -28,7 +28,7 @@ export class Hud {
         <div><kbd>Mouse</kbd> aim · <kbd>Right click</kbd> fire swivel gun · <kbd>Space</kbd> fire a gun deck (each press the next deck; reloading costs 1 metal per 3 guns)</div>
         <div><kbd>C</kbd> fit / stow broadside cannons · <kbd>X</kbd> fire mode: <span data-firemode>in sequence</span></div>
         <div><kbd>Click</kbd> an enemy ship to mark it (again, or <kbd>T</kbd>, to let go)</div>
-        <div><kbd>M</kbd> or <kbd>Tab</kbd> chart: right click on it to send a ship somewhere</div>
+        <div><kbd>M</kbd> or <kbd>Tab</kbd> chart: right click on it to send a ship somewhere · <kbd>Ctrl</kbd>+<kbd>1</kbd>…<kbd>9</kbd> makes a fleet of the ships picked, <kbd>1</kbd>…<kbd>9</kbd> picks it again</div>
         <div><kbd>U</kbd> alongside an island: build an outpost or upgrade your stronghold</div>
         <div><kbd>E</kbd> alongside an island that is not yours: plunder it (the crew strip it fast; it then lies bare for a while)</div>
         <div><kbd>I</kbd> your upgrades · <kbd>R</kbd> when capsized: back to your home island</div>

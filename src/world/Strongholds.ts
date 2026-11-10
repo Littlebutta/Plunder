@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { disposeMerged, replaceWithMerged } from '../render/merge';
+import { replaceWithMerged } from '../render/merge';
+import { HealthBar } from '../render/HealthBar';
 import { Crew, CrewSurface } from '../crew/Crew';
 import type { Collider } from '../combat/ProjectileSystem';
 import { ballisticVelocity } from '../combat/ballistics';
@@ -101,6 +102,8 @@ export class Stronghold {
   hp = 0;
   /** Seconds a hostile ship has stood over the ruins. */
   capture = 0;
+  /** A ship hostile to the one taking it is close by too: the capture is held up. */
+  contested = false;
   sinceHit = 99;
   /** Stone owed for repairs under way. */
   stoneDue = 0;
@@ -110,8 +113,7 @@ export class Stronghold {
   readonly yieldAcc = emptyStock();
   private readonly gunTimers: number[] = [];
   private readonly body = new THREE.Group();
-  private readonly barBack: THREE.Sprite;
-  private readonly barFill: THREE.Sprite;
+  private readonly bar = new HealthBar(6);
   private readonly flagMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   private top = 4;
 
@@ -130,12 +132,7 @@ export class Stronghold {
     // face the sea
     this.group.rotation.y = -Math.atan2(this.site.z - island.center.z, this.site.x - island.center.x);
     this.collider = { id, position: new THREE.Vector3(), radius: 5 };
-    this.barBack = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x2a1708, depthTest: false }));
-    this.barFill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x7ed957, depthTest: false }));
-    this.barFill.center.set(0, 0.5);
-    this.barBack.renderOrder = 8;
-    this.barFill.renderOrder = 9;
-    this.group.add(this.body, this.barBack, this.barFill);
+    this.group.add(this.body, this.bar.sprite);
     this.crew = new Crew(home ? 5 : 3, 0xffffff, this.groundSurface());
     this.group.add(this.crew.group);
     this.setLevel(0);
@@ -279,28 +276,29 @@ export class Stronghold {
   }
 
   private refreshBar(): void {
-    const f = this.hp / this.maxHp;
-    const show = f < 0.999;
-    this.barBack.visible = this.barFill.visible = show;
-    this.barFill.scale.set(Math.max(0.001, 5.6 * f), 0.42, 1);
-    (this.barFill.material as THREE.SpriteMaterial).color.set(f > 0.5 ? 0x7ed957 : f > 0.25 ? 0xffc04d : 0xe23b3b);
+    this.bar.set(this.hp / this.maxHp);
   }
 
   private rebuild(): void {
-    disposeMerged(this.body.children);
     for (const child of [...this.body.children]) this.body.remove(child);
-    this.top = buildStronghold(this.body, this.level, this.flagMat) * this.scale;
-    // a hundred little parts become one mesh per material: far fewer draw calls
-    replaceWithMerged(this.body, true);
+    // every fort of a level is the same: bake it once and share the geometry (baking took 15-20 ms, a hitch on each upgrade)
+    const t = strongholdTemplate(this.level);
+    for (const m of t.meshes) {
+      const mesh = new THREE.Mesh(m.geometry, m.material === templateFlag ? this.flagMat : m.material);
+      mesh.castShadow = m.castShadow;
+      mesh.receiveShadow = m.receiveShadow;
+      mesh.renderOrder = m.renderOrder;
+      mesh.matrixAutoUpdate = false;
+      this.body.add(mesh);
+    }
+    this.top = t.top * this.scale;
     this.body.scale.setScalar(1);
     this.group.scale.setScalar(this.scale);
     this.crew.group.scale.setScalar(1 / this.scale);
     this.crew.reset();
     this.showRuin(false);
     const y = this.top / this.scale + 2.4;
-    this.barBack.position.set(0, y, 0);
-    this.barBack.scale.set(6, 0.8, 1);
-    this.barFill.position.set(-2.8, y, 0);
+    this.bar.sprite.position.set(0, y, 0);
     this.refreshBar();
     const r = (this.level === 0 ? 4.6 : this.level === 3 ? 7.5 : 6) * this.scale;
     this.collider.radius = r;
@@ -344,6 +342,26 @@ const mats = {
 };
 
 /** Build the model for a level into `root` (unit scale). Returns its height. */
+/** Stand-in for each stronghold's own flag material in the shared bakes. */
+const templateFlag = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+const templates = new Map<number, { meshes: THREE.Mesh[]; top: number }>();
+/** Bake every level up front (at load), so an upgrade mid-match costs nothing. */
+export function warmStrongholds(): void {
+  for (let l = 0; l <= 3; l++) strongholdTemplate(l);
+}
+
+/** A stronghold of this level, its hundred little parts baked into one mesh per material (shared, never disposed). */
+function strongholdTemplate(level: number): { meshes: THREE.Mesh[]; top: number } {
+  let t = templates.get(level);
+  if (!t) {
+    const root = new THREE.Group();
+    const top = buildStronghold(root, level, templateFlag);
+    t = { meshes: replaceWithMerged(root, true), top };
+    templates.set(level, t);
+  }
+  return t;
+}
+
 function buildStronghold(root: THREE.Group, level: number, flagMat: THREE.Material): number {
   const part = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, outline = 0.05) => {
     const mesh = new THREE.Mesh(geo, mat);
@@ -737,8 +755,20 @@ export class Territory {
         this.hooks.fire(_from, ballisticVelocity(_from, _to, STRONGHOLD.gunSpeed, _vel), s.id);
       }
 
-      // capture: by whoever's ship is standing over the ruins
-      if (s.ruined && range < STRONGHOLD.captureRange) s.capture += dt;
+      // capture: by whoever's ship is standing over the ruins, unless a ship hostile to them is there too
+      s.contested = false;
+      if (s.ruined && range < STRONGHOLD.captureRange) {
+        for (const other of ships) {
+          if (!other.alive || other === foe || !this.factions.hostile(other.faction, foe.faction)) continue;
+          if (Math.hypot(other.position.x - s.site.x, other.position.z - s.site.z) < STRONGHOLD.captureRange) {
+            s.contested = true;
+            break;
+          }
+        }
+      }
+      if (s.contested) {
+        // held where it is until one side is driven off
+      } else if (s.ruined && range < STRONGHOLD.captureRange) s.capture += dt;
       else s.capture = Math.max(0, s.capture - dt * 0.5);
       if (s.capture >= STRONGHOLD.captureTime) this.capture(s, foe.faction);
     }
@@ -747,7 +777,7 @@ export class Territory {
   /** Everything the other copies of an online match need: who is still in, then five numbers per stronghold. */
   netState(): number[] {
     const out = [this.factions.list.reduce((n, f) => n | (f.alive ? 1 << f.id : 0), 0)];
-    for (const s of this.strongholds) out.push(this.islands.indexOf(s.island), s.side, s.level, Math.round(s.hp), Math.round(s.capture * 10) / 10);
+    for (const s of this.strongholds) out.push(this.islands.indexOf(s.island), s.side, s.level, Math.round(s.hp), (s.contested ? -1 : 1) * (Math.round(s.capture * 10) / 10 + 0.1));
     return out;
   }
 
@@ -771,7 +801,9 @@ export class Territory {
         changed = true;
       }
       if (s.level !== a[i + 2]) changed = true;
-      if (s.sync(a[i + 2], a[i + 3], a[i + 4])) this.hooks.ruined(s);
+      // the capture rides as (seconds + 0.1), negative while contested
+      s.contested = a[i + 4] < 0;
+      if (s.sync(a[i + 2], a[i + 3], Math.max(0, Math.abs(a[i + 4]) - 0.1))) this.hooks.ruined(s);
       seen.add(s);
     }
     // burned to the ground by raiders

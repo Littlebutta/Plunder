@@ -901,6 +901,41 @@ export class MapView {
     this.selected = null;
     this.selectedShips.clear();
     for (const id of this.fleets[n] ?? []) this.selectedShips.add(id);
+    this.infoKey = '';
+  }
+
+  /** Has fleet `n` (0 up) any ships? */
+  hasFleet(n: number): boolean {
+    return (this.fleets[n]?.length ?? 0) > 0;
+  }
+
+  /** Ctrl + number: the escorts picked now become fleet `n` (0 up), leaving any fleet they were in. */
+  assignFleet(n: number): boolean {
+    const ids = [...this.selectedShips].filter((id) => id !== 0);
+    if (ids.length === 0) return false;
+    for (const f of this.fleets) for (const id of ids) if (f.includes(id)) f.splice(f.indexOf(id), 1);
+    while (this.fleets.length <= n) this.fleets.push([]);
+    this.fleets[n] = ids;
+    this.barKey = '';
+    this.infoKey = '';
+    return true;
+  }
+
+  private lastPick = { n: -1, at: 0 };
+  /** A number: pick fleet `n` (0 up). Pressed twice quickly (or `centre`), the chart moves to it. */
+  selectFleet(n: number, centre = false): void {
+    if (!this.hasFleet(n)) return;
+    this.pickFleet(n);
+    const now = performance.now();
+    const twice = this.lastPick.n === n && now - this.lastPick.at < 450;
+    this.lastPick = { n, at: now };
+    if (!(centre || twice) || !this.state) return;
+    const picked = this.state.ships.filter((s) => this.selectedShips.has(s.id));
+    if (!picked.length) return;
+    this.view.cx = picked.reduce((a, s) => a + s.position.x, 0) / picked.length;
+    this.view.cz = picked.reduce((a, s) => a + s.position.z, 0) / picked.length;
+    this.view.zoom = Math.max(this.view.zoom, this.minZoom() * 2.2);
+    this.clampView();
   }
 
   private minZoom(): number {
@@ -963,7 +998,7 @@ export class MapView {
     if (key === this.barKey) return;
     this.barKey = key;
     this.bar.innerHTML = this.fleets
-      .map((f, n) => (f.length ? `<span class="chart-fleet"><button data-fleet="${n}" title="Pick every ship in this fleet">Fleet ${n + 1} <small>${f.length}</small></button><button data-disband="${n}" title="Disband this fleet">×</button></span>` : ''))
+      .map((f, n) => (f.length ? `<span class="chart-fleet"><button data-fleet="${n}" title="Pick every ship in this fleet (key ${n + 1}; Ctrl + a number makes a fleet of the ships picked)">Fleet ${n + 1} <small>${f.length}</small></button><button data-disband="${n}" title="Disband this fleet">×</button></span>` : ''))
       .join('');
   }
 
@@ -986,7 +1021,7 @@ export class MapView {
         <div class="island-name">${picked.length} ships</div>
         <div class="island-type">${picked.map((s) => s.name).join(', ')}</div>
         <div class="chart-hint">Right click sends them all. Hold right and drag for a patrol zone.</div>
-        ${escorts ? '<button data-ship-act="group">Make them a fleet</button><button data-ship-act="follow">Follow the flagship</button>' : ''}`;
+        ${escorts ? '<button data-ship-act="group" title="Or Ctrl + a number">Make them a fleet</button><button data-ship-act="follow">Follow the flagship</button>' : ''}`;
       return;
     }
     if (ship) {

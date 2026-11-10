@@ -172,6 +172,9 @@ const COLORS = {
   basalt: new THREE.Color(0x5c4b4b),
   cliff: new THREE.Color(0xc29a7a),
   seabed: new THREE.Color(0x2f86b4),
+  limestone: new THREE.Color(0xd8cfbd),
+  limestoneDark: new THREE.Color(0xa99c87),
+  granite: new THREE.Color(0xb3aaa2),
 };
 
 function buildIsland(type: IslandType, radius: number, rand: () => number): Island {
@@ -202,6 +205,37 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
   const mesaH = 9 + rand() * 9;
   const mesaR = radius * (0.45 + rand() * 0.2);
   const hillsH = 4 + rand() * 6;
+  // Each kind of island comes in a few styles, so no two mountains look like copies:
+  // peaks are lone volcanoes or twin summits on a saddle; ridges run straight, curl
+  // round a bay, or break into a saw of teeth; hills may carry limestone towers or a
+  // bald granite dome; mesas are plateaus, tall lone buttes, or stepped tiers.
+  const roll = rand();
+  const style =
+    type === 'peak' ? (roll < 0.6 ? 'volcano' : 'twin')
+    : type === 'ridge' ? (roll < 0.4 ? 'ridge' : roll < 0.7 ? 'crescent' : 'sawtooth')
+    : type === 'hills' ? (roll < 0.45 ? 'hills' : roll < 0.75 ? 'karst' : 'dome')
+    : type === 'mesa' ? (roll < 0.45 ? 'mesa' : roll < 0.7 ? 'butte' : 'tiers')
+    : 'plain';
+  if (style === 'twin' && peaks.length) {
+    // a second summit nearly as tall as the first, across a saddle
+    const a = rand() * Math.PI * 2;
+    const p0 = peaks[0];
+    peaks.length = 1;
+    p0.x = Math.cos(a) * radius * 0.22;
+    p0.z = Math.sin(a) * radius * 0.22;
+    peaks.push({ x: -Math.cos(a) * radius * 0.26, z: -Math.sin(a) * radius * 0.26, h: p0.h * (0.78 + rand() * 0.18), r: p0.r * 0.8, crater: false });
+  }
+  // limestone towers: a few sheer-sided stacks with rounded, green tops
+  const towers =
+    style === 'karst'
+      ? Array.from({ length: 2 + Math.floor(rand() * 3) }, () => {
+          const a = rand() * Math.PI * 2;
+          const d = rand() * radius * 0.45;
+          return { x: Math.cos(a) * d, z: Math.sin(a) * d, r: radius * (0.12 + rand() * 0.08), h: (12 + rand() * 14) * (radius / 45) };
+        })
+      : [];
+  const dome = { x: (rand() - 0.5) * radius * 0.4, z: (rand() - 0.5) * radius * 0.4, r: radius * (0.42 + rand() * 0.12), h: (14 + rand() * 10) * (radius / 45) };
+  const teeth = 3 + Math.floor(rand() * 3);
 
   const height = (x: number, z: number): number => {
     const r = Math.hypot(x, z);
@@ -234,24 +268,60 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
       case 'ridge': {
         const ax = Math.cos(ridgeDir);
         const az = Math.sin(ridgeDir);
+        if (style === 'crescent') {
+          // a ridge curled round one side, cupping a bay on the other
+          const ang = Math.atan2(z, x) - ridgeDir;
+          const off = Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang)));
+          const arc = 1 - THREE.MathUtils.smoothstep(off, 1.5, 2.3);
+          const band = Math.max(0, 1 - Math.abs(r - coast * 0.58) / (coast * 0.26));
+          const rr = noise.ridged(x * 0.05 + 2, z * 0.05 + 2, 4);
+          h = Math.max(h, beach + Math.pow(band, 1.3) * arc * ridgeH * (0.55 + rr * 0.6));
+          break;
+        }
         const along = x * ax + z * az;
         const across = -x * az + z * ax;
         const len = 1 - Math.min(1, Math.abs(along) / (coast * 0.85));
         const w = Math.max(0, 1 - Math.abs(across) / (coast * 0.45));
         const ridge = noise.ridged(along * 0.05, across * 0.08 + 3, 5);
-        h = Math.max(h, beach + Math.pow(w, 1.4) * Math.pow(len, 0.6) * ridgeH * (0.5 + ridge));
+        // a saw: sharp teeth along the crest
+        const saw = style === 'sawtooth' ? 0.45 + 0.85 * Math.pow(1 - Math.abs(Math.sin((along / (coast * 1.7)) * Math.PI * teeth)), 3) : 1;
+        h = Math.max(h, beach + Math.pow(w, style === 'sawtooth' ? 1.1 : 1.4) * Math.pow(len, 0.6) * ridgeH * (0.5 + ridge) * saw);
         break;
       }
       case 'mesa': {
         const d = r / mesaR + (noise.fbm(x * 0.04, z * 0.04) - 0.5) * 0.35;
-        // terraced cliffs: two steps
-        const step1 = 1 - THREE.MathUtils.smoothstep(d, 0.92, 1.0);
-        const step2 = 1 - THREE.MathUtils.smoothstep(d, 0.55, 0.62);
-        h = Math.max(h, beach + step1 * mesaH * 0.6 + step2 * mesaH * 0.5);
+        if (style === 'butte') {
+          // one tall, narrow block of rock with a flat top, standing on low ground
+          const db = d / 0.62;
+          h = Math.max(h, beach + (1 - THREE.MathUtils.smoothstep(db, 0.86, 1.0)) * mesaH * 1.9 + (1 - THREE.MathUtils.smoothstep(d, 0.9, 1.1)) * 1.2);
+        } else if (style === 'tiers') {
+          // three terraces climbing to a small top
+          const s1 = 1 - THREE.MathUtils.smoothstep(d, 0.94, 1.0);
+          const s2 = 1 - THREE.MathUtils.smoothstep(d, 0.66, 0.72);
+          const s3 = 1 - THREE.MathUtils.smoothstep(d, 0.36, 0.42);
+          h = Math.max(h, beach + (s1 * 0.42 + s2 * 0.42 + s3 * 0.5) * mesaH);
+        } else {
+          // terraced cliffs: two steps
+          const step1 = 1 - THREE.MathUtils.smoothstep(d, 0.92, 1.0);
+          const step2 = 1 - THREE.MathUtils.smoothstep(d, 0.55, 0.62);
+          h = Math.max(h, beach + step1 * mesaH * 0.6 + step2 * mesaH * 0.5);
+        }
         break;
       }
       case 'hills':
         h = beach + Math.max(0, 1 - t) * hillsH * noise.fbm(x * 0.035 + 7, z * 0.035 + 7, 4) * 2;
+        for (const tw of towers) {
+          const d = Math.hypot(x - tw.x, z - tw.z) / tw.r + (noise.fbm(x * 0.12 + 4, z * 0.12 + 4) - 0.5) * 0.3;
+          if (d >= 1.15) continue;
+          // sheer sides, a rounded top
+          const side = 1 - THREE.MathUtils.smoothstep(d, 0.82, 1.0);
+          const cap = Math.sqrt(Math.max(0, 1 - d * d * 0.6));
+          h = Math.max(h, beach + side * cap * tw.h);
+        }
+        if (style === 'dome') {
+          const d = Math.hypot(x - dome.x, z - dome.z) / dome.r;
+          if (d < 1) h = Math.max(h, beach + Math.pow(1 - d * d, 0.8) * dome.h);
+        }
         break;
       case 'cay':
         h = beach * 0.6 - 0.2;
@@ -319,7 +389,10 @@ function buildIsland(type: IslandType, radius: number, rand: () => number): Isla
     else if (y < 0.5 + n * 0.3) c.copy(COLORS.wetSand);
     else if (y < sandLine) c.copy(COLORS.sand);
     else if (type === 'cay' || type === 'stacks') c.copy(COLORS.sand);
-    else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : COLORS.rock);
+    else if (style === 'karst' && slope > 0.3 + n * 0.15) c.copy(COLORS.limestone).lerp(COLORS.limestoneDark, Math.max(0, n * 2.5));
+    else if (style === 'dome' && y > dome.h * 0.45 + n * 3) c.copy(COLORS.granite).lerp(COLORS.rock, Math.max(0, n * 1.5));
+    else if (style === 'butte' && slope > 0.3 + n * 0.2) c.copy(COLORS.cliff).lerp(COLORS.rockDark, 0.25 + n);
+    else if (slope > 0.42 + n * 0.2) c.copy(type === 'mesa' ? COLORS.cliff : style === 'sawtooth' ? COLORS.rockDark : COLORS.rock);
     else if (type === 'peak' && y > peakTop * 0.5 + n * 5) c.copy(COLORS.basalt).lerp(COLORS.rockDark, Math.max(0, n * 2));
     else if (type === 'ridge' && y > peakTop * 0.62 + n * 4) c.copy(COLORS.rockDark);
     else c.copy(n > 0.05 ? COLORS.grassDark : COLORS.grass);
