@@ -8,6 +8,10 @@ import { solveElevation } from './SwivelGun';
 export const BROADSIDE = {
   muzzleSpeed: 46, // m/s
   reload: 3.2, // s per side
+  /** A heavier battery takes longer to serve: each gun past `freeGuns` adds this much to the reload, up to `maxGunLoad`. */
+  freeGuns: 4,
+  perGun: 0.025,
+  maxGunLoad: 1.6,
   /** Furthest the battery will aim (m). Upgrades will extend this later. */
   maxRange: 120,
   /** Small side-to-side aim either way; the ship's heading does the rest. */
@@ -212,11 +216,20 @@ export class Broadside {
     return out;
   }
 
+  /**
+   * Seconds a deck takes to reload: the base time, the upgrades, and the weight
+   * of the battery (a 4-gun sloop reloads in 3.2 s, a 20-gun ship about 4.5 s).
+   */
+  get reloadTime(): number {
+    const load = Math.min(BROADSIDE.maxGunLoad, 1 + BROADSIDE.perGun * Math.max(0, this.guns.length - BROADSIDE.freeGuns));
+    return BROADSIDE.reload * this.reloadMul * load;
+  }
+
   /** 0..1 reload progress of the active side: the deck nearest to ready. */
   get reloadProgress(): number {
     const armed = this.armedDecks();
     if (armed.length === 0) return 1;
-    return 1 - Math.max(Math.min(...armed.map((d) => this.cooldown[this.side][d])), 0) / (BROADSIDE.reload * this.reloadMul);
+    return 1 - Math.max(Math.min(...armed.map((d) => this.cooldown[this.side][d])), 0) / this.reloadTime;
   }
 
   /** True when at least one deck on the active side can fire. */
@@ -347,7 +360,7 @@ export class Broadside {
     if (deck < 0) return false;
     const cd = this.cooldown[this.side];
     const firing = all ? this.armedDecks().filter((d) => cd[d] <= 0) : [deck];
-    for (const d of firing) cd[d] = BROADSIDE.reload * this.reloadMul;
+    for (const d of firing) cd[d] = this.reloadTime;
     this.lastDeck = all ? -1 : deck;
     const side = this.guns.filter((g) => g.side === this.side && firing.includes(g.deck)).sort((a, b) => a.root.position.z - b.root.position.z);
     if (side.length === 0) return false;

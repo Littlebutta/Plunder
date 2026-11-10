@@ -72,6 +72,7 @@ Arcade rules: the sail always drives the raft, in any direction. The wind (white
 
 - **Swivel gun:** free aim with the mouse, dotted trajectory. The ring lands on the water under the cursor. Max range 90 m.
 - **Broadside:** the cannons barely traverse (about 12° either way). You aim by turning the ship; the distance to your aim point sets the elevation. A white 3D ribbon follows the shells' arc through the air to the impact zone. Max range 120 m. The cursor only gives a general direction: the aim is held as a compass bearing and a range, small cursor movements are ignored, larger ones are eased in, and the guns traverse against the hull's yaw, so the swell does not swing the ribbon.
+- **Reload** is 3.2 s per gun deck for a ship of up to 4 guns; each gun past that adds 2.5%, up to +60% (a 20-gun ship reloads in about 4.5 s). Big batteries hit harder but fire less often (`BROADSIDE.freeGuns`, `perGun`, `maxGunLoad`).
 - Past max range the ring or ribbon turns red and stops at the limit. Ranges are set in `SWIVEL.maxRange` / `BROADSIDE.maxRange` so upgrades can extend them later.
 - Shots do not inherit the ship's own motion, and shells that hit an island stop there.
 
