@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "project": "Plunder",
-  "updated": "2026-11-10T02:33:34Z",
+  "updated": "2026-11-10T02:33:36Z",
   "categories": [
     {
       "key": "feature",
@@ -1629,6 +1629,19 @@
       "created": "2026-11-10T02:33:34Z",
       "priority": "medium",
       "updated": "2026-11-10T02:33:34Z",
+      "by": "Claude"
+    },
+    {
+      "id": "F-72",
+      "cat": "feature",
+      "title": "Volcano event: a mountain island erupts, fireballs to dodge, red ashy sky",
+      "status": "idea",
+      "tags": [],
+      "notes": "Devin 2026-11-10 batch 5",
+      "links": [],
+      "created": "2026-11-10T02:33:36Z",
+      "priority": "medium",
+      "updated": "2026-11-10T02:33:36Z",
       "by": "Claude"
     }
   ],
